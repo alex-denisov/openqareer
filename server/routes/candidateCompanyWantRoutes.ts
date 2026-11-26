@@ -55,8 +55,11 @@ function invalidQuery(reply: FastifyReply, request: FastifyRequest) {
   );
 }
 
+/** Через сколько секунд экран перезапрашивает счётчики, пока подборка догружается. */
+const PENDING_RETRY_SECONDS = 5;
+
 async function wantedRows(deps: RouteDeps, candidateId: string) {
-  const context = await companyContext(deps, candidateId);
+  const context = await companyContext(deps, candidateId, { allowPendingVacancies: true });
   return { context, rows: wantedCompanyRows(context.rows) };
 }
 
@@ -70,8 +73,9 @@ async function handleWantPage(deps: RouteDeps, request: FastifyRequest, reply: F
   const parsed = wantPageSchema.safeParse(request.query);
   if (!parsed.success) return invalidQuery(reply, request);
   const query = parsed.data;
-  const { rows } = await wantedRows(deps, candidate.id);
+  const { rows, context } = await wantedRows(deps, candidate.id);
   const filtered = filterWantRows(rows, query);
+  if (context.vacanciesPending) reply.header('retry-after', PENDING_RETRY_SECONDS);
   return {
     data: {
       items: filtered.slice(query.offset, query.offset + query.limit),
@@ -80,6 +84,7 @@ async function handleWantPage(deps: RouteDeps, request: FastifyRequest, reply: F
       limit: query.limit,
       counts: countWantStages(rows),
       industries: wantIndustries(rows),
+      ...(context.vacanciesPending ? { vacanciesPending: true } : {}),
     },
     meta: { requestId: request.id, total: filtered.length, offset: query.offset },
   };

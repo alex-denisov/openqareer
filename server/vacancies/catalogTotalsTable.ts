@@ -23,3 +23,15 @@ CREATE TABLE IF NOT EXISTS catalog_listings (
   computed_at TEXT NOT NULL
 ) STRICT;
 `;
+
+/**
+ * B776: how many entries the public catalog shows, written by maintenance with the listings.
+ * Its count(*) over the projection held the HTTP event loop whenever the 5-minute copy expired.
+ */
+export const CATALOG_ENTRIES_TOTAL_TABLE = `
+CREATE TABLE IF NOT EXISTS catalog_entries_total (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  total INTEGER NOT NULL,
+  computed_at TEXT NOT NULL
+) STRICT;
+`;

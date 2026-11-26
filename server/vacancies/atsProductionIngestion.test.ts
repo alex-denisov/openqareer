@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { useRecordedFetch } from './__fixtures__/recordedFetch';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 describe('ATS Production Ingestion Gate (Subgroup 4.1)', () => {
   useRecordedFetch('atsProductionIngestion');
@@ -124,5 +125,5 @@ describe('ATS Production Ingestion Gate (Subgroup 4.1)', () => {
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
-  }, 45000);
+  }, timeBudget(45000));
 });

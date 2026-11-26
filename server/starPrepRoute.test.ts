@@ -37,7 +37,7 @@ async function setup() {
     payload: { clusterId: 'cluster-1', stage: 'interview', manualVacancy: vacancy },
   });
   const applicationId = created.json().data.id as string;
-  return { app, ownerAuth, otherAuth: `Bearer ${other.accessToken}`, url: `${APPLICATIONS_URL}/${applicationId}/star-prep` };
+  return { app, candidateStore, ownerId: owner.id, ownerAuth, otherAuth: `Bearer ${other.accessToken}`, url: `${APPLICATIONS_URL}/${applicationId}/star-prep` };
 }
 
 describe('star prep routes', () => {
@@ -61,6 +61,20 @@ describe('star prep routes', () => {
     expect(second.json().data.version).toBe(2);
     const read = await app.inject({ method: 'GET', url, headers: { authorization: ownerAuth } });
     expect(read.json().data.paragraphs[0]).toEqual({ ...paragraph, text: 'Правка' });
+  });
+
+  it('B635: GET отдаёт задачи и требования из описания вакансии отклика', async () => {
+    const { app, candidateStore, ownerId, ownerAuth } = await setup();
+    const application = candidateStore.createApplication(ownerId, {
+      clusterId: 'cluster-2',
+      stage: 'interview',
+      manualVacancy: { ...vacancy, description: 'Требования:\n- Опыт управления рисками от 5 лет' },
+    });
+    const url = `${APPLICATIONS_URL}/${application.id}/star-prep`;
+    const read = await app.inject({ method: 'GET', url, headers: { authorization: ownerAuth } });
+    expect(read.json().data.asks).toEqual([
+      { kind: 'req', text: 'Опыт управления рисками от 5 лет' },
+    ]);
   });
 
   it('отклоняет абзац без факта-источника и не сохраняет его', async () => {

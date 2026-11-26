@@ -44,6 +44,51 @@ const SCOPE_SUFFIX =
   /([\p{L}.]+(?:\s[\p{L}.]+)?)[-\s]based\s+(?:remote|role|position|candidates?|applicants?)|([\p{L}.]+(?:\s[\p{L}.]+)?)\s+only\b/giu;
 const WINDOW = 70;
 
+/** «US Remote», «Remote: US», «Remote - United States»: страна вплотную к пометке (B794). */
+const REMOTE_BESIDE_US =
+  /\b(?:US|U\.S\.|USA|United States)\s*[-–—]?\s*[Rr]emote\b|\b[Rr]emote position within the United States\b|\b[Rr]emote\s*[:(–—-]+\s*(?:the\s+)?(?:US|U\.S\.|USA|United States)(?![\p{L}-])/u;
+
+/**
+ * Найм только в США, страну текст не называет фразой о месте (B794): 401(k), E-Verify, требование гражданства
+ * и спонсорство. Текст о равных правах («protected veterans») и рынок («customers across the US»)
+ * страну найма не называют. На adenisov.test таких «удалённо из любой страны» было 113 из 259.
+ */
+const US_EMPLOYMENT =
+  /\b401\s?\(?k\)?|\bE-Verify\b|\b(?:must be|qualify as(?: either)?|(?:proof|evidence) of|requires?|only|limited to)\s+(?:an?\s+|the\s+)?(?:active\s+)?U\.?S\.? citizen(?:s|ship)?\b|\bU\.?S\.? citizen(?:s|ship)? (?:is |are )?(?:required|only)|\bemployer in the (?:US|U\.S\.|United States)/iu;
+/** Компания нанимает и в других странах: 401(k) там — льгота сотрудников из США. */
+const HIRES_BEYOND_US =
+  /\bworldwide\b|\bglobally distributed\b|\bfully distributed\b|\bemployer of record\b|\bEOR\b|\bcontractors? (?:outside|worldwide|globally)|\b(?:US|U\.S\.)(?:-based)? (?:employees|team members|only benefits)|\boutside (?:of )?the (?:US|U\.S\.|United States)|\bnon-U\.?S\.? citizens?\b/iu;
+/** «US/Canada», «across the U.S. and Canada»: 401(k) рядом с такой парой США не выделяет. */
+const US_WITH_OTHERS =
+  /\b(?:US|U\.S\.|United States|USA)\s*(?:\/|&|,|and|or)\s*(?:Canada|EU|Europe|EMEA|UK|LATAM)\b/iu;
+
+const REMOTE_WINDOW = 40;
+/** Все области рядом с пометкой «remote»: «Remote (US) / Remote (EU)» — не только США. */
+function areasBesideRemote(description: string): string[] {
+  return [...description.matchAll(/\bremote\b/giu)].flatMap((match) => {
+    const at = match.index ?? 0;
+    const before =
+      description
+        .slice(Math.max(0, at - REMOTE_WINDOW), at)
+        .split('\n')
+        .at(-1) ?? '';
+    const after = description.slice(at, at + REMOTE_WINDOW).split('\n')[0] ?? '';
+    return areasIn(` ${before}${after} `);
+  });
+}
+
+function employmentAreas(description: string): string[] {
+  const beyond = HIRES_BEYOND_US.test(description);
+  if (REMOTE_BESIDE_US.test(description)) {
+    const others = areasBesideRemote(description).filter((area) => area !== 'US');
+    if (others.length > 0) return ['US', ...others];
+    return beyond ? [] : ['US'];
+  }
+  return US_EMPLOYMENT.test(description) && !beyond && !US_WITH_OTHERS.test(description)
+    ? ['US']
+    : [];
+}
+
 function windowAfter(text: string, end: number): string {
   const tail = text.slice(end, end + WINDOW);
   // «the U.S.»: точка внутри сокращения предложение не кончает.
@@ -75,5 +120,7 @@ export function extractRemoteScope(input: RemoteScopeInput): string {
   if (saysWorkFromAnywhere(input.title ?? '', input.description ?? '')) return GLOBAL_REMOTE_SCOPE;
   const fromLocation = locationAreas(location);
   if (fromLocation.length > 0) return serialize(fromLocation);
-  return serialize(descriptionAreas(input.description ?? ''));
+  const description = input.description ?? '';
+  const named = descriptionAreas(description);
+  return serialize(named.length > 0 ? named : employmentAreas(description));
 }

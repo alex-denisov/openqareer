@@ -69,8 +69,16 @@ import { humanSourceLabel } from './sourceLabels';
 /**
  * Проверяет, проходила ли карточка через указанный этап воронки.
  */
-function applicationReachedStage(app: ApplicationView, targetStage: ApplicationStage): boolean {
+export function applicationReachedStage(app: ApplicationView, targetStage: ApplicationStage): boolean {
   return app.stage === targetStage || app.archivePreviousStage === targetStage || (app.reachedStages?.includes(targetStage) ?? false);
+}
+
+/**
+ * Ответила ли компания: ответ записан или отклик дошёл до интервью либо оффера — без ответа туда
+ * не доходят, хотя отдельной отметки «ответили» в истории может не быть (B801).
+ */
+export function applicationGotReply(app: ApplicationView): boolean {
+  return (['responded', 'interview', 'offer'] as const).some((stage) => applicationReachedStage(app, stage));
 }
 
 /**
@@ -164,7 +172,7 @@ function buildSourceBreakdown(
     source,
     sourceLabel: humanSourceLabel(source),
     total: items.length,
-    responded: items.filter((a) => applicationReachedStage(a, 'responded')).length,
+    responded: items.filter(applicationGotReply).length,
     interview: items.filter((a) => applicationReachedStage(a, 'interview')).length,
     offer: items.filter((a) => applicationReachedStage(a, 'offer')).length,
   }));

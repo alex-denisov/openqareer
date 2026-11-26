@@ -1,0 +1,32 @@
+/* «Сегодня»: только то, чего нет в стилях макета. */
+@layer b640.sections {
+  /* Д11: заголовок ленты, «Отметить всё» и шестерёнка на 390 — в один ряд. */
+  @media (max-width: 767px) {
+    .b640 .np-full > .list-head { flex-wrap: nowrap; gap: var(--career-space-1); }
+    .b640 .np-full > .list-head > h2 { white-space: nowrap; }
+    .b640 .np-full > .list-head > .btn { min-inline-size: 0; padding-inline: var(--career-space-2); white-space: normal; }
+    .b640 .np-full > .list-head > .icon-btn { flex: none; }
+  }
+  @media (max-width: 767px) {
+    /* Макет s04 на 390: ответы на вопрос над колонками — в нижней полосе над навигацией.
+       «Нет» слева, «Верно» справа на полширины, «Не сейчас» строкой выше справа (B645-2). */
+    .b640 .route.why.col-wide .why-body > .actions {
+      position: fixed; z-index: 11; inset-inline: 0; margin: 0;
+      inset-block-end: calc(var(--career-mobile-nav-height) + env(safe-area-inset-bottom, 0px));
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0;
+      padding: var(--career-space-2) var(--career-space-4);
+      background: var(--career-surface); border-block-start: var(--career-border-width) solid var(--career-line-strong);
+    }
+    .b640 .route.why.col-wide .why-body > .actions > .btn { min-block-size: var(--career-target-min); }
+    .b640 .route.why.col-wide .why-body > .actions > .btn:nth-child(1) { grid-area: 2 / 2; justify-content: center; }
+    .b640 .route.why.col-wide .why-body > .actions > .btn:nth-child(2) { grid-area: 2 / 1; justify-self: start; }
+    .b640 .route.why.col-wide .why-body > .actions > .btn:nth-child(3) { grid-area: 1 / 2; justify-self: end; }
+    /* Пока показана полоса сигнала, кнопка ведущего блока контурная и стоит в потоке
+       под ним на всю ширину (макет s04, B645-2). */
+    div.b640:has(main .route.why.col-wide .why-body > .actions) main .lead > .actions { display: grid; }
+    /* Полоса из двух строк над навигацией: последний блок не уходит под неё. */
+    div.b640:has(main .route.why.col-wide .why-body > .actions) #career-main {
+      padding-block-end: calc(var(--career-mobile-nav-height) + env(safe-area-inset-bottom, 0px) + var(--career-target-min) * 2 + var(--career-space-8));
+    }
+  }
+}

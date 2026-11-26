@@ -6,11 +6,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { COVER_LETTER_MAX_CHARS } from '../domain/coverLetterWriting';
 import type { ChatCompletionClient } from './roleNamer';
 import {
+  buildContactMessageWriter,
   buildCoverLetterWriter,
   buildEnabledCoverLetterWriter,
   COVER_LETTER_BUDGET_MS,
   COVER_LETTER_OUTPUT_TOKENS,
   COVER_LETTER_VERTEX_TIMEOUT_MS,
+  coverLetterStages,
+  LETTER_STAGE_MS,
   LETTER_MODEL_ENABLED,
   letterPrompt,
   LlmCoverLetterWriter,
@@ -311,6 +314,16 @@ describe('QueuedCoverLetterWriter: пустых писем нет (B640, реш�
     expect(letterPrompt(seen[0]!)).not.toContain('Прошлый вариант письма отклонён.');
   });
 
+  it('повтор нарушил другое правило: третий вызов называет обе причины (B682)', async () => {
+    const seen: CoverLetterWriteInput[] = [];
+    const outcomes = ['Resource-Logistics', 'Рост 900', 'Хорошее письмо'].map((body) => ({ body, stage: 'g' }));
+    const queue = new QueuedCoverLetterWriter([recorded('g', outcomes, seen)], ['g'], () => undefined);
+    const review = (body: string) => [...named(body), ...(body.includes('900') ? ['number'] : [])];
+    await expect(queue.writeCoverLetter({ ...input, review })).resolves.toMatchObject({ body: 'Хорошее письмо' });
+    expect(seen[2]?.correction).toContain('Не переводи и не меняй названия');
+    expect(seen[2]?.correction).toContain('Не пиши цифр');
+  });
+
   it('второй отказ — отказ всей цепочки (маршрут отвечает 503)', async () => {
     const bad = { body: 'At GK Resource-Logistics I led.', stage: 'g' };
     const queue = new QueuedCoverLetterWriter([recorded('g', [bad, bad], [])], ['g'], () => undefined);
@@ -360,9 +373,77 @@ describe('цепочка письма (решение владельца, B601)'
   });
 });
 
+describe('B753: цепочка сообщения знакомому и рекрутёру отдельно от письма', () => {
+  const config = {
+    providerCredentials: { openrouter: 'o', gemini: 'g', openai: 'k' },
+    vertex: { projectId: 'p', location: 'l', clientEmail: 'e', privateKey: 'k', model: 'gemini' },
+  } as unknown as Parameters<typeof buildContactMessageWriter>[0];
+  it('GLM первым, затем DeepSeek, без Vertex; письмо по-прежнему с DeepSeek', () => {
+    const contact = buildContactMessageWriter(config, true) as unknown as { descriptors: readonly string[] };
+    expect(contact.descriptors).toEqual(['openrouter:z-ai/glm-5.3-flash', 'openrouter:deepseek/deepseek-v4.1-flash']);
+    expect(coverLetterStages(config)[0]?.label).toBe('openrouter:deepseek/deepseek-v4.1-flash');
+  });
+  it('модель письма выключена — писателя сообщений нет', () => {
+    expect(buildContactMessageWriter(config, false)).toBeUndefined();
+  });
+});
+
 describe('сроки письма (B601)', () => {
-  it('общий срок вмещает все три ступени и самую медленную замеренную', () => {
-    expect(COVER_LETTER_BUDGET_MS).toBeGreaterThanOrEqual(100_000);
+  it('общий срок вмещает повтор DeepSeek, GLM и Vertex', () => {
+    expect(COVER_LETTER_BUDGET_MS).toBe(
+      2 * LETTER_STAGE_MS.deepseek + LETTER_STAGE_MS.glm + LETTER_STAGE_MS.vertex,
+    );
+  });
+});
+
+describe('ступень DeepSeek уступает GLM за 8 с (B730)', () => {
+  const OPENROUTER = 'https://openrouter.ai/api/v1';
+
+  it('цепочка ставит DeepSeek срок 8 с, GLM — 15 с', () => {
+    const stages = coverLetterStages({ providerCredentials: { openrouter: 'o' } });
+    const limits = stages.map((stage) => (stage.writer as unknown as { timeoutMs: number }).timeoutMs);
+    expect(limits).toEqual([8_000, 15_000]);
+  });
+
+  it('зависший DeepSeek через 8 с отдаёт письмо GLM', async () => {
+    vi.useFakeTimers();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms: number) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException('deadline', 'TimeoutError')), ms);
+      return controller.signal;
+    });
+    try {
+      const hanging: ChatCompletionClient = {
+        chat: {
+          completions: {
+            create: vi.fn((_body: unknown, options?: { signal?: AbortSignal }) =>
+              new Promise((_resolve, reject) => {
+                options?.signal?.addEventListener('abort', () => reject(options.signal?.reason));
+              }),
+            ),
+          },
+        },
+      } as unknown as ChatCompletionClient;
+      const glm = client(LETTER);
+      const failures: unknown[] = [];
+      const queue = new QueuedCoverLetterWriter(
+        [
+          new LlmCoverLetterWriter({ apiKey: 'o', model: 'deepseek/deepseek-v4.1-flash', baseUrl: OPENROUTER, stage: 'd', timeoutMs: LETTER_STAGE_MS.deepseek, client: hanging }),
+          new LlmCoverLetterWriter({ apiKey: 'o', model: 'z-ai/glm-5.3-flash', baseUrl: OPENROUTER, stage: 'g', timeoutMs: LETTER_STAGE_MS.glm, client: glm }),
+        ],
+        [],
+        (failure) => failures.push(failure),
+      );
+      const outcome = queue.writeCoverLetter(input);
+      await vi.advanceTimersByTimeAsync(7_999);
+      expect(glm.chat.completions.create).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(outcome).resolves.toMatchObject({ stage: 'g' });
+      expect(failures).toEqual([{ stage: 'd', kind: 'timeout' }]);
+    } finally {
+      timeout.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });
 

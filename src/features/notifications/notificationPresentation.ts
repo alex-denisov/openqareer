@@ -12,6 +12,7 @@ const BODY: Record<NotificationEventKind, string> = {
   import_completed: 'Импорт завершён. Проверьте сведения в профиле перед использованием.',
   employer_reply: 'В отклике зафиксирован ответ работодателя.',
   delivery_error: 'Доставка отклика не подтверждена. Проверьте карточку отклика.',
+  post_reminder: 'Пришло время поста по вашему ритму. Публикуете вы сами.',
 };
 
 const SOURCE: Record<NotificationEventKind, string> = {
@@ -25,6 +26,7 @@ const SOURCE: Record<NotificationEventKind, string> = {
   import_completed: 'Импорт профиля',
   employer_reply: 'Трекер откликов',
   delivery_error: 'Трекер откликов',
+  post_reminder: 'Очередь постов',
 };
 
 export function notificationDescription(kind: NotificationEventKind): string {

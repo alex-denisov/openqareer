@@ -62,10 +62,12 @@ function cluster(id: string, company: string, title: string) {
     id,
     canonicalTitle: title,
     canonicalCompany: company,
+    sources: [],
     primaryUrl: `https://hh.ru/vacancy/${id}`,
     skills: ['TypeScript', 'Node.js', 'AWS', 'Distributed systems'],
     status: 'active',
     isRemote: false,
+    descriptionSummary: `Описание ${company}`,
   };
 }
 
@@ -94,6 +96,7 @@ async function setup(tier: 'free' | 'pro' = 'pro', rejected = false) {
   const getApplication = vi.fn(
     (_candidateId: string, id: string) => applications.find((item) => item.id === id) ?? null,
   );
+  const findSentApplication = vi.fn((): string | null => null);
   const candidateStore = {
     authenticate: (token: string) => (token === 'session' ? candidate : null),
     getSnapshot: () => ({
@@ -106,6 +109,7 @@ async function setup(tier: 'free' | 'pro' = 'pro', rejected = false) {
       documents: [{ id: 'resume-a', kind: 'resume', fileName: 'CV.pdf', version: 2 }],
     }),
     listApplications,
+    findSentApplication,
     getApplication,
     createApplication: vi.fn(
       (_candidateId: string, input: { clusterId: string; manualVacancy: unknown }) => {
@@ -217,6 +221,33 @@ describe('candidate automation API (B452)', () => {
       ]),
     );
     expect(enabled.json().data.linkedinPublishing).toMatchObject({ enabled: false });
+  });
+
+  it('B635: отклик из автоматизации хранит описание вакансии', async () => {
+    const { inject, candidateStore } = await setup();
+    await enable(inject);
+    await inject('POST', '/api/v1/candidate/automation/queue/refresh', {
+      opportunities: [
+        { clusterId: 'cluster-a', letterText: 'Письмо', materialDocumentIds: ['resume-a'] },
+      ],
+    });
+    expect(candidateStore.createApplication.mock.calls[0]?.[1].manualVacancy).toMatchObject({
+      description: 'Описание Acme',
+    });
+  });
+
+  it('B801: отклик по дублю объявления уже отправлен — в автоочередь не встаёт', async () => {
+    const { inject, candidateStore, listApplications } = await setup();
+    candidateStore.findSentApplication.mockReturnValue('sent-a');
+    await enable(inject);
+    const response = await inject('POST', '/api/v1/candidate/automation/queue/refresh', {
+      opportunities: [
+        { clusterId: 'cluster-a', letterText: 'Письмо', materialDocumentIds: ['resume-a'] },
+      ],
+    });
+    expect(response.json().data).toMatchObject({ added: 0, skipped: 1 });
+    expect(candidateStore.createApplication).not.toHaveBeenCalled();
+    expect(listApplications).not.toHaveBeenCalled();
   });
 
   it('builds only server-verified queue items, honors stop companies and previews owned materials', async () => {

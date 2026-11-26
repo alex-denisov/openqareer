@@ -40,7 +40,7 @@ export const LINKEDIN_COMPANY_SOURCE_PREFIX = 'src-company-li-';
 const LINKEDIN_COMPANY_REFRESH_MINUTES = 720;
 const KNOWN_PROVIDERS = new Set<string>(ATS_PROVIDERS.map((p) => p.provider));
 const ATS_HOSTS =
-  /(greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|recruitee\.com|smartrecruiters\.com|breezy\.hr|pinpointhq\.com|personio\.(de|com)|bamboohr\.com|myworkdayjobs\.com|icims\.com|jobvite\.com|oraclecloud\.com|linkedin\.com|comeet\.(co|com))$/i;
+  /(greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|recruitee\.com|smartrecruiters\.com|breezy\.hr|pinpointhq\.com|personio\.(de|com)|bamboohr\.com|myworkdayjobs\.com|icims\.com|jobvite\.com|oraclecloud\.com|linkedin\.com|comeet\.(co|com)|teamtailor\.com)$/i;
 
 /** Регистрируемый хост без www; пустая строка, если адрес не читается. */
 export function siteHost(url: string | null | undefined): string {

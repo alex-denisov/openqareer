@@ -122,3 +122,91 @@ describe('QueuedExperienceFactRewriter', () => {
     expect(built?.provenance?.model).toBe('gpt-5.6-luna');
   });
 });
+
+describe('B645: тексты профиля LinkedIn', () => {
+  const linkedin = {
+    language: 'ru' as const,
+    targetRole: 'Руководитель разработки',
+    aboutFacts: [{ id: 'm1', text: 'Вёл команду из 9 человек' }],
+    places: [],
+  };
+  const reply = { about: { text: 'Строю инженерные команды: последняя выросла до 9 человек.', factIds: ['m1'] }, places: [] };
+
+  it('просит строгий JSON с промптом пересказа и читает ответ', async () => {
+    const { create, client } = clientAnswering(JSON.stringify(reply));
+    const rewriter = new LlmExperienceFactRewriter({ apiKey: 'k', model: 'gpt-5.6-luna', client });
+    await expect(rewriter.linkedinProfile(linkedin)).resolves.toEqual(reply);
+    const sent = create.mock.calls[0]![0];
+    expect(sent.response_format.json_schema).toMatchObject({ name: 'linkedin_profile_rewrite', strict: true });
+    expect(sent.messages[0].content).toContain('Пиши заново, своими словами');
+    expect(sent.messages[1].content).toContain('Вёл команду из 9 человек');
+  });
+
+  it('очередь пропускает упавшую и пустую ступень', async () => {
+    const failures: string[] = [];
+    const stage = (model: string, result: () => Promise<unknown>) => ({
+      provenance: { model, promptRevision: 'r' },
+      rewrite: async () => null,
+      linkedinProfile: vi.fn(result) as never,
+    });
+    const queue = new QueuedExperienceFactRewriter(
+      [
+        stage('a', () => Promise.reject(new Error('timeout'))),
+        stage('b', () => Promise.resolve({ about: { text: ' ', factIds: [] }, places: [] })),
+        stage('c', () => Promise.resolve(reply)),
+      ],
+      (model) => failures.push(model),
+    );
+    await expect(queue.linkedinProfile(linkedin)).resolves.toEqual(reply);
+    expect(failures).toEqual(['a', 'b']);
+  });
+
+  it('B645: другой вариант — своя схема и промпт; очередь пропускает пустой ответ', async () => {
+    const variant = { target: 'about', language: 'ru', targetRole: 'CTO', facts: [{ id: 'm1', text: 'Вёл команду из 9 человек' }], avoid: ['Старый'] } as const;
+    const answer = { text: 'Новый вариант', factIds: ['m1'] };
+    const { create, client } = clientAnswering(JSON.stringify(answer));
+    const rewriter = new LlmExperienceFactRewriter({ apiKey: 'k', model: 'gpt-5.6-luna', client });
+    await expect(rewriter.linkedinVariant(variant)).resolves.toEqual(answer);
+    const sent = create.mock.calls[0]![0];
+    expect(sent.response_format.json_schema).toMatchObject({ name: 'linkedin_profile_variant', strict: true });
+    expect(sent.messages[1].content).toContain('Старый');
+    const failures: string[] = [];
+    const stage = (model: string, result: unknown) => ({
+      provenance: { model, promptRevision: 'r' }, rewrite: async () => null, linkedinVariant: vi.fn(async () => result) as never,
+    });
+    const queue = new QueuedExperienceFactRewriter([stage('a', { text: ' ', factIds: [] }), stage('b', answer)], (model) => failures.push(model));
+    await expect(queue.linkedinVariant(variant)).resolves.toEqual(answer);
+    expect(failures).toEqual(['a']);
+  });
+
+  it('B682: вариант резюме — своя схема; очередь пропускает пустой ответ', async () => {
+    const request = { target: 'about', language: 'ru', vacancyTitle: 'CTO', facts: [{ id: 'f1', text: 'Вёл команду' }], keep: [], avoid: ['Старый'] } as const;
+    const answer = { text: 'Новый', factIds: ['f1'] };
+    const { create, client } = clientAnswering(JSON.stringify(answer));
+    const rewriter = new LlmExperienceFactRewriter({ apiKey: 'k', model: 'gpt-5.6-luna', client });
+    await expect(rewriter.hhResumeVariant(request)).resolves.toEqual(answer);
+    expect(create.mock.calls[0]![0].response_format.json_schema).toMatchObject({ name: 'hh_resume_variant', strict: true });
+    const stage = (result: unknown) => ({ rewrite: async () => null, hhResumeVariant: async () => result as never });
+    const queue = new QueuedExperienceFactRewriter([stage({ text: ' ', factIds: [] }), stage(answer)], () => undefined);
+    await expect(queue.hhResumeVariant(request)).resolves.toEqual(answer);
+  });
+
+  it('B786: вариант, не прошедший проверку, пишет следующая ступень', async () => {
+    const variantRequest = {
+      place: { employer: 'Сфера', title: 'Руководитель', period: '2018', language: 'ru' as const },
+      facts: [{ id: 'f1', domain: 'outcome', statement: 'Команда бэкенда была 18 человек' }],
+      current: 'Руководила бэкендом из 18 человек.',
+      avoid: ['Руководила бэкендом из 18 человек.'],
+      wish: '',
+    };
+    const good = { text: 'Вела бэкенд из 18 человек.' };
+    const { create, client } = clientAnswering(JSON.stringify(good));
+    const llm = new LlmExperienceFactRewriter({ apiKey: 'k', model: 'gpt-5.6-luna', client });
+    await expect(llm.rewriteVariant(variantRequest)).resolves.toEqual(good);
+    expect(create.mock.calls[0]![0].response_format.json_schema).toMatchObject({ name: 'experience_fact_rewrite_variant' });
+    const bad = { rewrite: async () => null, rewriteVariant: async () => ({ text: 'Вела бэкенд из 99 человек.' }) };
+    const failed = vi.fn();
+    await expect(new QueuedExperienceFactRewriter([bad, llm], failed).rewriteVariant(variantRequest)).resolves.toEqual(good);
+    expect(failed).toHaveBeenCalledOnce();
+  });
+});

@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# B705: переключает Caddy на экземпляр приложения 3210 или 3211.
+# Запускается через sudo от openqareer-deploy с точными аргументами:
+# «<основной>» или «<основной> <резерв>» (B705-2: тёплый резерв).
+# Пишет сниппет, проверяет весь Caddyfile, делает graceful reload (открытые
+# соединения дорабатывают на прежнем upstream); при ошибке возвращает сниппет.
+set -Eeuo pipefail
+
+if [[ "$(id -u)" == "0" ]]; then
+  readonly SNIPPET=/etc/caddy/openqareer-upstream.caddy
+  readonly CADDYFILE=/etc/caddy/Caddyfile
+else
+  # Только для тестов: под root переопределения не читаются.
+  readonly SNIPPET="${OPENQAREER_UPSTREAM_FILE:?}"
+  readonly CADDYFILE="${OPENQAREER_CADDYFILE:?}"
+fi
+
+fail() {
+  printf 'openqareer-upstream: %s\n' "$1" >&2
+  exit 1
+}
+
+valid_port() { [[ "$1" == "3210" || "$1" == "3211" ]]; }
+
+port="${1:-}"
+reserve="${2:-}"
+[[ "$#" -le 2 ]] || fail "usage: openqareer-upstream <port> [reserve-port]"
+valid_port "$port" || fail "port must be 3210 or 3211"
+if [[ -n "$reserve" ]]; then
+  valid_port "$reserve" && [[ "$reserve" != "$port" ]] ||
+    fail "reserve must be the other port"
+  # lb_policy first: весь трафик на основной, пока он здоров. Активная проверка
+  # /health и пассивный fail_duration выводят упавший основной из ротации,
+  # а lb_try_duration повторяет на резерве запрос, который не смог подключиться.
+  wanted="$(printf '%s\n' \
+    "to 127.0.0.1:$port 127.0.0.1:$reserve" \
+    'lb_policy first' \
+    'lb_try_duration 10s' \
+    'lb_try_interval 250ms' \
+    'fail_duration 30s' \
+    'health_uri /health' \
+    'health_interval 2s' \
+    'health_timeout 3s')"
+else
+  wanted="to 127.0.0.1:$port"
+fi
+label="$port${reserve:+ reserve=$reserve}"
+if [[ -f "$SNIPPET" && "$(cat "$SNIPPET")" == "$wanted" ]]; then
+  printf 'upstream=%s unchanged\n' "$label"
+  exit 0
+fi
+
+backup="$(mktemp)"
+next="$(mktemp "$(dirname "$SNIPPET")/.openqareer-upstream.XXXXXX")"
+had_snippet=0
+restore() {
+  if [[ "$had_snippet" == "1" ]]; then
+    cp -- "$backup" "$SNIPPET"
+  else
+    rm -f -- "$SNIPPET"
+  fi
+}
+trap 'rm -f -- "$backup" "$next"' EXIT
+if [[ -f "$SNIPPET" ]]; then
+  cp -- "$SNIPPET" "$backup"
+  had_snippet=1
+fi
+
+printf '%s\n' "$wanted" > "$next"
+chmod 0644 "$next"
+mv -f -- "$next" "$SNIPPET"
+
+if ! caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null 2>&1; then
+  restore
+  fail "Caddyfile with upstream $label does not validate; previous upstream kept"
+fi
+if ! systemctl reload caddy; then
+  restore
+  systemctl reload caddy || true
+  fail "caddy reload failed; previous upstream restored"
+fi
+printf 'upstream=%s switched\n' "$label"

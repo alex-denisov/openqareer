@@ -4,6 +4,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import { expect as expectPage } from '@playwright/test';
 import type { ConnectorRequest } from '../connectorHarness';
 import { HhApplicationBrowserSession } from './hhApplicationBrowser';
+import { timeBudget } from '../../../shared/testing/timeBudget';
 
 describe('hh.ru candidate-scoped application browser session', { timeout: 35_000 }, () => {
   const fixedNow = '2026-08-14T15:00:00.000Z';
@@ -25,7 +26,7 @@ describe('hh.ru candidate-scoped application browser session', { timeout: 35_000
 
   afterAll(async () => {
     await browser?.close();
-  }, 30_000);
+  }, timeBudget(30_000));
 
   async function createSession(html = fixture) {
     context = await browser.newContext();
@@ -79,10 +80,10 @@ describe('hh.ru candidate-scoped application browser session', { timeout: 35_000
       evidence: { kind: 'dom_confirmation', observedAt: fixedNow },
     });
     await expectPage(
-      page.locator('[data-resume-id="synthetic-resume-1"] input'),
+      page.locator('input[name="resumeId"][value="synthetic-resume-1"]'),
     ).toBeChecked();
     await expectPage(
-      page.locator('[data-qa="vacancy-response-popup__letter-textarea"]'),
+      page.locator('[data-qa="vacancy-response-popup-form-letter-input"]'),
     ).toHaveValue('Подтверждённый кандидатом текст.');
     expect(await page.evaluate(() => window.syntheticSubmitted)).toBe(true);
   });
@@ -179,7 +180,7 @@ describe('hh.ru candidate-scoped application browser session', { timeout: 35_000
   it('does not re-apply when hh.ru already shows an application for this vacancy', async () => {
     const alreadyApplied = fixture.replace(
       '<main>',
-      '<main><p data-qa="vacancy-response-already-applied">Вы уже откликнулись</p>',
+      '<main><button data-qa="vacancy-response-link-view-topic">Вы откликнулись</button>',
     );
     const session = await createSession(alreadyApplied);
 
@@ -241,8 +242,8 @@ describe('hh.ru candidate-scoped application browser session', { timeout: 35_000
 
   it('pauses when the approved message has nowhere to go', async () => {
     const noLetter = fixture
-      .replace('data-qa="vacancy-response-popup__letter-textarea"', 'data-qa="letter-removed"')
-      .replace('data-qa="vacancy-response-popup__letter-toggle"', 'data-qa="toggle-removed"');
+      .replace('data-qa="vacancy-response-popup-form-letter-input"', 'data-qa="letter-removed"')
+      .replace('data-qa="add-cover-letter"', 'data-qa="toggle-removed"');
     const session = await createSession(noLetter);
 
     const receipt = await session.execute(request());
@@ -315,7 +316,7 @@ describe('hh.ru candidate-scoped application browser session', { timeout: 35_000
       status: 'paused',
       diagnostic: { reason: 'hh_target_mismatch' },
     });
-  }, 30000);
+  }, timeBudget(30000));
 
   it('never reports completion without a bounded DOM confirmation reference', async () => {
     const noReference = fixture.replace(' data-response-id="synthetic-response-42"', '');

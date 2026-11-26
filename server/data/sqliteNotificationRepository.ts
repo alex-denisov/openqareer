@@ -2,7 +2,25 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
 import { MIGRATION_45 } from './notificationSchema';
+import { widenNotificationKinds } from './notificationKindMigration';
 import { MIGRATION_46 } from './notificationDeliverySchema';
+import {
+  MIGRATION_DELIVERY_SETTINGS,
+  deferDeliveryUntil,
+  readDeliverySettings,
+  writeDeliverySettings,
+  type DeliverySettings,
+} from './notificationDeliverySettings';
+import {
+  MIGRATION_INVITATION_PREFERENCE,
+  deleteInvitationRows,
+  disableInvitationEmail,
+  isInvitationEvent,
+  markInvitationEvent,
+  readInvitationPreference,
+  writeInvitationPreference,
+  type InvitationChannels,
+} from './notificationInvitationPreference';
 import type { SealedText } from './sealedText';
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -23,6 +41,7 @@ const RETENTION_MS = NOTIFICATION_RETENTION_DAYS * 24 * 60 * 60 * 1_000;
 interface NotificationRow {
   id: string;
   event_kind: NotificationEventKind;
+  source_type?: string;
   source_id: string;
   created_at: string;
   expires_at: string;
@@ -40,6 +59,15 @@ interface Cursor {
   readonly id: string;
 }
 
+export interface NotificationFeedRow {
+  readonly id: string;
+  readonly kind: NotificationEventKind;
+  readonly sourceType: string;
+  readonly sourceId: string;
+  readonly createdAt: string;
+  readonly readAt: string | null;
+}
+
 export type NotificationDeliveryChannel = 'email' | 'telegram';
 
 export interface ClaimedNotificationDelivery {
@@ -48,6 +76,8 @@ export interface ClaimedNotificationDelivery {
   readonly channel: NotificationDeliveryChannel;
   readonly attempt: number;
   readonly notification: NotificationItem;
+  /** n02: откуда событие (отклик) — по нему доставка находит компанию для строки. */
+  readonly source: { readonly type: string; readonly id: string };
 }
 
 interface DeliveryRow extends NotificationRow {
@@ -68,6 +98,7 @@ const EVENT_PREFERENCE_SQL = `CASE n.event_kind
   WHEN 'import_completed' THEN 'ev-weekly-digest'
   WHEN 'employer_reply' THEN 'ev-reply'
   WHEN 'delivery_error' THEN 'ev-delivery-error'
+  WHEN 'post_reminder' THEN 'ev-reminder'
 END`;
 
 export class NotificationCursorError extends Error {
@@ -98,7 +129,10 @@ export class SqliteNotificationRepository {
       applySqliteBusyTimeout(this.database);
     }
     this.database.exec(MIGRATION_45);
+    widenNotificationKinds(this.database);
     this.database.exec(MIGRATION_46);
+    this.database.exec(MIGRATION_INVITATION_PREFERENCE);
+    this.database.exec(MIGRATION_DELIVERY_SETTINGS);
     this.deleteExpired();
     this.retentionSweep = setInterval(() => this.deleteExpired(), 60 * 60 * 1_000);
     this.retentionSweep.unref();
@@ -113,7 +147,8 @@ export class SqliteNotificationRepository {
     const existing = this.readByIdempotencyKey(candidateId, input.idempotencyKey);
     if (existing) return this.toItem(existing);
     const createdAt = input.createdAt ?? now;
-    const expiresAt = new Date(Date.parse(createdAt) + RETENTION_MS).toISOString();
+    const keptFrom = Math.max(Date.parse(createdAt), Date.parse(input.deliverAt ?? createdAt));
+    const expiresAt = new Date(keptFrom + RETENTION_MS).toISOString();
     if (expiresAt <= now) return null;
     const id = randomUUID();
     this.database.exec('SAVEPOINT record_candidate_notification');
@@ -127,7 +162,7 @@ export class SqliteNotificationRepository {
         )
         .run(id, candidateId, input.kind, input.sourceType, input.sourceId, input.idempotencyKey, createdAt, expiresAt);
       const row = this.readByIdempotencyKey(candidateId, input.idempotencyKey);
-      if (row?.id === id) this.enqueueSelectedChannels(candidateId, row.id, input.kind, now);
+      if (row?.id === id) this.enqueueSelectedChannels(candidateId, row.id, input, now);
       this.database.exec('RELEASE SAVEPOINT record_candidate_notification');
     } catch (error) {
       this.database.exec('ROLLBACK TO SAVEPOINT record_candidate_notification');
@@ -138,6 +173,7 @@ export class SqliteNotificationRepository {
     return row ? this.toItem(row) : null;
   }
 
+  /** Строки с `created_at` в будущем (напоминание B695 о посте) не видны до своего времени. */
   list(
     candidateId: string,
     options: { readonly limit: number; readonly cursor?: string; readonly now: string },
@@ -146,9 +182,9 @@ export class SqliteNotificationRepository {
     const cursor = options.cursor ? decodeCursor(options.cursor) : null;
     const rows = this.database
       .prepare(
-        `SELECT n.id, n.event_kind, n.source_id, n.created_at, n.expires_at, n.read_at
+        `SELECT n.id, n.event_kind, n.source_type, n.source_id, n.created_at, n.expires_at, n.read_at
          FROM candidate_notifications n
-         WHERE n.candidate_id = ? AND n.expires_at > ?
+         WHERE n.candidate_id = ? AND n.expires_at > ? AND n.created_at <= ?
            AND COALESCE((SELECT p.app_enabled FROM candidate_notification_preferences p
              WHERE p.candidate_id = n.candidate_id AND p.preference_key = ${EVENT_PREFERENCE_SQL}), 1) = 1
            AND (? IS NULL OR n.created_at < ? OR (n.created_at = ? AND n.id < ?))
@@ -156,6 +192,7 @@ export class SqliteNotificationRepository {
       )
       .all(
         candidateId,
+        options.now,
         options.now,
         cursor ? 1 : null,
         cursor?.createdAt ?? null,
@@ -168,16 +205,62 @@ export class SqliteNotificationRepository {
     const unread = this.database
       .prepare(
         `SELECT COUNT(*) AS count FROM candidate_notifications n
-         WHERE n.candidate_id = ? AND n.read_at IS NULL AND n.expires_at > ?
+         WHERE n.candidate_id = ? AND n.read_at IS NULL AND n.expires_at > ? AND n.created_at <= ?
            AND COALESCE((SELECT p.app_enabled FROM candidate_notification_preferences p
              WHERE p.candidate_id = n.candidate_id AND p.preference_key = ${EVENT_PREFERENCE_SQL}), 1) = 1`,
       )
-      .get(candidateId, options.now) as { count: number };
+      .get(candidateId, options.now, options.now) as { count: number };
     const last = pageRows.at(-1);
     return {
       items: pageRows.map((row) => this.toItem(row)),
       unreadCount: unread.count,
       nextCursor: hasMore && last ? encodeCursor(last) : null,
+    };
+  }
+
+  /**
+   * B671: все неистёкшие уведомления кандидата (не больше `max`, новые первыми) с
+   * источником и число непрочитанных. Только чтение: без сдвига курсора и без очистки.
+   */
+  listForFeed(
+    candidateId: string,
+    options: { readonly max: number; readonly now: string; readonly keepReplies?: boolean },
+  ): { readonly rows: NotificationFeedRow[]; readonly unreadCount: number } {
+    // Ответы остаются в выборке, когда у приглашений свой ключ: ленту дочищает домен.
+    const keep = options.keepReplies ? "n.event_kind = 'employer_reply' OR " : '';
+    const enabled = `(${keep}COALESCE((SELECT p.app_enabled FROM candidate_notification_preferences p
+             WHERE p.candidate_id = n.candidate_id AND p.preference_key = ${EVENT_PREFERENCE_SQL}), 1) = 1)`;
+    const rows = this.database
+      .prepare(
+        `SELECT n.id, n.event_kind, n.source_type, n.source_id, n.created_at, n.read_at
+         FROM candidate_notifications n
+         WHERE n.candidate_id = ? AND n.expires_at > ? AND n.created_at <= ? AND ${enabled}
+         ORDER BY n.created_at DESC, n.id DESC LIMIT ?`,
+      )
+      .all(candidateId, options.now, options.now, options.max) as unknown as {
+      id: string;
+      event_kind: NotificationEventKind;
+      source_type: string;
+      source_id: string;
+      created_at: string;
+      read_at: string | null;
+    }[];
+    const unread = this.database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM candidate_notifications n
+         WHERE n.candidate_id = ? AND n.read_at IS NULL AND n.expires_at > ? AND n.created_at <= ? AND ${enabled}`,
+      )
+      .get(candidateId, options.now, options.now) as { count: number };
+    return {
+      rows: rows.map((row) => ({
+        id: row.id,
+        kind: row.event_kind,
+        sourceType: row.source_type,
+        sourceId: row.source_id,
+        createdAt: row.created_at,
+        readAt: row.read_at,
+      })),
+      unreadCount: unread.count,
     };
   }
 
@@ -206,6 +289,31 @@ export class SqliteNotificationRepository {
     }));
   }
 
+  /**
+   * B671: запись, которая копит источник за сутки («Новые вакансии по вашей роли»): первый
+   * вызов создаёт её как `recordEvent`, следующие меняют `source_id` через `merge` и время
+   * записи — на время нового набора, если в нём есть новое.
+   */
+  recordOrMergeEvent(
+    candidateId: string,
+    input: NotificationEventInput,
+    merge: (storedSourceId: string) => string,
+  ): void {
+    const existing = this.readByIdempotencyKey(candidateId, input.idempotencyKey);
+    if (!existing) {
+      this.recordEvent(candidateId, { ...input, sourceId: merge('') });
+      return;
+    }
+    const next = merge(existing.source_id);
+    if (next === existing.source_id) return;
+    // Новое содержимое — новость: прочитанная запись снова непрочитана (B671, n01b).
+    this.database
+      .prepare(
+        'UPDATE candidate_notifications SET source_id = ?, created_at = ?, read_at = NULL WHERE id = ?',
+      )
+      .run(next, input.createdAt ?? new Date().toISOString(), existing.id);
+  }
+
   /** B543: отмена ручной отметки снимает её уведомление и неотправленные доставки. */
   withdrawEvent(candidateId: string, idempotencyKey: string): boolean {
     const row = this.readByIdempotencyKey(candidateId, idempotencyKey);
@@ -217,6 +325,53 @@ export class SqliteNotificationRepository {
       .prepare('DELETE FROM candidate_notifications WHERE candidate_id = ? AND id = ?')
       .run(candidateId, row.id);
     return true;
+  }
+
+  /**
+   * Источник удалён (тестовое или ошибочное интервью): его уведомления, которые ещё никуда не
+   * ушли, снимаются вместе с доставками. Ушедшее письмо или сообщение остаётся в истории.
+   */
+  withdrawUnsentFromSource(candidateId: string, sourceType: string, sourceId: string): number {
+    const ofSource = `SELECT id FROM candidate_notifications
+      WHERE candidate_id = ? AND source_type = ? AND source_id = ?`;
+    // A channel still waiting goes too, even if another channel already sent the reminder.
+    this.database
+      .prepare(
+        `DELETE FROM candidate_notification_deliveries
+         WHERE status IN ('pending', 'failed') AND notification_id IN (${ofSource})`,
+      )
+      .run(candidateId, sourceType, sourceId);
+    const unsent = `${ofSource} AND NOT EXISTS (SELECT 1 FROM candidate_notification_deliveries d
+      WHERE d.notification_id = candidate_notifications.id AND d.status IN ('sending', 'delivered'))`;
+    this.database
+      .prepare(`DELETE FROM candidate_notification_deliveries WHERE notification_id IN (${unsent})`)
+      .run(candidateId, sourceType, sourceId);
+    const result = this.database
+      .prepare(`DELETE FROM candidate_notifications WHERE id IN (${unsent})`)
+      .run(candidateId, sourceType, sourceId);
+    return Number(result.changes);
+  }
+
+  /** B690: есть ли непрочитанное уведомление этого источника — повтор не нужен. */
+  hasUnreadFromSource(candidateId: string, sourceType: string, now = new Date().toISOString()): boolean {
+    return this.database
+      .prepare(
+        `SELECT 1 FROM candidate_notifications
+         WHERE candidate_id = ? AND source_type = ? AND read_at IS NULL AND expires_at > ? LIMIT 1`,
+      )
+      .get(candidateId, sourceType, now) !== undefined;
+  }
+
+  /** B690: причина ушла — непрочитанные уведомления источника снимаются вместе с их доставками. */
+  withdrawUnreadFromSource(candidateId: string, sourceType: string): number {
+    const unread = `SELECT id FROM candidate_notifications WHERE candidate_id = ? AND source_type = ? AND read_at IS NULL`;
+    this.database
+      .prepare(`DELETE FROM candidate_notification_deliveries WHERE notification_id IN (${unread})`)
+      .run(candidateId, sourceType);
+    const result = this.database
+      .prepare(`DELETE FROM candidate_notifications WHERE id IN (${unread})`)
+      .run(candidateId, sourceType);
+    return Number(result.changes);
   }
 
   markRead(candidateId: string, notificationId: string, now = new Date().toISOString()): boolean {
@@ -235,11 +390,11 @@ export class SqliteNotificationRepository {
     const result = this.database
       .prepare(
         `UPDATE candidate_notifications AS n SET read_at = ?
-         WHERE candidate_id = ? AND read_at IS NULL AND expires_at > ?
+         WHERE candidate_id = ? AND read_at IS NULL AND expires_at > ? AND created_at <= ?
            AND COALESCE((SELECT p.app_enabled FROM candidate_notification_preferences p
              WHERE p.candidate_id = n.candidate_id AND p.preference_key = ${EVENT_PREFERENCE_SQL}), 1) = 1`,
       )
-      .run(now, candidateId, now);
+      .run(now, candidateId, now, now);
     return Number(result.changes);
   }
 
@@ -269,12 +424,47 @@ export class SqliteNotificationRepository {
     });
   }
 
-  isDeliveryEnabled(candidateId: string, channel: NotificationDeliveryChannel, kind: NotificationEventKind): boolean {
+  isDeliveryEnabled(
+    candidateId: string,
+    channel: NotificationDeliveryChannel,
+    kind: NotificationEventKind,
+    notificationId?: string,
+  ): boolean {
+    const invitation =
+      notificationId && kind === 'employer_reply' && isInvitationEvent(this.database, notificationId)
+        ? readInvitationPreference(this.database, candidateId)
+        : null;
+    if (invitation) return this.channelOpen(candidateId, channel, invitation);
     const key = notificationPreferenceKey(kind);
     if (!key) return false;
     const preference = this.getPreferences(candidateId).find((item) => item.key === key);
     if (!preference) return false;
     return channel === 'email' ? preference.email : preference.telegram && this.getTelegramChat(candidateId) !== null;
+  }
+
+  private channelOpen(
+    candidateId: string,
+    channel: NotificationDeliveryChannel,
+    channels: InvitationChannels,
+  ): boolean {
+    return channel === 'email' ? channels.email : channels.telegram && this.getTelegramChat(candidateId) !== null;
+  }
+
+  /** B671: ключ «Приглашения»; без сохранённой строки — значения ключа «Ответы». */
+  getInvitationPreference(candidateId: string): InvitationChannels & { readonly stored: boolean } {
+    const stored = readInvitationPreference(this.database, candidateId);
+    if (stored) return { ...stored, stored: true };
+    const reply = this.getPreferences(candidateId).find((item) => item.key === 'ev-reply')!;
+    return { app: reply.app, email: reply.email, telegram: reply.telegram, stored: false };
+  }
+
+  setInvitationPreference(
+    candidateId: string,
+    channels: InvitationChannels,
+    now = new Date().toISOString(),
+  ): InvitationChannels {
+    writeInvitationPreference(this.database, candidateId, channels, now);
+    return { app: channels.app, email: channels.email, telegram: channels.telegram };
   }
 
   setPreference(
@@ -349,6 +539,14 @@ export class SqliteNotificationRepository {
     return { connected: Boolean(row), linkedAt: row?.linked_at ?? null };
   }
 
+  /** B690: срок последней невостребованной ссылки на бота; null — ссылки нет. */
+  getTelegramLinkCodeExpiry(candidateId: string): string | null {
+    const row = this.database
+      .prepare('SELECT expires_at FROM candidate_notification_telegram_link_codes WHERE candidate_id = ?')
+      .get(candidateId) as { expires_at: string } | undefined;
+    return row?.expires_at ?? null;
+  }
+
   createTelegramLinkCode(candidateId: string, codeHash: string, expiresAt: string, now = new Date().toISOString()): void {
     this.database
       .prepare(
@@ -383,6 +581,25 @@ export class SqliteNotificationRepository {
     }
   }
 
+  /** n02 «Как часто» и «Не показывать название компании». */
+  getDeliverySettings(candidateId: string): DeliverySettings {
+    return readDeliverySettings(this.database, candidateId);
+  }
+
+  setDeliverySettings(candidateId: string, settings: DeliverySettings, now = new Date().toISOString()): DeliverySettings {
+    return writeDeliverySettings(this.database, candidateId, settings, now);
+  }
+
+  /** Уведомление об ответе было приглашением или оффером (B671): оно не ждёт сводки. */
+  isInvitation(notificationId: string): boolean {
+    return isInvitationEvent(this.database, notificationId);
+  }
+
+  /** Отложить взятую доставку до сводки (n02). */
+  deferDelivery(candidateId: string, notificationId: string, channel: NotificationDeliveryChannel, until: string, now: string): void {
+    deferDeliveryUntil(this.database, { candidateId, notificationId, channel, until, now });
+  }
+
   claimDueDeliveries(now: string, limit: number): ClaimedNotificationDelivery[] {
     const batchSize = Math.max(1, Math.min(100, Math.trunc(limit)));
     const staleAt = new Date(Date.parse(now) - 10 * 60 * 1_000).toISOString();
@@ -394,7 +611,7 @@ export class SqliteNotificationRepository {
       ).run(now, now, staleAt);
       const rows = this.database.prepare(
         `SELECT d.notification_id, d.candidate_id, d.channel, d.attempts,
-                n.id, n.event_kind, n.source_id, n.created_at, n.expires_at, n.read_at
+                n.id, n.event_kind, n.source_type, n.source_id, n.created_at, n.expires_at, n.read_at
          FROM candidate_notification_deliveries d
          JOIN candidate_notifications n ON n.id = d.notification_id AND n.candidate_id = d.candidate_id
          WHERE d.status = 'pending' AND d.next_attempt_at <= ? AND n.expires_at > ?
@@ -415,6 +632,7 @@ export class SqliteNotificationRepository {
       channel: row.channel,
       attempt: row.attempts + 1,
       notification: this.toItem(row),
+      source: { type: row.source_type ?? '', id: row.source_id },
       }));
     } catch (error) {
       this.database.exec('ROLLBACK');
@@ -494,6 +712,7 @@ export class SqliteNotificationRepository {
       for (const preference of this.getPreferences(row.candidate_id)) {
         this.setPreference(row.candidate_id, preference.key, { ...preference, email: false }, now);
       }
+      disableInvitationEmail(this.database, row.candidate_id, now);
       this.database.exec('RELEASE SAVEPOINT unsubscribe_notification_email');
       return true;
     } catch (error) {
@@ -511,6 +730,11 @@ export class SqliteNotificationRepository {
     const removed = Number(this.database
       .prepare('DELETE FROM candidate_notifications WHERE expires_at <= ?')
       .run(now).changes);
+    // Не полагаемся на ON DELETE CASCADE: внешние ключи у переданной базы могут быть выключены.
+    this.database.prepare(
+      `DELETE FROM candidate_notification_invitation_events
+       WHERE notification_id NOT IN (SELECT id FROM candidate_notifications)`,
+    ).run();
     this.database.prepare('DELETE FROM candidate_notification_unsubscribe_tokens WHERE expires_at <= ?').run(now);
     this.database.prepare('DELETE FROM candidate_notification_telegram_link_codes WHERE expires_at <= ?').run(now);
     return removed;
@@ -525,8 +749,13 @@ export class SqliteNotificationRepository {
       .run(candidateId);
     this.database.prepare('DELETE FROM candidate_notification_telegram_preferences WHERE candidate_id = ?').run(candidateId);
     this.database.prepare('DELETE FROM candidate_notification_telegram_chats WHERE candidate_id = ?').run(candidateId);
+    deleteInvitationRows(this.database, candidateId);
     this.database.prepare('DELETE FROM candidate_notification_telegram_link_codes WHERE candidate_id = ?').run(candidateId);
     this.database.prepare('DELETE FROM candidate_notification_unsubscribe_tokens WHERE candidate_id = ?').run(candidateId);
+    // B690: имя в Telegram живёт в своей таблице, она появляется только при первой записи.
+    if (this.database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'candidate_telegram_usernames'").get()) {
+      this.database.prepare('DELETE FROM candidate_telegram_usernames WHERE candidate_id = ?').run(candidateId);
+    }
     return removed;
   }
 
@@ -538,25 +767,46 @@ export class SqliteNotificationRepository {
   private enqueueSelectedChannels(
     candidateId: string,
     notificationId: string,
-    kind: NotificationEventKind,
+    input: NotificationEventInput,
     now: string,
   ): void {
-    const key = notificationPreferenceKey(kind);
+    const sendAt = input.deliverAt ?? now;
+    if (Date.parse(sendAt) < Date.parse(now)) return;
+    const enqueue = (channel: NotificationDeliveryChannel) =>
+      this.enqueue(candidateId, notificationId, channel, now, sendAt);
+    if (input.invitation && input.kind === 'employer_reply') {
+      markInvitationEvent(this.database, candidateId, notificationId);
+      const invitation = readInvitationPreference(this.database, candidateId);
+      if (invitation) {
+        if (invitation.email) enqueue('email');
+        if (this.channelOpen(candidateId, 'telegram', invitation)) {
+          enqueue('telegram');
+        }
+        return;
+      }
+    }
+    const key = notificationPreferenceKey(input.kind);
     if (!key) return;
     const preference = this.getPreferences(candidateId).find((item) => item.key === key);
     if (!preference) return;
-    if (preference.email) this.enqueue(candidateId, notificationId, 'email', now);
+    if (preference.email) enqueue('email');
     if (preference.telegram && this.getTelegramChat(candidateId) !== null) {
-      this.enqueue(candidateId, notificationId, 'telegram', now);
+      enqueue('telegram');
     }
   }
 
-  private enqueue(candidateId: string, notificationId: string, channel: NotificationDeliveryChannel, now: string): void {
+  private enqueue(
+    candidateId: string,
+    notificationId: string,
+    channel: NotificationDeliveryChannel,
+    now: string,
+    sendAt: string,
+  ): void {
     this.database.prepare(
       `INSERT INTO candidate_notification_deliveries
         (notification_id, candidate_id, channel, status, attempts, next_attempt_at, updated_at)
        VALUES (?, ?, ?, 'pending', 0, ?, ?) ON CONFLICT(notification_id, channel) DO NOTHING`,
-    ).run(notificationId, candidateId, channel, now, now);
+    ).run(notificationId, candidateId, channel, sendAt, now);
   }
 
   private requireSealedText(): SealedText {
@@ -567,7 +817,7 @@ export class SqliteNotificationRepository {
   private readByIdempotencyKey(candidateId: string, key: string): NotificationRow | undefined {
     return this.database
       .prepare(
-        `SELECT id, event_kind, source_id, created_at, expires_at, read_at
+        `SELECT id, event_kind, source_type, source_id, created_at, expires_at, read_at
          FROM candidate_notifications WHERE candidate_id = ? AND idempotency_key = ?`,
       )
       .get(candidateId, key) as NotificationRow | undefined;
@@ -580,6 +830,7 @@ export class SqliteNotificationRepository {
       createdAt: row.created_at,
       readAt: row.read_at,
       sourceId: row.source_id,
+      sourceType: row.source_type,
     });
   }
 }

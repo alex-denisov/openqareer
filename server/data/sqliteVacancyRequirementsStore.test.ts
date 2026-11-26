@@ -42,6 +42,28 @@ describe('durable public vacancy requirement queue', () => {
     expect(store.getLatest(input.vacancyId, hash)?.extractorVersion).toBe(extractVacancyRequirements(input).extractorVersion);
   });
 
+  it('reads the latest requirements of many vacancies at once, as getLatestOrLegacy does one by one (B766)', () => {
+    const { store } = setup();
+    const second = { vacancyId: 'v2', clusterId: 'c2', description: 'Requirements\n- Kubernetes' };
+    for (const source of [input, second]) {
+      store.enqueue(source);
+      store.complete(store.claim('w', 1)!, extractVacancyRequirements(source), 2);
+    }
+    const many = store.latestManyOrLegacy(['v1', 'v2', 'missing']);
+    expect([...many.keys()].sort()).toEqual(['v1', 'v2']);
+    expect(many.get('v1')).toEqual(store.getLatestOrLegacy('v1'));
+    expect(many.get('v2')?.requirements[0]?.text).toBe('Kubernetes');
+    expect(store.latestManyOrLegacy([]).size).toBe(0);
+  });
+
+  it('a batch read skips a version no reader serves, like getLatestOrLegacy (B766)', () => {
+    const { store } = setup();
+    const old = { ...input, extractorVersion: 'obsolete-extractor' };
+    store.enqueue(old);
+    store.complete(store.claim('old', 1)!, extractVacancyRequirements(old), 2);
+    expect(store.latestManyOrLegacy(['v1']).size).toBe(0);
+  });
+
   it('retains the worker lease through the bounded provider timeout and retry window', async () => {
     const { store, db } = setup();
     const other = new SqliteVacancyRequirementsStore(db);

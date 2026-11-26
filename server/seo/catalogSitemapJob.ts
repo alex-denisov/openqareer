@@ -7,6 +7,7 @@
  * serves files from memory, like `landing_stats` (B535).
  */
 import type { DatabaseSync } from 'node:sqlite';
+import { inWriteTransaction, writeInPortions } from '../data/writePortions';
 import { VACANCY_CLUSTERS_TABLE } from '../data/sqliteSchema';
 import { salaryMarketSitemapUrls } from './salaryMarketSitemap';
 import { marketReportPages } from './marketReport';
@@ -33,6 +34,20 @@ export const CATALOG_SITEMAPS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalog_si
   updated_at TEXT NOT NULL
 ) STRICT`;
 
+/**
+ * B776: одна строка о сборке файлов. Веб-процесс сверяет её, а не строки catalog_sitemaps:
+ * их столбцы лежат после 17 МБ xml, и подпись по ним шла 0,5 с цикла событий (прод 23.11).
+ */
+export const CATALOG_SITEMAPS_BUILD_TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalog_sitemaps_build (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  signature TEXT NOT NULL
+) STRICT`;
+
+function buildSignature(files: readonly SitemapFile[], now: Date): string {
+  const at = now.toISOString();
+  return files.map((file) => `${file.name}:${file.urlCount}:${file.lastmod ?? ''}:${at}`).join('|');
+}
+
 const DAY_MS = 86_400_000;
 
 /**
@@ -42,10 +57,6 @@ const DAY_MS = 86_400_000;
  * withdrawal date is stored here; a withdrawn vacancy leaves the active set.
  */
 function indexableJobs(database: DatabaseSync, now: Date): SitemapUrl[] {
-  // The summary job creates the table on its first tick; the sitemap may run before it.
-  database.exec(CATALOG_RU_SUMMARIES_TABLE_SQL);
-  database.exec(CATALOG_CARD_ROLLOUT_TABLE_SQL);
-  database.exec(VACANCY_CLUSTERS_TABLE);
   const restricted = SEARCH_RESTRICTED_JSON_NEEDLES.map(() => 'instr(c.cluster_json, ?) > 0').join(
     ' OR ',
   );
@@ -123,9 +134,14 @@ function listingCounts(database: DatabaseSync): ListingRow[] {
  * listing changes when a vacancy is added, and `last_seen_at` moves for every
  * row on every crawl, so it says nothing. Records the history first.
  */
-function listings(database: DatabaseSync, now: Date): SitemapUrl[] {
+function listings(
+  database: DatabaseSync,
+  now: Date,
+  writer: DatabaseSync,
+  pause: () => void,
+): SitemapUrl[] {
   const counts = listingCounts(database);
-  recordListingHistory(database, counts, now);
+  recordListingHistory(writer, counts, now, pause);
   // 11.11: only listings at their threshold; a thin list is not offered to search.
   return counts.flatMap((row) => {
     if (!listingQualifies(row.count, row.role !== undefined)) return [];
@@ -134,11 +150,23 @@ function listings(database: DatabaseSync, now: Date): SitemapUrl[] {
   });
 }
 
-/** Also records which listings exist and qualify (`catalog_listing_history`). */
-export function computeCatalogSitemaps(database: DatabaseSync, now: Date): SitemapFile[] {
+/**
+ * Also records which listings exist and qualify (`catalog_listing_history`): that and the
+ * tables other jobs create on their first tick go through `writer`, because in the worker
+ * `database` is read-only.
+ */
+export function computeCatalogSitemaps(
+  database: DatabaseSync,
+  now: Date,
+  writer: DatabaseSync = database,
+  pause: () => void = () => undefined,
+): SitemapFile[] {
+  writer.exec(CATALOG_RU_SUMMARIES_TABLE_SQL);
+  writer.exec(CATALOG_CARD_ROLLOUT_TABLE_SQL);
+  writer.exec(VACANCY_CLUSTERS_TABLE);
   return buildSitemapFiles({
     listings: [
-      ...listings(database, now),
+      ...listings(database, now, writer, pause),
       ...salaryMarketSitemapUrls(database, (code) => countryCatalogFrom(database, code)),
     ],
     jobs: indexableJobs(database, now),
@@ -146,35 +174,40 @@ export function computeCatalogSitemaps(database: DatabaseSync, now: Date): Sitem
   });
 }
 
-/** Replaces the whole set at once, so a shrunk job list leaves no stale file. */
+/**
+ * One file per transaction: the set is ~40 MB, and one transaction would hold the write lock.
+ * The build signature and the removal of stale files go last, so the web server re-reads the
+ * set only when it is complete.
+ */
 export function writeCatalogSitemaps(
   database: DatabaseSync,
   files: readonly SitemapFile[],
   now: Date,
+  pause: () => void = () => undefined,
 ): void {
   database.exec(CATALOG_SITEMAPS_TABLE_SQL);
-  const insert = database.prepare(
+  const at = now.toISOString();
+  const upsert = database.prepare(
     `INSERT INTO catalog_sitemaps (name, position, xml, url_count, lastmod, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (name) DO UPDATE SET position = excluded.position, xml = excluded.xml,
+       url_count = excluded.url_count, lastmod = excluded.lastmod, updated_at = excluded.updated_at`,
   );
-  database.exec('BEGIN IMMEDIATE');
-  try {
-    database.exec('DELETE FROM catalog_sitemaps');
-    files.forEach((file, position) => {
-      insert.run(
-        file.name,
-        position,
-        file.xml,
-        file.urlCount,
-        file.lastmod ?? null,
-        now.toISOString(),
-      );
-    });
-    database.exec('COMMIT');
-  } catch (error: unknown) {
-    database.exec('ROLLBACK');
-    throw error;
-  }
+  const rows = files.map((file, position) => ({ file, position }));
+  writeInPortions(database, rows, 1, pause, ({ file, position }) => {
+    upsert.run(file.name, position, file.xml, file.urlCount, file.lastmod ?? null, at);
+  });
+  pause();
+  inWriteTransaction(database, () => {
+    database
+      .prepare('DELETE FROM catalog_sitemaps WHERE name NOT IN (SELECT value FROM json_each(?))')
+      .run(JSON.stringify(files.map((file) => file.name)));
+    // Created with its row: an empty build table would leave a restarted web server without files.
+    database.exec(CATALOG_SITEMAPS_BUILD_TABLE_SQL);
+    database
+      .prepare('INSERT OR REPLACE INTO catalog_sitemaps_build (id, signature) VALUES (1, ?)')
+      .run(buildSignature(files, now));
+  });
 }
 
 /** Null when the maintenance process has not written the files yet. */

@@ -63,25 +63,71 @@ function cleanEmployer(raw: string): string {
   return value;
 }
 
+/** Формат работы в той же строке «🏢 …» — не работодатель («🏢 офис»). */
+const WORK_FORMAT = /^(?:офис|удал[её]нк\S*|удал[её]нно|гибрид\S*|office|remote|hybrid|on-?site)$/iu;
+
+/**
+ * B756 22.11: каналы-боты пишут работодателя строкой «🏢 Компания · 📍 Город» без слова
+ * «Компания»; пустая компания на проде роняла «Вакансии» у кандидата.
+ */
+function readEmojiLabelledEmployer(lines: string[]): string {
+  for (const line of lines) {
+    const match = line.match(/^\u{1F3E2}\uFE0F?\s*([^·•|]+)/u);
+    if (!match) continue;
+    const value = cleanEmployer(match[1]!);
+    if (value && !WORK_FORMAT.test(value)) return value;
+  }
+  return '';
+}
+
 /** `Компания: X` — the one form the channels do label, on its own line or mid-sentence. */
 function readLabelledEmployer(lines: string[]): string {
+  const emoji = readEmojiLabelledEmployer(lines);
+  if (emoji) return emoji;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const own = line.match(/^(?:компания|company|работодатель)\s*[:\-—]\s*(.+)$/iu);
+    const own = line.match(/^(?:компания|company|работодатель|клиент|заказчик|о\s+компании|about\s+(?:the\s+)?company)\s*[:\-—]\s*(.+)$/iu);
     if (own) {
       const value = cleanEmployer(own[1]);
       if (value) return value;
     }
-    const standalone = line.match(/^(?:компания|company|работодатель)\s*[:\-—]?$/iu);
+    const standalone = line.match(/^(?:компания|company|работодатель|клиент|заказчик|о\s+компании|about\s+(?:the\s+)?company)\s*[:\-—]?$/iu);
     if (standalone && i + 1 < lines.length) {
-      const nextVal = cleanEmployer(lines[i + 1]);
-      if (nextVal) return nextVal;
+      const nextLine = lines[i + 1];
+      const nextVal = cleanEmployer(nextLine);
+      if (nextVal && readsLikeAName(nextVal)) return nextVal;
+      const intro = nextLine.match(/^([A-ZА-ЯЁ][a-zA-Zа-яё0-9_.-]{1,30})\s+(?:is|ranked|была|было|были|это|является|—|–|-|специализируется|занимается|развивает)/iu);
+      if (intro) {
+        const cand = cleanEmployer(intro[1]);
+        if (cand && readsLikeAName(cand)) return cand;
+      }
     }
   }
   const inline = lines
     .join(' ')
-    .match(/(?:компания|company|работодатель)\s*[:\-—]\s*([^.,;\n]{2,50})/iu);
+    .match(/(?:компания|company|работодатель|клиент|заказчик|о\s+компании|about\s+(?:the\s+)?company)\s*[:\-—]\s*([^.,;\n]{2,50})/iu);
   return inline ? cleanEmployer(inline[1]) : '';
+}
+
+/** B646: extracts employer from common introduction patterns in post description lines. */
+function readEmployerFromDescriptionLines(lines: string[]): string {
+  for (const line of lines) {
+    const dashMatch = line.match(
+      /^([A-ZА-ЯЁ][a-zA-Zа-яё0-9_.-]{1,30})\s+[—–-]\s*(?:международн\S+\s+|российск\S+\s+|крупн\S+\s+)?(?:[-a-zа-яё0-9]+[\s-])?(?:компания|стартап|агентство|студия|сервис|платформа|холдинг|маркетплейс)/iu,
+    );
+    if (dashMatch) {
+      const candidate = cleanEmployer(dashMatch[1]);
+      if (candidate && readsLikeAName(candidate)) return candidate;
+    }
+    const inviteMatch = line.match(
+      /^([A-ZА-ЯЁ][a-zA-Zа-яё0-9_.-]{1,30})\s+(?:приглашает|ждёт|ждет|нанимает|открывает\s+позицию)/iu,
+    );
+    if (inviteMatch) {
+      const candidate = cleanEmployer(inviteMatch[1]);
+      if (candidate && readsLikeAName(candidate)) return candidate;
+    }
+  }
+  return '';
 }
 
 /** A short line with no role word, sitting directly above the role, is the employer. */
@@ -251,7 +297,13 @@ export function extractTelegramJobHeader(rawLines: string[]): { title: string; c
 
   for (const line of content.slice(0, TITLE_SCAN_LINES)) {
     const header = readHeaderFromLine(line, labelled);
-    if (header) return header;
+    if (header) {
+      if (!header.company) {
+        const fromDesc = readEmployerFromDescriptionLines(content);
+        if (fromDesc) return { ...header, company: fromDesc };
+      }
+      return header;
+    }
   }
 
   return { title: '', company: labelled };

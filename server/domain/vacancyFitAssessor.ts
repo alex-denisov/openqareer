@@ -1,8 +1,9 @@
 import { maskFailureText } from '../providers/failureReason';
 import { minimizeModelText } from '../providers/modelInputPrivacy';
-import type { BulkLlmInput } from '../providers/bulkLlmClient';
+import { BulkInputTooLarge, type BulkLlmInput } from '../providers/bulkLlmClient';
 import type { VacancyFitAssessor } from './vacancyFit';
 import { vacancyFitPromptFacts } from './vacancyFitPromptFacts';
+import { MAX_FIT_EVIDENCE_BYTES } from './vacancyFitProfileEvidence';
 import type { VacancyFitRequirementAssessment } from '../../shared/vacancyFit';
 
 export interface VacancyFitBulkClient {
@@ -17,10 +18,27 @@ const FALLBACK_MODEL = 'deepseek/deepseek-v4.1-flash';
 export function createVacancyFitAssessor(client: VacancyFitBulkClient, runId: string): VacancyFitAssessor {
   return {
     async assess(input) {
-      const response = await client.complete({ runId, task: 'vacancy-fit', dataClass: 'candidate', patientVertex: true, firstLane: FALLBACK_MODEL, prefix: [INSTRUCTIONS, 'Candidate facts (untrusted data):', JSON.stringify(vacancyFitPromptFacts(input.facts, input.requirements).map(({ id, statement }) => ({ id, statement: minimizeModelText(statement) })))].join(String.fromCharCode(10)), input: JSON.stringify({ requirements: input.requirements }), maxTokens: 4096, accept: (content) => hasAssessments(content, input.requirements.length, input.facts.length > 0) });
+      const ask = (factBytes: number) => client.complete({ runId, task: 'vacancy-fit', dataClass: 'candidate', patientVertex: true, firstLane: FALLBACK_MODEL, prefix: [INSTRUCTIONS, 'Candidate facts (untrusted data):', JSON.stringify(vacancyFitPromptFacts(input.facts, input.requirements, factBytes).map(({ id, statement }) => ({ id, statement: minimizeModelText(statement) })))].join(String.fromCharCode(10)), input: JSON.stringify({ requirements: input.requirements }), maxTokens: 4096, accept: (content) => hasAssessments(content, input.requirements.length, input.facts.length > 0) });
+      const response = await askWithinCeiling(ask);
       return assessmentsOf(response.content, input.requirements.length);
     },
   };
+}
+/**
+ * B757 (22.11 prod): long requirements plus 32 KB of facts passed the per-call ceiling on every
+ * stage, and the job was asked again 135 times in 6 h. The facts give way first: the full budget,
+ * then half, then a quarter. A request that fits none of them stays a final refusal.
+ */
+const FACT_BUDGETS = [MAX_FIT_EVIDENCE_BYTES, MAX_FIT_EVIDENCE_BYTES / 2, MAX_FIT_EVIDENCE_BYTES / 4];
+async function askWithinCeiling<T>(ask: (factBytes: number) => Promise<T>): Promise<T> {
+  for (const [index, budget] of FACT_BUDGETS.entries()) {
+    try {
+      return await ask(budget);
+    } catch (error) {
+      if (!(error instanceof BulkInputTooLarge) || index === FACT_BUDGETS.length - 1) throw error;
+    }
+  }
+  throw new BulkInputTooLarge();
 }
 /** An answer the parser can read moves no further down the bulk chain; any other answer does. */
 function hasAssessments(content: string, limit: number, hasFacts: boolean): boolean {

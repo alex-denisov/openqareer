@@ -28,7 +28,7 @@ function statedActions(statement: string): string[] {
 }
 
 /** Перевод не меняет субъект: где факт не называет личного действия, его нет и в переводе (G3d, письмо 6). */
-function addsPersonalAction(source: string, translation: string): boolean {
+export function addsPersonalAction(source: string, translation: string): boolean {
   if (FIRST_PERSON_GREW.test(translation)) return true;
   return statedActions(source).length === 0 && statedActions(translation).length > 0;
 }

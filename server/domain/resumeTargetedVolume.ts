@@ -1,4 +1,5 @@
 import type { ResumeExperience, TargetedResumeSlice } from './resumeStudioTypes';
+import { termAppears } from './requirementTerm';
 import { formatTargetedResumeAsAtsText } from './resumeAtsText';
 
 const PRINT_PAGE_WIDTH_MM = 210;
@@ -43,34 +44,25 @@ const PAGE_LINES = Math.floor(
     (PRINT_FONT_SIZE_PX * PRINT_LINE_HEIGHT),
 );
 
+/** Bullets each place keeps when the version is fitted to two pages: a place never becomes a bare title (B713). */
+export const MIN_BULLETS_PER_PLACE = 2;
+
+/**
+ * Fits the version to two pages by trimming bullets that match no requirement, oldest place first.
+ * Places are never dropped: a gap in the work history is worse than a third page (B713).
+ */
 export function estimateResumePages(targeted: TargetedResumeSlice): TargetedResumeVolume {
   const trimmed: TargetedResumeTrim[] = [];
-  const afterExperience = trimIrrelevantExperience(targeted, trimmed);
-  const afterBullets = trimIrrelevantBullets(afterExperience, trimmed);
-  return withPageVolume(afterBullets.targeted, afterBullets.measurement, trimmed);
+  const fitted = trimIrrelevantBullets(
+    { targeted, measurement: measureAtsText(targeted) },
+    trimmed,
+  );
+  return withPageVolume(fitted.targeted, fitted.measurement, trimmed);
 }
 
-function trimIrrelevantExperience(
-  targeted: TargetedResumeSlice,
-  trimmed: TargetedResumeTrim[],
-): PageEstimateState {
-  let current = targeted;
-  let measurement = measureAtsText(current);
-  for (const role of oldestFirst(zeroMatchExperience(current))) {
-    if (measurement.pages <= 2) break;
-    current = replaceExperience(
-      current,
-      current.document.experience.filter((item) => item.id !== role.id),
-    );
-    trimmed.push({
-      id: `experience:${role.id}`,
-      kind: 'experience',
-      label: experienceLabel(role),
-      reason: 'В роли нет совпадений с требованиями вакансии; она удалена первой по давности.',
-    });
-    measurement = measureAtsText(current);
-  }
-  return { targeted: current, measurement };
+function irrelevantBulletIndex(role: ResumeExperience | undefined, requirements: readonly string[]): number {
+  if (!role || role.bullets.length <= MIN_BULLETS_PER_PLACE) return -1;
+  return role.bullets.findIndex((bullet) => !bulletMatches(bullet.value, requirements));
 }
 
 function trimIrrelevantBullets(
@@ -79,15 +71,12 @@ function trimIrrelevantBullets(
 ): PageEstimateState {
   let current = state.targeted;
   let measurement = state.measurement;
+  const requirements = current.requirements.map((item) => item.requirement);
   for (const role of oldestFirst(current.document.experience)) {
-    if (measurement.pages <= 2) break;
     while (measurement.pages > 2) {
       const currentRole = current.document.experience.find((item) => item.id === role.id);
-      const bulletIndex = currentRole?.bullets.findIndex(
-        (bullet) => !bulletMatches(bullet.value, current.requirements.map((item) => item.requirement)),
-      );
-      if (!currentRole || bulletIndex === undefined || bulletIndex < 0) break;
-      const bullet = currentRole.bullets[bulletIndex];
+      const bulletIndex = irrelevantBulletIndex(currentRole, requirements);
+      const bullet = currentRole?.bullets[bulletIndex];
       if (!bullet) break;
       current = replaceExperience(
         current,
@@ -147,30 +136,8 @@ function wrappedLineCount(line: string): number {
   return Math.max(1, Math.ceil(characters / CONTENT_COLUMNS));
 }
 
-function zeroMatchExperience(targeted: TargetedResumeSlice): readonly ResumeExperience[] {
-  return targeted.document.experience.filter(
-    (role) => !experienceMatches(role, targeted.requirements.map((item) => item.requirement)),
-  );
-}
-
-function experienceMatches(role: ResumeExperience, requirements: readonly string[]): boolean {
-  return [role.title?.value, role.employer?.value, role.location?.value, ...role.bullets.map((b) => b.value)]
-    .filter((value): value is string => Boolean(value))
-    .some((value) => bulletMatches(value, requirements));
-}
-
 function bulletMatches(bullet: string, requirements: readonly string[]): boolean {
-  const normalizedBullet = normalizeText(bullet);
-  if (!normalizedBullet) return false;
-  return requirements.some((requirement) => {
-    const normalizedRequirement = normalizeText(requirement);
-    return normalizedRequirement.length > 0 &&
-      ` ${normalizedBullet} `.includes(` ${normalizedRequirement} `);
-  });
-}
-
-function normalizeText(value: string): string {
-  return value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/gu, ' ');
+  return requirements.some((requirement) => termAppears(requirement, bullet));
 }
 
 function oldestFirst<T extends ResumeExperience>(roles: readonly T[]): T[] {
@@ -189,11 +156,6 @@ function startTime(role: ResumeExperience): number | null {
   if (typeof raw !== 'string' || !raw.trim()) return null;
   const time = Date.parse(raw);
   return Number.isFinite(time) ? time : null;
-}
-
-function experienceLabel(role: ResumeExperience): string {
-  const label = [role.title?.value, role.employer?.value].filter(Boolean).join(' — ');
-  return label || 'Опыт работы без названия';
 }
 
 function replaceExperience(

@@ -11,6 +11,7 @@ import {
 import { SectionHead } from './ProfileSectionHead';
 import { ProfileFactProvenance } from './ProfileProvenanceChip';
 import type { CefrLevel, ResumeDraft, ResumeLanguageInput } from './resumeTypes';
+import { languageNameRu } from '../../../shared/languageNames';
 
 interface SectionProps {
   readonly draft: ResumeDraft;
@@ -29,18 +30,9 @@ export const CEFR_LABELS: Record<CefrLevel, string> = {
   C1: 'свободный',
   C2: 'в совершенстве',
 };
-const LANGUAGE_NAMES: Readonly<Record<string, string>> = {
-  english: 'Английский',
-  russian: 'Русский',
-  german: 'Немецкий',
-  french: 'Французский',
-  spanish: 'Испанский',
-  chinese: 'Китайский',
-  italian: 'Итальянский',
-};
-
+/** Название языка по-русски по общему словарю. */
 export function languageName(name: string): string {
-  return LANGUAGE_NAMES[name.trim().toLocaleLowerCase('en')] ?? name;
+  return languageNameRu(name);
 }
 
 const NATIVE_SOURCE = /native|bilingual|родн/iu;

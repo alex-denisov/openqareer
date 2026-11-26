@@ -1,0 +1,54 @@
+/* B785, o03: каркас листа виден, пока резюме собирается (в макете он включён адресом). */
+@layer b640.sections {
+  .b640 .cv-stage:not(:has(.cv-doc)) > .cv-skel {
+    display: grid;
+  }
+  /* Разделы листа держат отступ заголовками; строки идут подряд, как в файле. */
+  .b640 .cv-page > p {
+    margin: 0;
+    white-space: pre-line;
+  }
+  .b640 .cv-e-acts {
+    display: flex;
+    flex-wrap: wrap;
+    margin-inline-start: calc(-1 * var(--career-space-2));
+  }
+  .b640 .cv-e-form {
+    display: grid;
+  }
+  .b640 .cv-e-text {
+    min-block-size: 0;
+  }
+  .b640 .cv-e-acts > .cv-undo {
+    color: var(--career-text);
+  }
+  /* base-09 сбрасывает `background` и стрелку общего select: возвращаем её. */
+  .b640 .cv-lead .cv-hh select {
+    padding-inline-end: calc(var(--career-space-3) * 2 + var(--career-space-2));
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--career-text-dim) 50%),
+      linear-gradient(135deg, var(--career-text-dim) 50%, transparent 50%);
+    background-position:
+      calc(100% - var(--career-space-3) - var(--career-space-1)) 50%,
+      calc(100% - var(--career-space-3)) 50%;
+    background-size: var(--career-space-1) var(--career-space-1);
+    background-repeat: no-repeat;
+  }
+  /* Полоса действия: кнопка на вертикали колонки резюме, как в макете. */
+  .b640 .act-dock.is-auto.cv-dock {
+    display: grid;
+    grid-template-columns: subgrid;
+    column-gap: var(--career-space-8);
+    justify-items: start;
+  }
+  .b640 .act-dock.cv-dock > .btn {
+    grid-column: -2 / -1;
+  }
+  /* Под полосой страницы нет: полоса стоит у низа окна и в конце прокрутки. */
+  .b640 .page:has(> .act-dock.cv-dock:not(:empty)) {
+    padding-block-end: 0;
+  }
+  .b640 .act-dock.is-auto.cv-dock:empty {
+    display: none;
+  }
+}

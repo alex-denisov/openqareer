@@ -1,0 +1,120 @@
+/* «Карьера»: только то, чего нет в стилях макета. */
+@layer b640.sections {
+  /* s09: место полосы навыков, пока она читается (B792). */
+  .b640 .sk-place { visibility: hidden; }
+  /* s10: столбцы ролей равной ширины в любом движке (макет 166/166/172; WebKit делил 159/193). */
+  .b640 .cmp.cmp-roles { table-layout: fixed; }
+  .b640 .cmp.cmp-roles thead th:first-child { inline-size: var(--career-label-col); }
+  /* s10: «Как посчитано» стоит сразу за последним словом длинного заголовка, а не строкой ниже.
+     Место под значок — внутренний отступ заголовка: он не отрывается от последнего слова.
+     Значок занимает его отрицательным полем и сам ширины строке не прибавляет, поэтому
+     ни Chromium, ни WebKit .app не переносят его отдельно (склейка U+2060 и nowrap WebKit
+     не держит). */
+  .b640 .lead-head:has(> #cmp-title) {
+    --cmp-tip-size: max(var(--career-control-sm), var(--career-target-min));
+    display: block;
+  }
+  .b640 .lead-head:has(> #cmp-title) > .lead-title {
+    display: inline;
+    padding-inline-end: calc(var(--cmp-tip-size) + var(--career-space-1));
+  }
+  .b640 .lead-head:has(> #cmp-title) > .tip {
+    display: inline-flex;
+    vertical-align: middle;
+    margin-inline-start: calc(var(--cmp-tip-size) * -1);
+  }
+  /* c06: «Изменить места» в сетке .lead — строчная ссылка по ширине текста, как row-act макета. */
+  .b640 .lead > .row-act {
+    justify-self: start;
+  }
+  @media (max-width: 767px) {
+    /* S10: две кнопки закреплены над нижней навигацией — последний блок («Назвать свою роль»)
+       не уходит под них. */
+    div.b640:has(main .r2-actions > .is-primary) #career-main {
+      padding-block-end: calc(
+        var(--career-mobile-nav-height) + env(safe-area-inset-bottom, 0px) + 2 *
+          var(--career-target-min) + var(--career-space-8)
+      );
+    }
+  }
+  /* S9: столбцы таблицы ролей — ширины макета на 1080 px (294 / 209 / 198 / 149 / 229),
+     иначе таблица растягивает столбцы по данным (B645). */
+  .b640 .c9-table {
+    table-layout: fixed;
+  }
+  .b640 .c9-table thead th:nth-child(1) {
+    inline-size: 27.2%;
+  }
+  .b640 .c9-table thead th:nth-child(2) {
+    inline-size: 19.4%;
+  }
+  .b640 .c9-table thead th:nth-child(3) {
+    inline-size: 18.3%;
+  }
+  .b640 .c9-table thead th:nth-child(4) {
+    inline-size: 13.8%;
+  }
+  .b640 .c9-table thead th:nth-child(5) {
+    inline-size: 21.3%;
+  }
+  /* S9: строка источников под зарплатой переносится внутри ячейки; столбец nowrap держит
+     только саму вилку, иначе строка уходит под «Вакансий» (B645). */
+  .b640 .c9-table td .c9-n {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 767px) {
+    /* S9 390: «652 вакансии · по подборке за 30 дней» переносится внутри полосы, а не уходит
+       под «Изменить» (B645). */
+    .b640 .role-strip-n {
+      flex: 0 1 auto;
+      max-inline-size: 100%;
+    }
+  }
+  /* S9c: подвал окна «Роли поиска» переносит длинную главную кнопку (в макете `pf-df rs-foot`). */
+  .b640 .rs-dlg .pf-df {
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  /* C10: ошибка поля «Зарплата от» — как у полей профиля (`.pf-f small.is-err`). */
+  .b640 .cc-edit .field small.is-err {
+    display: flex;
+    gap: var(--career-space-1);
+    align-items: center;
+    color: var(--career-danger);
+    font-weight: 600;
+  }
+  /* C10: найденные места под полем «География». */
+  .b640 .cc-opts {
+    display: grid;
+    gap: var(--career-space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  /* C4: на 1440 и 1176 главная кнопка «Ответить» первой, как в макете; на 390 полоса закреплена. */
+  @media (min-width: 768px) {
+    .b640 .lead > .m-commit > .row-act {
+      order: 1;
+    }
+  }
+  /* C4 на 390 (B645): «Пропустить» строкой над «Ответить» по правому краю, «Ответить» — от половины полосы. */
+  @media (max-width: 767px) {
+    .b640 .lead > .actions.m-commit.m-commit.m-commit:has(> .row-act) {
+      flex-direction: row-reverse;
+      flex-wrap: wrap-reverse;
+      justify-content: space-between;
+      align-items: center;
+      row-gap: 0;
+    }
+    .b640 .lead > .actions.m-commit.m-commit.m-commit:has(> .row-act) > .btn.btn.btn {
+      order: -1;
+      flex: 0 1 auto;
+      min-inline-size: 50%;
+    }
+    .b640 .lead > .actions.m-commit.m-commit.m-commit:has(> .row-act) > .row-act {
+      flex: 0 0 auto;
+      margin-inline: calc(-1 * var(--career-space-2));
+    }
+  }
+}

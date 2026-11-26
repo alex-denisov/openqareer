@@ -355,6 +355,7 @@ interface ApplicationStub {
   readonly candidateId: string;
   readonly clusterId: string | null;
   stage: string;
+  starred?: boolean;
   archivePreviousStage: string | null;
   version: number;
   readonly vacancy: unknown;
@@ -400,6 +401,10 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
   /** Freeze Date at FIXTURE_NOW for specs that compare fixture dates with the present. */
   readonly freezeNow?: boolean;
   readonly candidateId?: string;
+  /** B649: сервер включил этому аккаунту новый кабинет B640. */
+  readonly cabinetB640?: boolean;
+  /** B642: сервер записывает разговоры (`features.interviewRecording`). */
+  readonly interviewRecording?: boolean;
   readonly initialSession?:
     | (Omit<AuthUser, 'role'> & {
         role: AuthUser['role'] | 'CareerPartner';
@@ -414,6 +419,12 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
   /** B552: fit analysis of the first matched vacancy, also served by its /fit route. */
   readonly firstVacancyFitView?: VacancyFitView;
   readonly vacancyInitialFilters?: VacanciesScreenState;
+  /** B645: роли поиска из «Карьеры» в meta.campaign списка подборки. */
+  readonly vacancyCampaignRoles?: readonly string[];
+  /** B726: русские названия ролей поиска в meta.campaign (`titlesRu`). */
+  readonly vacancyCampaignTitlesRu?: Readonly<Record<string, string>>;
+  /** B645: число частых требований роли поиска, которых нет в профиле (строка «Проверить N навыков»). */
+  readonly roleSkillGap?: number;
   readonly savedVacanciesCount?: number;
   readonly companyCount?: number;
   readonly companyDirectory?: Omit<MockCandidateCompanyOptions, 'companyCount'>;
@@ -549,6 +560,7 @@ function savedApplicationFixtures(count: number): ApplicationStub[] {
       candidateId: 'candidate-fixture',
       clusterId: `saved-cluster-${sequence}`,
       stage: 'saved',
+      starred: true,
       archivePreviousStage: null,
       version: 1,
       vacancy: {
@@ -1692,7 +1704,18 @@ export async function mockSignedInCabinet(
         json: {
           data:
             options.initialSession === undefined
-              ? { ...candidate, emailVerified: true }
+              ? {
+                  ...candidate,
+                  emailVerified: true,
+                  ...(options.cabinetB640
+                    ? {
+                        features: {
+                          cabinetB640: true,
+                          ...(options.interviewRecording ? { interviewRecording: true } : {}),
+                        },
+                      }
+                    : {}),
+                }
               : options.initialSession,
         },
       });
@@ -1931,6 +1954,7 @@ export async function mockSignedInCabinet(
           candidateId: 'candidate-fixture',
           clusterId: body.clusterId ?? null,
           stage: body.stage ?? 'saved',
+          starred: (body.stage ?? 'saved') === 'saved',
           archivePreviousStage: null,
           version: 1,
           vacancy: body.manualVacancy ?? null,
@@ -1949,7 +1973,8 @@ export async function mockSignedInCabinet(
         (item) => item.id === decodeURIComponent(applicationRoute[1]!),
       );
       if (!record) return route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
-      const body = route.request().postDataJSON() as { stage?: string };
+      const body = route.request().postDataJSON() as { stage?: string; starred?: boolean };
+      if (body.starred !== undefined) record.starred = body.starred;
       if (body.stage === 'archived') record.archivePreviousStage = record.stage;
       if (body.stage) record.stage = body.stage;
       record.version += 1;
@@ -2561,10 +2586,28 @@ export async function mockSignedInCabinet(
     if (options.firstVacancyFitView && /\/candidate\/vacancies\/[^/]+\/fit$/u.test(path)) {
       return route.fulfill({ json: { data: options.firstVacancyFitView } });
     }
-    if (path.endsWith('/candidate/matched-vacancies')) {
+    if (path.endsWith('/candidate/role-skill-demand') && options.roleSkillGap !== undefined) {
+      const skills = Array.from({ length: options.roleSkillGap }, (_, index) => ({
+        skill: `Навык ${index + 1}`,
+        inProfile: false,
+      }));
+      return route.fulfill({
+        json: {
+          data: { state: 'ready', roles: [{ roleTitle: 'Руководитель разработки', skills }] },
+        },
+      });
+    }
+    // Список s07 читает порции по 20 (первая несёт и кампанию), прежний маршрут — по 50.
+    // Порядок столбцов здесь не моделируется.
+    if (/\/candidate\/(?:b640\/)?matched-vacancies$/u.test(path)) {
       const offset = Number(url.searchParams.get('offset') ?? 0);
       const page = withFirstFitView(
-        matchedVacancyPage(offset, options.vacancyTotal),
+        matchedVacancyPage(
+          offset,
+          options.vacancyTotal,
+          // Короткая подборка приходит целиком: порции порядка сервера нужны только длинной.
+          (options.vacancyTotal ?? 0) > 50 ? Number(url.searchParams.get('limit')) || 50 : 50,
+        ),
         offset,
         options.firstVacancyFitView,
       );
@@ -2577,6 +2620,20 @@ export async function mockSignedInCabinet(
           meta: {
             ...page.meta,
             ...(options.vacancyFacets ? { facets: options.vacancyFacets } : {}),
+            ...(options.vacancyCampaignRoles
+              ? {
+                  campaign: {
+                    roles: { value: options.vacancyCampaignRoles, origin: 'explicit' },
+                    regions: { value: [], origin: 'default' },
+                    ...(options.vacancyCampaignTitlesRu
+                      ? { titlesRu: options.vacancyCampaignTitlesRu }
+                      : {}),
+                  },
+                }
+              : {}),
+            ...(url.searchParams.get('roles') === 'campaign'
+              ? { roles: options.vacancyCampaignRoles ?? [] }
+              : {}),
             ...(offset === 0 && options.vacancyInitialFilters
               ? { initialFilters: options.vacancyInitialFilters }
               : {}),

@@ -30,6 +30,7 @@ const configSchema = z.object({
   OPENQAREER_OPENROUTER_API_KEY: z.string().min(20).optional(),
   OPENQAREER_HIBP_API_KEY: blankAsUnset(z.string().min(1).max(2_048)),
   OPENQAREER_EXA_API_KEY: blankAsUnset(z.string().min(1).max(2_048)),
+  OPENQAREER_YOUTUBE_API_KEY: blankAsUnset(z.string().min(1).max(2_048)),
   // Empty placeholders in the env file mean «not configured yet» (B266).
   OPENQAREER_TELEGRAM_BOT_TOKEN: z.preprocess(
     (value) => (value === '' ? undefined : value),
@@ -91,9 +92,22 @@ const configSchema = z.object({
     .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$/)
     .optional(),
   OPENQAREER_TEST_CANDIDATE_PASSWORD: z.string().min(16).max(256).optional(),
+  OPENQAREER_CABINET_B640_USERNAMES: z
+    .string()
+    .max(8_192)
+    .default('')
+    .transform(parseCabinetB640Usernames)
+    .refine((names) => names.every(isCabinetB640Entry), {
+      message: 'expected sign-in names separated by commas, or *',
+    }),
   OPENQAREER_RESEND_API_KEY: blankAsUnset(z.string().min(10).max(2_048)),
   OPENQAREER_ACCOUNT_EMAIL_FROM: blankAsUnset(z.string().min(3).max(320)),
   OPENQAREER_EMAIL_VERIFICATION_REQUIRED: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  ),
+  /** B642: запись и расшифровка разговоров — выключены до редакции 1.3 юридических документов. */
+  OPENQAREER_INTERVIEW_RECORDING_ENABLED: z.preprocess(
     (value) => (value === '' ? undefined : value),
     z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
   ),
@@ -190,6 +204,18 @@ function blankAsUnset(schema: z.ZodString) {
   );
 }
 
+/** B649: имена входа приводятся к виду, в котором их хранит вход. */
+function parseCabinetB640Usernames(value: string): string[] {
+  return value
+    .split(',')
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isCabinetB640Entry(name: string): boolean {
+  return name === '*' || /^[a-z0-9][a-z0-9._-]{2,79}$/u.test(name);
+}
+
 function parseEmailMxBypassDomains(value: string): string[] {
   return value
     .split(',')
@@ -253,6 +279,8 @@ export interface ServerConfig {
   openRouterKey?: string;
   hibpApiKey?: string;
   exaApiKey?: string;
+  /** B668: ключ YouTube Data API v3 (проект Google Cloud); нет ключа — источник не подключён. */
+  youtubeApiKey?: string;
   /** B266: owner alerts (plan requests). Both unset → alerts are silently off. */
   telegramBotToken?: string;
   telegramOwnerChatId?: string;
@@ -299,10 +327,14 @@ export interface ServerConfig {
     publicBaseUrl: string;
   };
   emailVerificationRequired?: boolean;
+  /** B642: маршруты записей разговоров; выключено — их нет (404). */
+  interviewRecordingEnabled?: boolean;
   emailVerificationFixedCode?: string;
   /** B471: zero means new Executive requests are placed on the waitlist. */
   executiveRequestCapacity?: number;
   emailMxCheckBypassDomains?: readonly string[];
+  /** B649: кому включён новый кабинет B640; пусто — никому, `*` — всем. */
+  cabinetB640Usernames?: readonly string[];
   desktopTunnel?: DesktopTunnelConfig;
   robokassa?: RobokassaGatewayConfig;
 }
@@ -421,6 +453,7 @@ export function readServerConfig(
     openRouterKey: parsed.OPENQAREER_OPENROUTER_API_KEY,
     hibpApiKey: parsed.OPENQAREER_HIBP_API_KEY,
     exaApiKey: parsed.OPENQAREER_EXA_API_KEY,
+    youtubeApiKey: parsed.OPENQAREER_YOUTUBE_API_KEY,
     telegramBotToken: parsed.OPENQAREER_TELEGRAM_BOT_TOKEN,
     telegramOwnerChatId: parsed.OPENQAREER_TELEGRAM_OWNER_CHAT_ID,
     ...(parsed.OPENQAREER_TELEGRAM_WEBHOOK_SECRET
@@ -446,7 +479,9 @@ export function readServerConfig(
     release: builtRelease,
     logLevel: parsed.OPENQAREER_LOG_LEVEL,
     emailMxCheckBypassDomains: parsed.OPENQAREER_MX_CHECK_BYPASS_DOMAINS,
+    cabinetB640Usernames: parsed.OPENQAREER_CABINET_B640_USERNAMES,
     emailVerificationRequired: parsed.OPENQAREER_EMAIL_VERIFICATION_REQUIRED,
+    interviewRecordingEnabled: parsed.OPENQAREER_INTERVIEW_RECORDING_ENABLED,
     executiveRequestCapacity: parsed.OPENQAREER_EXECUTIVE_REQUEST_CAPACITY,
     emailVerificationFixedCode: parsed.OPENQAREER_TEST_FIXED_CODE,
     secureCookies,

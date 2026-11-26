@@ -25,7 +25,7 @@ export interface VacancyFitPoint {
   readonly status: VacancyFitRequirementAssessment['status'];
 }
 export type VacancyFitFailure =
-  'model_unavailable' | 'model_invalid' | 'requirements' | 'profile_changed' | 'other';
+  'model_unavailable' | 'model_invalid' | 'requirements' | 'profile_changed' | 'too_large' | 'other';
 /** 02.11 audit: no per-quote cap, adjacent area unknown, location evidence only for location conditions, job-board soft-skill tags dropped. */
 export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-9';
 /** Shown while the current version is calculated, so a version bump never hides a known percent. */
@@ -102,8 +102,13 @@ export interface VacancyFitResult {
    * as met in the percent; the stored assessments stay as the model gave them, so no model call repeats.
    */
   readonly implied?: readonly { readonly requirementId: string; readonly role: string }[];
-  /** Lines of the text that say what the job will ask (04.11): kept with their verdicts, never counted. */
+  /**
+   * Lines kept with their verdicts and never counted: what the job will ask (04.11), and wishes
+   * («будет плюсом») the profile does not show (25.11).
+   */
   readonly duties?: readonly string[];
+  /** The wishes among `duties`: the card lists them after the counted lines, outside «N из M». */
+  readonly wishes?: readonly string[];
   /**
    * 03.11: location lines (an onsite city, a format) the search conditions cover. Met whatever the
    * profile city says; the stored assessments stay as the model gave them, like `implied`.

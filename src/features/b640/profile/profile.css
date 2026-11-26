@@ -1,0 +1,39 @@
+/* «Профиль»: только то, чего нет в стилях макета. */
+@layer b640.sections {
+  /* S1 1440 и 1176: роль в шапке — одна строка с многоточием, шапка по высоте фото 72 (B645).
+     На 390 роль в макете переносится. */
+  @media (min-width: 768px) {
+    .b640 .phead-role {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+  /* Д13: «Дальше» p06 стоит у низа окна. */
+  @media (min-width: 768px) {
+    .b640 .page.pf:has(> .act-dock.is-auto) { padding-block-end: 0; }
+  }
+  /* S1 390: круг инициалов того же размера, что фото на 390 (56). */
+  @media (max-width: 767px) {
+    .b640 .phead-pic > .phead-ini {
+      inline-size: calc(var(--career-space-8) + var(--career-space-6));
+      block-size: calc(var(--career-space-8) + var(--career-space-6));
+    }
+  }
+  /* p11: вид как в макете (кнопка 36, чип 32), область нажатия — 44. */
+  .b640 .ln-end .btn,
+  .b640 a.ln-open,
+  .b640 .ln-chip-pool {
+    position: relative;
+  }
+  .b640 .ln-end .btn::after,
+  .b640 a.ln-open::after,
+  .b640 .ln-chip-pool::after {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 50%;
+    block-size: max(100%, var(--career-target-min));
+    transform: translateY(-50%);
+  }
+}

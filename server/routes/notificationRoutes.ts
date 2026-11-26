@@ -2,6 +2,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import type { RouteDeps } from './deps';
+import { TELEGRAM_LINK_START, telegramUpdateRoute } from '../notifications/telegramUpdateRoute';
+import { createTelegramWebhookRegistrar } from '../notifications/telegramWebhookRegistration';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, sendError } from './helpers';
 import {
   closeNotificationRepositoryFor,
@@ -10,10 +12,12 @@ import {
 import { NotificationCursorError } from '../data/sqliteNotificationRepository';
 import type { NotificationPreferenceKey } from '../data/notificationPolicy';
 import { NotificationDeliveryProcessor } from '../notifications/notificationDelivery';
+import { forgetTelegramUsername, registerTelegramLinkStateRoutes, rememberTelegramUsername } from './telegramLinkStateRoutes';
 import {
   buildNotificationEmailSender,
   buildNotificationTelegramSender,
   buildTelegramWebhookConfigurator,
+  telegramWebhookUrl,
 } from '../notifications/notificationProviders';
 import { createNotificationUnsubscribeToken } from '../notifications/notificationToken';
 
@@ -271,6 +275,7 @@ const handleUnlinkTelegram: Handler = async (deps, request, reply) => {
   );
   if (!candidate) return undefined;
   const disconnected = notificationRepositoryFor(deps).unlinkTelegramChat(candidate.id);
+  forgetTelegramUsername(deps, request.log, candidate.id);
   return { data: { connected: false, disconnected }, meta: { requestId: request.id } };
 };
 
@@ -291,17 +296,27 @@ async function handleTelegramWebhook(
       false,
     );
   }
+  const route = telegramUpdateRoute(request.body, deps.smmTelegram?.chatId ?? null);
+  if (route === 'smm') {
+    // Ответ Telegram сразу: SMM думает моделью дольше, чем вебхук ждёт, и сам пишет свои сбои.
+    deps.smmTelegram?.handle(request.body);
+    return { ok: true };
+  }
+  if (route === 'link') await linkTelegramChat(deps, request);
+  return { ok: true };
+}
+
+/** `/start <код>`: чат привязывается к кандидату, бот подтверждает привязку. */
+async function linkTelegramChat(deps: RouteDeps, request: FastifyRequest): Promise<void> {
   const update = telegramUpdateSchema.safeParse(request.body);
-  if (!update.success || !update.data.message?.text) return { ok: true };
-  const match = update.data.message.text.match(
-    /^\/start(?:@[A-Za-z0-9_]+)?\s+([A-Za-z0-9_-]{40,64})$/u,
-  );
-  if (!match) return { ok: true };
+  const match = update.success ? update.data.message?.text?.match(TELEGRAM_LINK_START) : null;
+  if (!update.success || !update.data.message || !match) return;
   const chatId = String(update.data.message.chat.id);
   const candidateId = notificationRepositoryFor(deps).consumeTelegramLinkCode(
     opaqueTokenHash('telegram-link-v1', match[1]!),
     chatId,
   );
+  if (candidateId) rememberTelegramUsername(deps, request.log, candidateId, update.data.message.from?.username);
   if (candidateId && deps.config.telegramBotToken) {
     try {
       await buildNotificationTelegramSender(deps.config.telegramBotToken)({
@@ -319,7 +334,6 @@ async function handleTelegramWebhook(
       );
     }
   }
-  return { ok: true };
 }
 
 const unsubscribeQuerySchema = z
@@ -384,6 +398,7 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: RouteDeps
   registerInboxRoutes(app, deps);
   registerChannelRoutes(app, deps);
   registerExternalChannelRoutes(app, deps);
+  registerTelegramLinkStateRoutes(app, deps);
 }
 
 function registerInboxRoutes(app: FastifyInstance, deps: RouteDeps): void {
@@ -449,6 +464,8 @@ const telegramUpdateSchema = z
     message: z
       .object({
         text: z.string().max(200).optional(),
+        // B690: имя отправителя для «Telegram · @имя»; чужая форма поля — имени нет.
+        from: z.object({ username: z.unknown().optional() }).passthrough().optional().catch(undefined),
         chat: z.object({
           id: z.union([z.number().int().safe(), z.string().regex(/^-?[0-9]{1,20}$/u)]),
         }),
@@ -517,7 +534,26 @@ function createDeliveryProcessor(
       createUnsubscribeUrl(repository, publicBaseUrl, candidateId, deps.config.dataEncryptionKey),
     ...(emailConfig ? { sendEmail: buildNotificationEmailSender(emailConfig) } : {}),
     ...(botToken ? { sendTelegram: buildNotificationTelegramSender(botToken) } : {}),
+    resolveCompany: (candidateId, source) => applicationCompany(deps, candidateId, source),
+    resolveTimeZone: (candidateId) => deps.authService.getCandidateTimezone?.(candidateId) ?? null,
   });
+}
+
+/** n02: компания отклика (или отклика интервью) для строки письма и Telegram; сбой чтения не мешает доставке. */
+function applicationCompany(
+  deps: RouteDeps,
+  candidateId: string,
+  source: { readonly type: string; readonly id: string },
+): string | null {
+  try {
+    if (source.type === 'interview') {
+      return deps.candidateStore.getInterviewSubject(candidateId, source.id)?.vacancyCompany ?? null;
+    }
+    if (source.type !== 'application') return null;
+    return deps.candidateStore.getApplication(candidateId, source.id)?.vacancy?.company ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function startDeliveryPoller(app: FastifyInstance, processor: NotificationDeliveryProcessor): void {
@@ -562,25 +598,13 @@ function startTelegramWebhookRegistration(
   webhookSecret: string,
   publicBaseUrl: string,
 ): void {
-  const configureWebhook = buildTelegramWebhookConfigurator(botToken, publicBaseUrl, webhookSecret);
-  let configuring = false;
+  const register = createTelegramWebhookRegistrar(
+    buildTelegramWebhookConfigurator(botToken, publicBaseUrl, webhookSecret),
+    app.log,
+    telegramWebhookUrl(publicBaseUrl),
+  );
   const registerWebhook = async () => {
-    if (configuring || telegramWebhookReady.get(deps)) return;
-    configuring = true;
-    try {
-      await configureWebhook();
-      telegramWebhookReady.set(deps, true);
-    } catch (error) {
-      app.log.error(
-        {
-          code: 'telegram_webhook_setup_failed',
-          failureType: error instanceof Error ? error.name : 'UnknownError',
-        },
-        'candidate-telegram-webhook-setup-failed',
-      );
-    } finally {
-      configuring = false;
-    }
+    if (await register()) telegramWebhookReady.set(deps, true);
   };
   const timer = setInterval(() => void registerWebhook(), 5 * 60_000);
   timer.unref();

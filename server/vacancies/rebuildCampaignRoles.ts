@@ -98,5 +98,5 @@ export async function rebuildCampaignRoles(
     },
   });
   options.log?.({ builtBy: auto.model, roles: auto.roles.length }, 'campaign-roles-rebuilt');
-  deps.matchedPoolPrecompute?.prioritizeCampaign(candidateId);
+  deps.matchedPoolPrecompute?.refreshCampaign?.(candidateId);
 }

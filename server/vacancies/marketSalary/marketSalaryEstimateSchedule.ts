@@ -15,7 +15,14 @@ interface EstimateLog {
 }
 
 const FIRST_RUN_MS = 3 * 60_000;
-const INTERVAL_MS = 6 * 60 * 60_000;
+const INTERVAL_MS = 24 * 60 * 60_000;
+/**
+ * B761 23.11: проход читает 2,7 млн строк с диска (~590 с блокировок, 27–45 мин) и шёл
+ * каждые 6 часов — в часы людей и в пик сбора 21–23Z. Раз в сутки в 01:30Z (04:30 МСК).
+ */
+const DAILY_AT_UTC_MINUTE = 90;
+/** B803: 25.11 выкаты прервали проход дважды, и оценки не обновились сутки: догоняем до следующего слота. */
+const DAILY_CATCH_UP_MS = INTERVAL_MS;
 
 export function scheduleMarketSalaryEstimateJob(
   database: DatabaseSync,
@@ -46,6 +53,8 @@ export function scheduleMarketSalaryEstimateJob(
     job: 'market-salary-estimates',
     firstRunMs: FIRST_RUN_MS,
     intervalMs: INTERVAL_MS,
+    dailyAtUtcMinute: DAILY_AT_UTC_MINUTE,
+    dailyCatchUpMs: DAILY_CATCH_UP_MS,
     run,
   });
 }

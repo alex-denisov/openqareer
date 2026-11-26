@@ -1,3 +1,9 @@
+import { registerFootprintAddedLinkRoute } from './footprintAddedLinkRoute';
+import { registerFootprintRemovalRoutes } from './footprintRemovalRoutes';
+import { registerFootprintRiskRoutes } from './footprintRiskRoutes';
+import { cabinetB640Enabled } from './cabinetB640Flag';
+import { expandSameWording, mergeSameWording } from '../osint/footprintPlanWording';
+import { hideFootprintTools, toPublicFootprint } from './footprintPublicView';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -16,6 +22,7 @@ import {
 import {
   buildCandidateFootprintQueryPlan,
   extractUnidentifiedEmployers,
+  profileLinksOf,
   toPublicFootprintQueryPlan,
 } from '../osint/candidateFootprintQueryPlan';
 import { registerCandidateFootprintChecklistRoutes } from './candidateFootprintChecklistRoutes';
@@ -39,23 +46,42 @@ const reviewSchema = z.object({
   review: z.enum(['confirmed_self', 'not_self', 'hidden', 'unreviewed']),
 }).strict();
 
-function sourceAvailability(config: RouteDeps['config']) {
+function sourceAvailability(config: RouteDeps['config'], youtube: boolean) {
   return {
     sherlock: true,
     maigret: true,
     hibp: Boolean(config.hibpApiKey),
     wayback: true,
     exa: Boolean(config.exaApiKey),
+    // B668: YouTube видят только кандидаты с флагом B640, прежний ответ не меняется.
+    ...(youtube ? { youtube: Boolean(config.youtubeApiKey) } : {}),
   } as const;
 }
 
-function getPlan(deps: RouteDeps, candidateId: string, manualEmployers?: readonly string[]) {
+/** B668: проверка канала YouTube — только кандидату с флагом нового кабинета. */
+function youtubeEnabled(deps: RouteDeps, request: FastifyRequest): boolean {
+  const principal = authenticateSession(request, deps.authService, deps.config);
+  return Boolean(principal && cabinetB640Enabled(deps.config, principal.username));
+}
+
+/** B740: инструменты поиска только на сервере; экрану B640 не нужны и коды шагов. */
+function forViewer<T>(deps: RouteDeps, request: FastifyRequest, data: T): T {
+  return youtubeEnabled(deps, request) ? hideFootprintTools(data) : toPublicFootprint(data);
+}
+
+function getPlan(
+  deps: RouteDeps,
+  candidateId: string,
+  manualEmployers: readonly string[] | undefined,
+  youtube: boolean,
+) {
   const draft = deps.candidateStore.getSnapshot(candidateId).resume?.draft ?? EMPTY_RESUME_DRAFT;
-  const availability = sourceAvailability(deps.config);
+  const availability = sourceAvailability(deps.config, youtube);
   return {
     plan: toPublicFootprintQueryPlan(
-      buildCandidateFootprintQueryPlan(draft, { manualEmployers }),
+      buildCandidateFootprintQueryPlan(draft, { manualEmployers, youtube }),
       availability,
+      profileLinksOf(draft),
     ),
     unidentifiedEmployers: extractUnidentifiedEmployers(draft),
     sourceAvailability: availability,
@@ -110,11 +136,11 @@ async function handleGetFootprintPlan(
       : undefined;
   const consent = consentForCandidate(deps, request, candidate.id);
   const { plan, unidentifiedEmployers, sourceAvailability } = getPlan(
-    deps, candidate.id, manualEmployers,
+    deps, candidate.id, manualEmployers, youtubeEnabled(deps, request),
   );
-  return {
-    data: {
-      plan,
+  const data = {
+      // B668: экран B640 не различает способы проверки — одна строка на формулировку.
+      plan: youtubeEnabled(deps, request) ? mergeSameWording(plan) : plan,
       unidentifiedEmployers,
       sourceAvailability,
       consent: {
@@ -123,9 +149,8 @@ async function handleGetFootprintPlan(
         versionId: CAPABILITY_CONSENT_CURRENT_VERSION.digital_footprint,
       },
       audit: latestFootprintAudit(deps, candidate.id),
-    },
-    meta: { requestId: request.id },
   };
+  return { data: forViewer(deps, request, data), meta: { requestId: request.id } };
 }
 
 function staleAudit(audit: NonNullable<ReturnType<NonNullable<RouteDeps['candidateReputationRepo']>['getLatestFootprintAudit']>>) {
@@ -159,7 +184,7 @@ async function handleGetFootprintAudit(
       ...(audit.completedAt ? { createdAt: audit.completedAt } : {}),
     });
   }
-  return { data: { audit }, meta: { requestId: request.id } };
+  return { data: forViewer(deps, request, { audit }), meta: { requestId: request.id } };
 }
 
 function isConsentCurrent(deps: RouteDeps, userId: string, candidateId: string): boolean {
@@ -180,14 +205,18 @@ function validateSelectedQueryIds(
   deps: RouteDeps,
   candidateId: string,
   selectedQueryIds: readonly string[],
-  manualEmployers?: readonly string[],
-): { valid: boolean; unavailable: boolean } {
-  const { plan } = getPlan(deps, candidateId, manualEmployers);
-  const selected = new Set(selectedQueryIds);
+  manualEmployers: readonly string[] | undefined,
+  youtube: boolean,
+): { valid: boolean; unavailable: boolean; ids: readonly string[] } {
+  const { plan } = getPlan(deps, candidateId, manualEmployers, youtube);
+  // B668: строка экрана B640 — все проверки с её формулировкой.
+  const ids = youtube ? expandSameWording(plan, selectedQueryIds) : selectedQueryIds;
+  const selected = new Set(ids);
   const matches = plan.filter((item) => selected.has(item.id));
   return {
     valid: matches.length === selected.size,
     unavailable: matches.some((item) => !item.available),
+    ids,
   };
 }
 
@@ -224,6 +253,7 @@ async function handleStartFootprintAudit(
   }
   const selected = validateSelectedQueryIds(
     deps, candidate.id, parsed.data.selectedQueryIds, parsed.data.manualEmployers,
+    youtubeEnabled(deps, request),
   );
   if (!selected.valid) {
     return sendError(reply, request, 409, 'query_plan_changed', 'План проверки изменился. Обновите страницу.', false);
@@ -232,7 +262,7 @@ async function handleStartFootprintAudit(
     return sendError(reply, request, 409, 'source_not_connected', 'Один из выбранных источников не подключён.', false);
   }
   return launchFootprintRun(
-    deps, request, reply, candidate.id, userId, parsed.data.selectedQueryIds,
+    deps, request, reply, candidate.id, userId, selected.ids,
     new Date().toISOString(), parsed.data.manualEmployers,
   );
 }
@@ -248,7 +278,10 @@ async function launchFootprintRun(
   manualEmployers?: readonly string[],
 ): Promise<unknown> {
   const draft = deps.candidateStore.getSnapshot(candidateId).resume?.draft ?? EMPTY_RESUME_DRAFT;
-  const plan = buildCandidateFootprintQueryPlan(draft, { manualEmployers });
+  const plan = buildCandidateFootprintQueryPlan(draft, {
+    manualEmployers,
+    youtube: youtubeEnabled(deps, request),
+  });
   try {
     const audit = startCandidateFootprintAudit({
       candidateId,
@@ -260,7 +293,7 @@ async function launchFootprintRun(
       adapters: createFootprintAdapterSet({ config: deps.config }),
       isAuthorized: () => isConsentCurrent(deps, userId, candidateId),
     });
-    return reply.code(202).send({ data: { audit }, meta: { requestId: request.id } });
+    return reply.code(202).send({ data: forViewer(deps, request, { audit }), meta: { requestId: request.id } });
   } catch (error) {
     if (error instanceof FootprintConsentRequiredError) {
       return sendError(reply, request, 409, 'digital_footprint_consent_required', 'Согласие было отозвано. Обновите страницу.', false);
@@ -297,7 +330,7 @@ async function handleReviewFootprintFinding(
     candidate.id, findingId.data, decision.data.review,
   );
   if (!audit) return sendError(reply, request, 404, 'finding_not_found', 'Находка больше недоступна.', false);
-  return { data: { audit }, meta: { requestId: request.id } };
+  return { data: forViewer(deps, request, { audit }), meta: { requestId: request.id } };
 }
 
 async function handleDeleteFootprintFindings(
@@ -337,4 +370,8 @@ export function registerCandidateFootprintRoutes(app: FastifyInstance, deps: Rou
     withDeps(deps, handleDeleteFootprintFindings),
   );
   registerCandidateFootprintChecklistRoutes(app, deps);
+  // B667: сводка по категориям риска; свой маршрут закрыт флагом B640.
+  registerFootprintRiskRoutes(app, deps);
+  registerFootprintRemovalRoutes(app, deps);
+  registerFootprintAddedLinkRoute(app, deps);
 }

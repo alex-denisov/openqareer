@@ -210,7 +210,7 @@ export class HhApplicationBrowserSession implements ConnectorExecutor {
     target: HhApplicationExecutionTarget,
   ): Promise<ConnectorReceipt | null> {
     const resume = this.page.locator(
-      `${HH_SELECTORS.apply.resumeRadio}[data-resume-id="${target.resumeId}"]`,
+      `${HH_SELECTORS.apply.resumeRadio}[value="${target.resumeId}"]`,
     );
     if (!(await isVisible(resume))) {
       return this.paused(

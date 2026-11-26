@@ -228,6 +228,14 @@ export class SqliteCandidateActionRepository {
     }
   }
 
+  /** Один выключатель по точному scope: кто-то мог поставить его раньше нас (B665). */
+  getKillSwitch(scope: string): { active: boolean; updatedAt: string } | null {
+    const row = this.database
+      .prepare('SELECT active, updated_at FROM candidate_action_kill_switches WHERE scope = ?')
+      .get(scope) as { active: number; updated_at: string } | undefined;
+    return row ? { active: row.active === 1, updatedAt: row.updated_at } : null;
+  }
+
   isKillSwitchActive(platform?: 'hh' | 'linkedin', candidateId?: string): boolean {
     const scopes = ['global'];
     if (platform && candidateId) scopes.push(`candidate:${candidateId}:${platform}`);

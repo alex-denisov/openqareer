@@ -1,14 +1,47 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod app_sign_in;
+mod ats_apply;
+mod ats_attempts;
+mod ats_boards;
+mod ats_files;
+mod ats_form_scripts;
+mod ats_model;
+mod ats_smartrecruiters;
+mod ats_steps;
+mod ats_target;
 mod automation_worker;
 mod connector_session;
 mod desktop_notify;
+mod device_settings;
+mod hh_apply;
+mod hh_apply_scripts;
+#[cfg(test)]
+mod hh_jsdom_harness;
+mod hh_questionnaire;
+mod hh_raise;
+mod hh_resume_copy;
+mod hh_resume_copy_scripts;
+mod hh_resume_edit;
+mod hh_resume_edit_scripts;
+mod hh_resume_experience;
+mod hh_resume_experience_scripts;
+mod linkedin_form_capture;
 mod linkedin_read_guard;
+mod native_answer;
 mod network_probe;
+mod recording;
+mod recording_clock;
+#[cfg(target_os = "macos")]
+mod recording_macos;
+#[cfg(target_os = "macos")]
+mod recording_macos_mic;
+mod recording_upload;
 mod session_token_store;
 mod sidecar_lifecycle;
 mod tunnel_manager;
+mod window_theme;
 #[cfg(windows)]
 mod windows_print;
 
@@ -101,6 +134,254 @@ async fn execute_local_action(request: LocalActionRequest) -> Result<LocalAction
     execute_candidate_action_safely(request).await
 }
 
+/// B704: a response to an hh.ru vacancy in the candidate's own hh.ru window, after the
+/// candidate confirmed it on the response screen.
+#[tauri::command]
+async fn run_hh_apply(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: hh_apply::HhApplyRequest,
+) -> Result<hh_apply::HhApplyReport, String> {
+    // Only the cabinet window may ask; a page opened in the hh.ru window never can.
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    hh_apply::run_hh_apply(&app, request).await
+}
+
+/// B787: the employer's application form in a hidden window. Only the cabinet
+/// window may ask; a page inside the form window never can.
+fn cabinet_only(webview: &tauri::Webview) -> Result<(), String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn ats_form_open(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_model::OpenRequest,
+) -> Result<ats_model::FormReport, String> {
+    cabinet_only(&webview)?;
+    ats_apply::open_form(&app, request).await
+}
+
+/// The open form as it is now. Nothing is filled or sent.
+#[tauri::command]
+async fn ats_form_read(
+    app: AppHandle,
+    webview: tauri::Webview,
+    vacancy_id: String,
+) -> Result<ats_model::FormReport, String> {
+    cabinet_only(&webview)?;
+    ats_apply::read_form(&app, &vacancy_id).await
+}
+
+/// Options of one list of the form. Nothing is picked or sent.
+#[tauri::command]
+async fn ats_form_options(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_steps::OptionsRequest,
+) -> Result<serde_json::Value, String> {
+    cabinet_only(&webview)?;
+    ats_steps::read_options(&app, request).await
+}
+
+/// Moves a multi-step form to its next page for confirmed values; never sends it.
+#[tauri::command]
+async fn ats_form_next(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_steps::NextRequest,
+) -> Result<ats_steps::StepReport, String> {
+    cabinet_only(&webview)?;
+    ats_steps::next_step(&app, request).await
+}
+
+#[tauri::command]
+async fn ats_form_fill(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_model::FillRequest,
+) -> Result<ats_model::FillReport, String> {
+    cabinet_only(&webview)?;
+    ats_apply::fill_form(&app, request).await
+}
+
+/// Presses the form's submit button once, after the candidate's confirmation.
+#[tauri::command]
+async fn ats_form_submit(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_model::SubmitRequest,
+) -> Result<ats_model::Receipt, String> {
+    cabinet_only(&webview)?;
+    ats_apply::submit_form(&app, request).await
+}
+
+/// Sends the code the candidate typed in the cabinet through the open form.
+#[tauri::command]
+async fn ats_form_code(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_model::CodeRequest,
+) -> Result<ats_model::Receipt, String> {
+    cabinet_only(&webview)?;
+    ats_apply::submit_code(&app, request).await
+}
+
+#[tauri::command]
+async fn ats_form_outcome(
+    app: AppHandle,
+    webview: tauri::Webview,
+    vacancy_id: String,
+) -> Result<ats_model::Receipt, String> {
+    cabinet_only(&webview)?;
+    ats_apply::read_form_outcome(&app, &vacancy_id).await
+}
+
+#[tauri::command]
+async fn ats_form_attempt(
+    app: AppHandle,
+    webview: tauri::Webview,
+    vacancy_id: String,
+) -> Result<Option<ats_attempts::Attempt>, String> {
+    cabinet_only(&webview)?;
+    ats_apply::read_attempt(&app, &vacancy_id)
+}
+
+/// Lets the candidate send again after they confirm that nothing left.
+#[tauri::command]
+async fn ats_form_release(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_model::ReleaseRequest,
+) -> Result<(), String> {
+    cabinet_only(&webview)?;
+    ats_apply::release_attempt(&app, request)
+}
+
+/// Removes the cookies and files of employer forms when the candidate leaves.
+#[tauri::command]
+async fn ats_form_erase(app: AppHandle, webview: tauri::Webview) -> Result<(), String> {
+    cabinet_only(&webview)?;
+    ats_apply::erase_bound_form_store(&app).await
+}
+
+/// Shows the form window; the cabinet calls it only for the candidate's press.
+#[tauri::command]
+async fn ats_form_show(
+    app: AppHandle,
+    webview: tauri::Webview,
+    vacancy_id: String,
+) -> Result<bool, String> {
+    cabinet_only(&webview)?;
+    ats_apply::show_form_window(&app, &vacancy_id).await
+}
+
+#[tauri::command]
+async fn ats_form_close(app: AppHandle, webview: tauri::Webview) -> Result<(), String> {
+    cabinet_only(&webview)?;
+    ats_apply::close_form_window(&app);
+    Ok(())
+}
+
+/// B708: reads whether the candidate finished the response in the open hh.ru window.
+#[tauri::command]
+async fn read_hh_apply_window(
+    app: AppHandle,
+    webview: tauri::Webview,
+    vacancy_id: String,
+) -> Result<String, String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    hh_apply::read_hh_apply_window(&app, &vacancy_id).await
+}
+
+/// B678: one section of the candidate's hh.ru resume changed in their own hh.ru window, after
+/// the candidate pressed «Применить» and confirmed it.
+#[tauri::command]
+async fn run_hh_resume_edit(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: hh_resume_edit::HhResumeEditRequest,
+) -> Result<hh_resume_edit::HhResumeEditReport, String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    hh_resume_edit::run_hh_resume_edit(&app, request).await
+}
+
+/// B678 slice 4: a reworded place of work put into one hh.ru resume as a new place ticked
+/// only for it, after the candidate pressed «Применить» and confirmed it.
+#[tauri::command]
+async fn run_hh_experience_edit(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: hh_resume_experience::HhExperienceEditRequest,
+) -> Result<hh_resume_edit::HhResumeEditReport, String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    hh_resume_experience::run_hh_experience_edit(&app, request).await
+}
+
+/// B787: a copy of the candidate's hh.ru resume, after they asked for one for this vacancy.
+#[tauri::command]
+async fn run_hh_resume_copy(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: hh_resume_copy::HhCopyRequest,
+) -> Result<hh_resume_copy::HhCopyReport, String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    hh_resume_copy::run_hh_resume_copy(&app, request).await
+}
+
+/// B787: that copy hidden from everyone, confirmed by a reloaded hh.ru page.
+#[tauri::command]
+async fn run_hh_resume_hide(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: hh_resume_copy::HhCopyActionRequest,
+) -> Result<hh_resume_copy::HhCopyReport, String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    hh_resume_copy::run_hh_resume_hide(&app, request).await
+}
+
+/// B787: the copy taken away when it could not be hidden.
+#[tauri::command]
+async fn run_hh_resume_delete_copy(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: hh_resume_copy::HhCopyActionRequest,
+) -> Result<hh_resume_copy::HhCopyReport, String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    hh_resume_copy::run_hh_resume_delete_copy(&app, request).await
+}
+
+/// B699: raises the candidate's hh.ru resume in their own hh.ru window; only the cabinet may ask.
+#[tauri::command]
+async fn run_hh_raise(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: hh_raise::HhRaiseRequest,
+) -> Result<hh_raise::HhRaiseReport, String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    hh_raise::run_hh_raise(&app, request).await
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NativeHttpRequest {
     pub url: String,
@@ -115,6 +396,9 @@ pub struct NativeHttpResponse {
     pub ok: bool,
     pub headers: std::collections::HashMap<String, String>,
     pub body: String,
+    /// A file answer (PDF, DOCX, image): text would lose its bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body_base64: Option<String>,
 }
 
 #[tauri::command]
@@ -183,13 +467,14 @@ async fn desktop_native_fetch(
         }
     }
 
-    let body = res.text().await.unwrap_or_default();
+    let (body, body_base64) = native_answer::read(res).await?;
 
     Ok(NativeHttpResponse {
         status,
         ok,
         headers: response_headers,
         body,
+        body_base64,
     })
 }
 
@@ -351,7 +636,11 @@ fn close_connector_session(app: AppHandle, platform: String, session_key: Option
 /// (a SHA-256 hex digest), or unbinds them on sign-out (INC-039).
 #[tauri::command]
 fn bind_connector_account(app: AppHandle, account_key: Option<String>) -> Result<bool, String> {
-    bind_candidate_account(&app, account_key)
+    let bound = bind_candidate_account(&app, account_key)?;
+    if bound {
+        linkedin_form_capture::start_if_flagged(&app);
+    }
+    Ok(bound)
 }
 
 #[tauri::command]
@@ -374,8 +663,8 @@ fn resize_connector_session(
 }
 
 #[tauri::command]
-fn park_connector_session(app: AppHandle, platform: String, layout: SessionLayout) -> bool {
-    park_session_window(&app, &platform, layout)
+fn park_connector_session(app: AppHandle, platform: String) -> bool {
+    park_session_window(&app, &platform)
 }
 
 /// Reads a page inside the candidate's own signed-in session window.
@@ -404,6 +693,18 @@ fn log_connector_diagnostic(
     connector_session::append_connector_diagnostic(&app, &scope, &event, detail.as_deref())
 }
 
+/// B787: masked hh.ru experience markup next to the diagnostics log; never sent anywhere.
+#[tauri::command]
+fn write_hh_resume_markup(app: AppHandle, sketch: String) -> Result<(), String> {
+    connector_session::write_hh_resume_markup(&app, &sketch)
+}
+
+/// B787: the candidate's hh.ru resume list next to the diagnostics log; never sent anywhere.
+#[tauri::command]
+fn write_hh_resumes_list(app: AppHandle, report: String) -> Result<(), String> {
+    connector_session::write_hh_resumes_list(&app, &report)
+}
+
 /// Inspects the current page without redirecting an in-progress login flow.
 #[tauri::command]
 async fn inspect_connector_session_page(
@@ -427,6 +728,19 @@ fn get_desktop_environment_info() -> DesktopInfo {
         arch: std::env::consts::ARCH.to_string(),
         is_desktop_companion: true,
     }
+}
+
+/// Закрытие главного окна не завершает приложение: фоновая работа идёт дальше.
+/// Со значком окно прячется и возвращается из него; без значка на Windows и Linux
+/// окно сворачивается на панель задач — спрятанное было бы не вернуть.
+fn hide_closed_main_window(window: &tauri::Window) {
+    let keep_on_taskbar =
+        !cfg!(target_os = "macos") && !device_settings::tray_icon_enabled(window.app_handle());
+    let _ = if keep_on_taskbar {
+        window.minimize()
+    } else {
+        window.hide()
+    };
 }
 
 fn is_tunnel_cleanup_event(event: &tauri::RunEvent) -> bool {
@@ -482,12 +796,28 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        // B722: «Запуск при входе в систему» в n06 — LaunchAgent на macOS, ключ Run на Windows.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
+        .manage(device_settings::DeviceSettingsState::default())
         .setup(|app| {
+            window_theme::open_main_window(app.handle())?;
             desktop_notify::configure_tray(app)?;
+            recording::purge_leftovers(app.handle());
+            device_settings::load_on_startup(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, WindowEvent::CloseRequested { .. }) {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    hide_closed_main_window(window);
+                }
+            }
+            // The form window's close button hides it: the code step must outlive it.
+            if window.label() == ats_apply::FORM_WINDOW_LABEL {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _ = window.hide();
@@ -502,7 +832,10 @@ fn main() {
         })
         .manage(app_state)
         .manage(CandidateSessionAccount::default())
+        .manage(ats_apply::AtsFormState::default())
+        .manage(connector_session::SessionWindowsOnScreen::default())
         .manage(linkedin_read_guard::LinkedInReadGuardState::default())
+        .manage(recording::RecordingState::default())
         .invoke_handler(tauri::generate_handler![
             open_external_url,
             probe_network_status,
@@ -510,6 +843,27 @@ fn main() {
             start_tunnel,
             stop_tunnel,
             execute_local_action,
+            run_hh_apply,
+            read_hh_apply_window,
+            ats_form_open,
+            ats_form_read,
+            ats_form_fill,
+            ats_form_options,
+            ats_form_next,
+            ats_form_submit,
+            ats_form_code,
+            ats_form_outcome,
+            ats_form_release,
+            ats_form_attempt,
+            ats_form_erase,
+            ats_form_show,
+            ats_form_close,
+            run_hh_resume_edit,
+            run_hh_experience_edit,
+            run_hh_resume_copy,
+            run_hh_resume_hide,
+            run_hh_resume_delete_copy,
+            run_hh_raise,
             desktop_native_fetch,
             print_resume,
             save_resume_pdf,
@@ -526,6 +880,8 @@ fn main() {
             read_connector_session_page,
             save_connector_capture_dump,
             log_connector_diagnostic,
+            write_hh_resume_markup,
+            write_hh_resumes_list,
             inspect_connector_session_page,
             get_desktop_environment_info,
             read_session_token,
@@ -538,6 +894,14 @@ fn main() {
             desktop_notify::request_desktop_notification_permission,
             desktop_notify::show_desktop_notification,
             desktop_notify::focus_main_window,
+            app_sign_in::desktop_open_sign_in,
+            device_settings::get_device_settings,
+            device_settings::save_device_settings,
+            window_theme::save_window_theme,
+            recording::recording_permissions,
+            recording::recording_request_permissions,
+            recording::recording_start,
+            recording::recording_stop,
         ])
         .build(tauri::generate_context!())
         .expect("error while building OpenQareer desktop application");
@@ -557,9 +921,22 @@ fn main() {
     }
 
     app.run(|app_handle, event| {
+        // B755: браузер вернул вход по адресу openqareer://signed-in — передаём главному окну.
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Opened { urls } = &event {
+            app_sign_in::deliver_opened_urls(app_handle, urls.iter().map(|url| url.as_str()));
+            return;
+        }
+        // Dock: без значка в строке меню спрятанное окно возвращает только он.
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen { .. } = event {
+            desktop_notify::show_main_window(app_handle);
+            return;
+        }
         if !is_tunnel_cleanup_event(&event) {
             return;
         }
+        recording::abandon_on_exit(app_handle);
         let tunnel = app_handle.state::<AppState>().tunnel.clone();
         tauri::async_runtime::block_on(async move {
             let _ = tunnel.stop().await;

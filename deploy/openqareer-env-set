@@ -10,7 +10,7 @@ set -Eeuo pipefail
 
 readonly ENV_FILE="${OPENQAREER_ENV_FILE:-/etc/openqareer/openqareer.env}"
 readonly ENV_OWNER="${OPENQAREER_ENV_OWNER:-root:openqareer-deploy}"
-readonly ALLOWED_KEYS='^OPENQAREER_(ANTHROPIC_API_KEY|TELEGRAM_(BOT_TOKEN|OWNER_CHAT_ID)|SMM_(CHAT_ID|ENABLED|AUTOPOST)|GSC_SERVICE_ACCOUNT_B64|VERTEX_(SERVICE_ACCOUNT_B64|MODEL|LOCATION|CREDIT_(USD|SINCE|UNTIL)|DAY_USD|CATALOG_SUMMARY_DAY_USD)|MATCH_MODE|LINKEDIN_POOL_EXECUTOR_(ENABLED|ACCOUNT_ID|TIMEZONE|MODE)|EXA_API_KEY|BULK_LLM_(ENABLED|BATCH_ENABLED|MODEL|PROVIDER|QUANTIZATION|RUN_USD|DAY_USD|MONTH_USD|TOTAL_USD|REQUEST_USD|INPUT_PER_MILLION_USD|OUTPUT_PER_MILLION_USD))$'
+readonly ALLOWED_KEYS='^OPENQAREER_(ANTHROPIC_API_KEY|TELEGRAM_(BOT_TOKEN|OWNER_CHAT_ID)|SMM_(CHAT_ID|ENABLED|AUTOPOST)|GSC_SERVICE_ACCOUNT_B64|VERTEX_(SERVICE_ACCOUNT_B64|MODEL|LOCATION|CREDIT_(USD|SINCE|UNTIL)|DAY_USD|CATALOG_SUMMARY_DAY_USD)|MATCH_MODE|LINKEDIN_POOL_EXECUTOR_(ENABLED|ACCOUNT_ID|TIMEZONE|MODE)|EXA_API_KEY|YOUTUBE_API_KEY|CABINET_B640_USERNAMES|BULK_LLM_(ENABLED|BATCH_ENABLED|MODEL|PROVIDER|QUANTIZATION|RUN_USD|DAY_USD|MONTH_USD|TOTAL_USD|REQUEST_USD|INPUT_PER_MILLION_USD|OUTPUT_PER_MILLION_USD))$'
 readonly VALUE_PATTERN='^[A-Za-z0-9:_.-]{1,200}$'
 # Часовой пояс IANA содержит «/» (Europe/Moscow).
 readonly TIMEZONE_KEY='^OPENQAREER_LINKEDIN_POOL_EXECUTOR_TIMEZONE$'
@@ -24,6 +24,11 @@ readonly BASE64_MAX_LENGTH=8000
 # Модель и провайдер массового клиента (B522) — пути вида deepseek/deepseek-v4-flash.
 readonly SLUG_KEY='^OPENQAREER_BULK_LLM_(MODEL|PROVIDER)$'
 readonly SLUG_PATTERN='^[a-z0-9][a-z0-9./_,-]{1,200}$'
+# Кому включён новый кабинет B640 (B649): имена входа через запятую без пробелов
+# либо одна «*» — всем. Формат имени тот же, что принимает server/config.ts.
+readonly USERNAMES_KEY='^OPENQAREER_CABINET_B640_USERNAMES$'
+readonly USERNAMES_PATTERN='^(\*|[A-Za-z0-9][A-Za-z0-9._-]{2,79}(,[A-Za-z0-9][A-Za-z0-9._-]{2,79})*)$'
+readonly USERNAMES_MAX_LENGTH=2000
 
 fail() {
   printf 'openqareer-env-set: %s\n' "$1" >&2
@@ -47,6 +52,9 @@ while IFS= read -r line || [[ -n "$line" ]]; do
       fail "value for $key has an unexpected shape"
   elif [[ "$key" =~ $SLUG_KEY ]]; then
     [[ "$value" =~ $SLUG_PATTERN ]] || fail "value for $key has an unexpected shape"
+  elif [[ "$key" =~ $USERNAMES_KEY ]]; then
+    [[ "$value" =~ $USERNAMES_PATTERN ]] && ((${#value} <= USERNAMES_MAX_LENGTH)) ||
+      fail "value for $key has an unexpected shape"
   elif [[ "$key" =~ $TIMEZONE_KEY ]]; then
     [[ "$value" =~ $TIMEZONE_PATTERN ]] || fail "value for $key has an unexpected shape"
   else

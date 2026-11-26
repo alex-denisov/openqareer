@@ -10,6 +10,7 @@ import type { VacanciesScreenState } from './VacanciesScreenFilters';
 import { matchesVacancyCity } from './vacancyFacets';
 import { matchesLocationSelection } from '../../../shared/locationTree';
 import { convertAmount, type CurrencyRates } from '../../../shared/currencyRates';
+import { monthlyAmount, salaryPeriodOf } from '../../../shared/monthlyRubSalary';
 
 export interface VacancyScreenFilterOptions {
   readonly locations: readonly {
@@ -98,8 +99,11 @@ function comparableSalary(
 ): { readonly lower?: number; readonly upper?: number } | undefined {
   const salary = item.cluster.salary;
   if (salary) {
-    const lower = salary.from ?? salary.to;
-    const upper = salary.to ?? salary.from;
+    // B765: the threshold is per month — a yearly range is divided; an hourly rate or an unknown period has no month.
+    const period = salaryPeriodOf(salary, rates);
+    if (period === 'hour' || period === 'unknown') return undefined;
+    const lower = monthlyAmount(salary.from ?? salary.to, period);
+    const upper = monthlyAmount(salary.to ?? salary.from, period);
     return convertedRange(lower, upper, salary.currency, state, rates);
   }
   const estimate = item.explanation.marketSalary;

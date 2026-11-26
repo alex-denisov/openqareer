@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { monitorEventLoopDelay, type IntervalHistogram } from 'node:perf_hooks';
+import { Agent } from 'undici';
 import { isForbiddenVacancyPage } from './hhVacancyDescription';
 import type { HhSearchTransport, HhSearchTransportResult } from './hhSearchFetcher';
 
@@ -34,38 +36,148 @@ export function parseRetryAfterMs(value: string | null, nowMs = Date.now()): num
   return Number.isFinite(ms) && ms > 0 ? ms : undefined;
 }
 
-/** Прямой путь: обычный запрос с браузерным представлением. */
-function describeFailure(error: unknown, startedAt: number): string {
-  const name = error instanceof Error ? error.name : 'Error';
-  const cause = error instanceof Error ? (error.cause as { code?: unknown } | undefined) : undefined;
-  const code = typeof cause?.code === 'string' ? ` ${cause.code}` : '';
-  return `${name}${code} ${Date.now() - startedAt}ms`;
+/** Одна выборка прямого пути (B756): где ушло время и сколько стоял цикл событий. */
+export interface HhFetchEvent {
+  readonly status: number;
+  readonly totalMs: number;
+  /** До заголовков ответа; нет — ответ не начался. */
+  readonly headersMs?: number;
+  /** Чтение тела; нет — до тела не дошли. */
+  readonly bodyMs?: number;
+  /** Наибольшая задержка цикла событий с прошлой выборки. */
+  readonly lagMs: number;
+  /** Выборка шла по новому соединению после сбоя предыдущей. */
+  readonly freshConnection: boolean;
+  readonly failure?: string;
 }
 
-export const directHhTransport: HhSearchTransport = async (url) => {
-  const startedAt = Date.now();
-  try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': BROWSER_USER_AGENT,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.8',
-      },
-      signal: AbortSignal.timeout(DIRECT_TIMEOUT_MS),
-    });
-    // A 403 keeps its page: the vacancy state tells «employer restricted» from a refusal.
-    const keepBody = response.ok || response.status === 403;
-    const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
-    return {
-      status: response.status,
-      body: keepBody ? await response.text() : '',
-      ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
-    };
-  } catch (error) {
-    // Недоступность — это отказ, а не пустая страница: разбор обязан упасть.
-    return { status: 0, body: '', failure: describeFailure(error, startedAt) };
+interface ClosableDispatcher {
+  destroy(): Promise<unknown>;
+}
+
+export interface DirectHhTransportDeps {
+  readonly fetch?: (url: string, init: RequestInit) => Promise<Response>;
+  readonly newDispatcher?: () => ClosableDispatcher;
+  readonly loopLagMs?: () => number;
+  readonly now?: () => number;
+  readonly onFetch?: (event: HhFetchEvent) => void;
+}
+
+let lagHistogram: IntervalHistogram | undefined;
+/** Наибольшая задержка цикла с прошлого вызова, мс. Гистограмма одна на процесс. */
+function processLoopLagMs(): number {
+  if (!lagHistogram) {
+    lagHistogram = monitorEventLoopDelay({ resolution: 20 });
+    lagHistogram.enable();
+    return 0;
   }
+  const maxMs = Math.round(lagHistogram.max / 1e6);
+  lagHistogram.reset();
+  return maxMs;
+}
+
+const phase = (ms: number | undefined, unfinished: boolean) =>
+  ms === undefined ? '-' : `${ms}ms${unfinished ? '+' : ''}`;
+
+function describeFailure(
+  error: unknown,
+  timing: { totalMs: number; headersMs?: number; bodyMs?: number; lagMs: number },
+): string {
+  const name = error instanceof Error ? error.name : 'Error';
+  const cause =
+    error instanceof Error ? (error.cause as { code?: unknown } | undefined) : undefined;
+  const code = typeof cause?.code === 'string' ? ` ${cause.code}` : '';
+  const inBody = timing.bodyMs !== undefined;
+  return (
+    `${name}${code} ${timing.totalMs}ms headers=${phase(timing.headersMs, !inBody && timing.headersMs !== undefined)}` +
+    ` body=${phase(timing.bodyMs, inBody)} lag=${timing.lagMs}ms`
+  );
+}
+
+/**
+ * Прямой путь: обычный запрос с браузерным представлением. Соединения свои
+ * (B756): после сбоя без ответа следующая выборка идёт по новому соединению,
+ * старые сокеты закрываются — 22.11 процесс обслуживания получал тайм-ауты,
+ * пока свежий процесс на том же хосте читал hh.ru за 0,4–2 с.
+ */
+export function createDirectHhTransport(deps: DirectHhTransportDeps = {}): HhSearchTransport {
+  const doFetch = deps.fetch ?? ((url: string, init: RequestInit) => fetch(url, init));
+  const newDispatcher = deps.newDispatcher ?? (() => new Agent());
+  const loopLagMs = deps.loopLagMs ?? processLoopLagMs;
+  const now = deps.now ?? Date.now;
+  let dispatcher = newDispatcher();
+  let freshConnection = false;
+  return async (url) => {
+    const startedAt = now();
+    const lagMs = loopLagMs();
+    const fresh = freshConnection;
+    freshConnection = false;
+    const marks: { headersMs?: number } = {};
+    try {
+      const page = await readDirectPage(doFetch, url, dispatcher, () => now() - startedAt, marks);
+      deps.onFetch?.({ ...page.timing, status: page.result.status, lagMs, freshConnection: fresh });
+      return page.result;
+    } catch (error) {
+      const totalMs = now() - startedAt;
+      const timing = {
+        totalMs,
+        ...(marks.headersMs !== undefined
+          ? { headersMs: marks.headersMs, bodyMs: totalMs - marks.headersMs }
+          : {}),
+        lagMs,
+      };
+      const failure = describeFailure(error, timing);
+      deps.onFetch?.({ status: 0, ...timing, freshConnection: fresh, failure });
+      const stale = dispatcher;
+      dispatcher = newDispatcher();
+      freshConnection = true;
+      void stale.destroy().catch(() => undefined);
+      // Недоступность — это отказ, а не пустая страница: разбор обязан упасть.
+      return { status: 0, body: '', failure };
+    }
+  };
+}
+
+const DIRECT_HEADERS = {
+  'User-Agent': BROWSER_USER_AGENT,
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.8',
 };
+
+/** Одна выборка; `marks.headersMs` ставится, как только пришли заголовки. */
+async function readDirectPage(
+  doFetch: NonNullable<DirectHhTransportDeps['fetch']>,
+  url: string,
+  dispatcher: ClosableDispatcher,
+  elapsed: () => number,
+  marks: { headersMs?: number },
+): Promise<{
+  result: HhSearchTransportResult;
+  timing: { totalMs: number; headersMs: number; bodyMs: number };
+}> {
+  const response = await doFetch(url, {
+    headers: DIRECT_HEADERS,
+    signal: AbortSignal.timeout(DIRECT_TIMEOUT_MS),
+    dispatcher,
+  } as RequestInit);
+  const headersMs = elapsed();
+  marks.headersMs = headersMs;
+  // A 403 keeps its page: the vacancy state tells «employer restricted» from a refusal.
+  const keepBody = response.ok || response.status === 403;
+  const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
+  const body = keepBody ? await response.text() : '';
+  const totalMs = keepBody ? elapsed() : headersMs;
+  return {
+    result: {
+      status: response.status,
+      body,
+      ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
+    },
+    timing: { totalMs, headersMs, bodyMs: totalMs - headersMs },
+  };
+}
+
+export const directHhTransport: HhSearchTransport = createDirectHhTransport();
 
 export interface EgressTransportConfig {
   /** Путь к ключу с принудительной командой на выходной ноде. */
@@ -141,10 +253,17 @@ export function buildEgressTransport(config: EgressTransportConfig): HhSearchTra
  * если он настроен. Собирается один раз на процесс — настройки выхода не
  * меняются на ходу.
  */
-export function buildHhPageFetcher(env: NodeJS.ProcessEnv = process.env): HhSearchTransport {
+export function buildHhPageFetcher(
+  env: NodeJS.ProcessEnv = process.env,
+  onFetch?: (event: HhFetchEvent) => void,
+  /** Прямой путь из потока выборки (B756); замеры тогда приходят из него. */
+  directTransport?: HhSearchTransport,
+): HhSearchTransport {
+  const direct =
+    directTransport ?? (onFetch ? createDirectHhTransport({ onFetch }) : directHhTransport);
   const egress = readEgressConfig(env);
-  if (!egress) return directHhTransport;
-  return directThenFallback(directHhTransport, buildEgressTransport(egress));
+  if (!egress) return direct;
+  return directThenFallback(direct, buildEgressTransport(egress));
 }
 
 /**

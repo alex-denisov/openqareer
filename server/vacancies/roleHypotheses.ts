@@ -1,6 +1,7 @@
 import type { RoleObservation } from '../../shared/poolRoleHypotheses';
 import type { WorkPreferenceResult } from '../../shared/workPreferences';
-import { careerRoleRowKey, sameCareerRole } from './careerRoleKey';
+import { careerRoleListKey } from './careerRoleKey';
+import { vacancyInCareerRole } from './techDirectorSignal';
 import {
   confirmRoleObservations,
   proposeRoles,
@@ -11,6 +12,7 @@ import {
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import { getCurrencyRates } from '../currency/cbrRates';
 import { monthlyRubSalary } from './roleWageSalary';
+import { rolePlatformCode } from './rolePlatformCode';
 
 /**
  * Роли считаются на сервере (B180, срез 1б).
@@ -29,7 +31,7 @@ function observations(matched: readonly MatchedVacancyItem[]): RoleObservation[]
     canonicalTitle: item.cluster.canonicalTitle,
     firstObservedAt: item.cluster.firstObservedAt,
     skills: item.cluster.skills,
-    sources: item.cluster.sources,
+    sources: item.cluster.sources.map((source) => ({ sourceType: rolePlatformCode(source) })),
     salary: item.cluster.salary ? monthlyRubSalary(item.cluster.salary, rates) : undefined,
   }));
 }
@@ -55,7 +57,7 @@ export function buildRoleProposals(input: {
     named: input.named,
     pool: observations(input.matched),
     candidateSkills: input.candidateSkills,
-    roleKey: careerRoleRowKey,
+    roleKey: careerRoleListKey,
     ...(input.workplaceRefs ? { workplaceRefs: input.workplaceRefs } : {}),
     ...(input.preferences ? { preferences: input.preferences } : {}),
   });
@@ -75,9 +77,7 @@ export function confirmChosenTitle(input: {
   // Тот же признак, что у фильтра «Роли» и счёта кампании: вакансия подобрана
   // по функции и уровню ролей кандидата и относится к этой роли (26.10).
   const ofRole = input.matched.filter(
-    (item) =>
-      item.explanation?.roleMatch !== 'none' &&
-      sameCareerRole(item.cluster.canonicalTitle, input.title),
+    (item) => item.explanation?.roleMatch !== 'none' && vacancyInCareerRole(item, input.title),
   );
   return confirmRoleObservations({
     title: input.title,

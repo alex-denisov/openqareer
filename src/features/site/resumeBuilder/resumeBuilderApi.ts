@@ -34,18 +34,27 @@ async function errorMessage(response: Response): Promise<string> {
 }
 
 /** Downloads the real file the server built; signed-in only. */
-export async function downloadResumeFile(
+/** Файл резюме: один и тот же для скачивания и для отклика. */
+export async function exportResumeFile(
   resume: BuilderResume,
   template: ResumeTemplate,
   format: ExportFormat,
-): Promise<void> {
+): Promise<Blob> {
   const response = await apiFetch('/api/v1/candidate/resume-builder/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ format, template, resume }),
   });
   if (!response.ok) throw new Error(await errorMessage(response));
-  const blob = await response.blob();
+  return response.blob();
+}
+
+export async function downloadResumeFile(
+  resume: BuilderResume,
+  template: ResumeTemplate,
+  format: ExportFormat,
+): Promise<void> {
+  const blob = await exportResumeFile(resume, template, format);
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

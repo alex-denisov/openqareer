@@ -1,3 +1,4 @@
+import { isStarred, markOfEvents } from '../applicationStar';
 import { interviewDayIsOver, stageShowsInterview } from '../../../shared/interviewDate';
 import type { DatabaseSync } from 'node:sqlite';
 import {
@@ -26,14 +27,35 @@ import type { ApplicationStage } from '../../../shared/applicationStage';
 import { DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS } from '../../../shared/applicationArchive';
 import type { SkipReasonId } from '../../../shared/skipReasons';
 import type { VacancyDecision } from '../../vacancies/applyVacancyDecisions';
+import { employerOrNone } from '../../../shared/jobCommunity';
 import { deriveApplicationFields, type ApplicationView } from '../../domain/applicationDerivedFields';
 import { defaultProcessProfile } from '../../vacancies/processProfileDefault';
 import { ApplicationNotFoundError, CandidateDocumentNotFoundError } from './errors';
+import type { SentLookup } from '../../domain/sentApplication';
+import { SentPostingIndex } from '../sentPostingIndex';
+import { InterviewStagePromotions } from '../interviewStagePromotion';
 
 export interface ReadApplicationOptions {
   readonly now?: string;
   readonly timezoneOffsetMinutes?: number;
   readonly archiveStaleDays?: number;
+}
+
+/**
+ * B678: снимок карточки снят до отправки и может нести площадку подборки. Отправленный отклик
+ * показывает площадку и адрес, с которыми записана сама отправка.
+ */
+function withSentChannel(
+  application: StoredApplication,
+  sent: VacancyApplication | null,
+): StoredApplication['vacancy'] {
+  const { vacancy, stage } = application;
+  if (!vacancy || stage === 'saved' || sent?.status !== 'applied') return vacancy;
+  return {
+    ...vacancy,
+    source: sent.vacancy.source || vacancy.source,
+    url: sent.vacancy.url || vacancy.url,
+  };
 }
 
 /**
@@ -48,6 +70,8 @@ export class ApplicationTrackerController {
   private readonly offers: SqliteApplicationOfferRepository;
   private readonly skips: SqliteVacancySkipRepository;
   private readonly visits: SqliteCandidateVisitRepository;
+  private readonly promotions: InterviewStagePromotions;
+  private readonly sentPostings: SentPostingIndex;
 
   constructor(
     database: DatabaseSync,
@@ -63,6 +87,12 @@ export class ApplicationTrackerController {
     this.offers = new SqliteApplicationOfferRepository(database, sealedText);
     this.skips = new SqliteVacancySkipRepository(database);
     this.visits = new SqliteCandidateVisitRepository(database);
+    this.promotions = new InterviewStagePromotions(database);
+    this.sentPostings = new SentPostingIndex(database, sealedText, (candidateId, id) => {
+      const application = this.applications.get(candidateId, id);
+      if (!application?.clusterId) return application?.vacancy ?? null;
+      return withSentChannel(application, legacyApplications.get(candidateId, application.clusterId));
+    });
   }
 
   listLegacy(candidateId: string): VacancyApplication[] {
@@ -81,9 +111,10 @@ export class ApplicationTrackerController {
 
   /** Ленивый перенос старых `applied` перед каждым чтением; идемпотентен. */
   list(candidateId: string, options: ReadApplicationOptions = {}): ApplicationView[] {
-    const legacyApplied = this.legacyApplications
+    const sent = this.legacyApplications
       .list(candidateId)
-      .filter((application) => application.status === 'applied')
+      .filter((application) => application.status === 'applied');
+    const legacyApplied = sent
       .map((application) => ({
         clusterId: application.clusterId,
         vacancy: application.vacancy,
@@ -91,7 +122,15 @@ export class ApplicationTrackerController {
       }));
     this.applications.migrateLegacyApplied(candidateId, legacyApplied);
     const applications = this.applications.list(candidateId);
-    return applications.map((application) => this.toView(application, options));
+    const sentByCluster = new Map(sent.map((item) => [item.clusterId, item]));
+    return applications.map((application) =>
+      this.toView(application, options, sentByCluster.get(application.clusterId ?? '') ?? null),
+    );
+  }
+
+  /** B801: id отправленного отклика на эту же вакансию; весь список не читается. */
+  findSent(candidateId: string, lookup: SentLookup): string | null {
+    return this.sentPostings.find(candidateId, lookup);
   }
 
   get(candidateId: string, id: string, options: ReadApplicationOptions = {}): ApplicationView | null {
@@ -161,25 +200,46 @@ export class ApplicationTrackerController {
     return linked;
   }
 
+  linkedMaterialId(candidateId: string, applicationId: string, role: ApplicationMaterialRole): string | null {
+    this.mustGetOwn(candidateId, applicationId);
+    return this.materials.list(applicationId).find((item) => item.role === role)?.documentId ?? null;
+  }
+
   createInterview(candidateId: string, applicationId: string, input: CreateInterviewInput): StoredApplicationInterview {
     return this.transaction(() => {
       const application = this.mustGetOwn(candidateId, applicationId);
-      if (application.stage !== 'interview') {
+      const promoted = application.stage !== 'interview';
+      // Этап меняется сейчас, а не в день интервью: будущая дата выпадала из окна воронки.
+      if (promoted) {
         this.applications.patch(candidateId, applicationId, {
           expectedVersion: application.version,
           stage: 'interview',
-          ...(input.scheduledAt ? { occurredAt: input.scheduledAt } : {}),
         });
       }
-      const parked = stageShowsInterview(application.stage)
-        ? null
-        : this.upcomingInterview(applicationId);
-      if (parked && input.scheduledAt) {
-        const moved = this.interviews.patch(applicationId, parked.id, { scheduledAt: input.scheduledAt });
-        if (moved) return moved;
+      const interview = this.placeInterview(application.stage, applicationId, input);
+      if (promoted) {
+        this.promotions.record({
+          applicationId,
+          interviewId: interview.id,
+          fromStage: application.stage,
+          fromStageChangedAt: application.stageChangedAt,
+        });
       }
-      return this.interviews.create(applicationId, input);
+      return interview;
     });
+  }
+
+  private placeInterview(
+    stageBefore: ApplicationStage,
+    applicationId: string,
+    input: CreateInterviewInput,
+  ): StoredApplicationInterview {
+    const parked = stageShowsInterview(stageBefore) ? null : this.upcomingInterview(applicationId);
+    if (parked && input.scheduledAt) {
+      const moved = this.interviews.patch(applicationId, parked.id, { scheduledAt: input.scheduledAt });
+      if (moved) return moved;
+    }
+    return this.interviews.create(applicationId, input);
   }
 
   /** The slot a rollback left stored: a return to «Интервью» moves it, keeping its notes. */
@@ -202,6 +262,21 @@ export class ApplicationTrackerController {
     const patched = this.interviews.patch(applicationId, interviewId, input);
     if (!patched) throw new ApplicationNotFoundError();
     return patched;
+  }
+
+  /** Чужой или несуществующий отклик — та же ошибка, что и у правки: маршрут отвечает 404. */
+  deleteInterview(candidateId: string, applicationId: string, interviewId: string): boolean {
+    this.mustGetOwn(candidateId, applicationId);
+    return this.transaction(() => {
+      const deleted = this.interviews.delete(applicationId, interviewId);
+      if (deleted) this.promotions.undo(applicationId, interviewId, new Date().toISOString());
+      return deleted;
+    });
+  }
+
+  deleteOffer(candidateId: string, applicationId: string): boolean {
+    this.mustGetOwn(candidateId, applicationId);
+    return this.offers.delete(applicationId);
   }
 
   putOffer(
@@ -238,7 +313,9 @@ export class ApplicationTrackerController {
   }
 
   deleteSkip(candidateId: string, clusterId: string): boolean {
-    return this.skips.delete(candidateId, clusterId);
+    return this.skips.delete(candidateId, clusterId, (id, cluster) =>
+      this.applications.restoreSkippedByCluster(id, cluster),
+    );
   }
 
   /**
@@ -254,6 +331,11 @@ export class ApplicationTrackerController {
       .list(candidateId)
       .map((skip) => ({ clusterId: skip.clusterId, status: 'skipped' as const, skipReasonId: skip.reasonId }));
     return [...saved, ...skipped];
+  }
+
+  /** Чистое чтение (B675): без ленивого переноса `applied`, как делает `list`. */
+  listClusterStages(candidateId: string): Array<{ clusterId: string; stage: ApplicationStage }> {
+    return this.applications.listClusterStages(candidateId);
   }
 
   /** `POST /visits` (architecture.md §4): moves the mark only past 30 minutes. */
@@ -288,7 +370,16 @@ export class ApplicationTrackerController {
     return application;
   }
 
-  private toView(application: StoredApplication, options: ReadApplicationOptions): ApplicationView {
+  private sentRecord(application: StoredApplication): VacancyApplication | null {
+    if (!application.clusterId) return null;
+    return this.legacyApplications.get(application.candidateId, application.clusterId);
+  }
+
+  private toView(
+    application: StoredApplication,
+    options: ReadApplicationOptions,
+    sent: VacancyApplication | null = this.sentRecord(application),
+  ): ApplicationView {
     const events = this.applications.listEvents(application.candidateId, application.id);
     const materials = this.materials
       .list(application.id)
@@ -305,11 +396,18 @@ export class ApplicationTrackerController {
     });
     return {
       ...application,
+      vacancy: namedEmployer(withSentChannel(application, sent)),
       ...derived,
+      starred: isStarred(application.stage, markOfEvents(events)),
       offer: offer ?? null,
       archiveStaleDays: options.archiveStaleDays ?? DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS,
     };
   }
+}
+
+/** B801: имя страницы-сообщества в снимке отклика — не работодатель. */
+function namedEmployer(vacancy: ApplicationView['vacancy']): ApplicationView['vacancy'] {
+  return vacancy ? { ...vacancy, company: employerOrNone(vacancy.company) } : vacancy;
 }
 
 /** Kept for readability at call sites that only need the event-kind union. */

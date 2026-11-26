@@ -15,6 +15,7 @@ function plainId(id: string): string {
  * otherwise it is read from that workplace's description and bullets only.
  * «О себе» and other places never lend their numbers, so 6 people at one
  * employer and 8 at another stay two facts instead of one contradiction.
+ * A size the candidate declined to state is not read either (B801).
  */
 export function withWorkplaceTeamSizes(
   draft: ResumeDraft,
@@ -23,7 +24,7 @@ export function withWorkplaceTeamSizes(
   const textById = new Map(memory.map((item) => [plainId(item.id), item.statement]));
   let changed = false;
   const experience = draft.experience.map((place) => {
-    if (place.teamSize) return place;
+    if (place.teamSize || place.teamSizeDeclined) return place;
     const text = [place.descriptionMemoryId, ...place.bulletMemoryIds]
       .flatMap((id) => (id ? [textById.get(plainId(id)) ?? ''] : []))
       .join('\n');

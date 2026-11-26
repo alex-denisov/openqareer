@@ -32,3 +32,26 @@ describe('labelVacancyRequirement (B510)', () => {
     expect(labelVacancyRequirement(requirement(text))).toMatchObject({ text, sourceQuote: text });
   });
 });
+
+describe('labelVacancyRequirement: alternatives keep their meaning (B676)', () => {
+  it('«Java или Go» stays both skills, in the order of the text', () => {
+    expect(labelVacancyRequirement(requirement('Java или Go в продакшене'))).toMatchObject({ label: 'Java или Go', skill: true, id: 'r' });
+  });
+  it('«or» and «/» are alternatives too', () => {
+    expect(labelVacancyRequirement(requirement('Production experience with Python or Go')).label).toBe('Python или Go');
+    expect(labelVacancyRequirement(requirement('Опыт коммерческой разработки на Kotlin/Java')).label).toBe('Kotlin или Java');
+  });
+  it('more than three alternatives end with «…»', () => {
+    expect(labelVacancyRequirement(requirement('Опыт работы с Python, Go, Java или Kotlin в продакшене')).label).toBe('Python или Go или Java…');
+  });
+  it('a fourth option that is not a known skill still gets «…»', () => {
+    expect(labelVacancyRequirement(requirement('AWS или GCP или Azure или Яндекс Облако')).label).toBe('AWS или GCP или Azure…');
+  });
+  it('a long list stops at the chip length', () => {
+    expect(labelVacancyRequirement(requirement('2 years as Team Lead / Engineering Manager / Head of Engineering')).label).toBe('Team Lead или Engineering Manager…');
+  });
+  it('«и» and a comma list keep the current label', () => {
+    expect(labelVacancyRequirement(requirement('Опыт работы с Kafka и RabbitMQ в продакшене')).label).toBe('Kafka');
+    expect(labelVacancyRequirement(requirement('Strong SQL, dbt, and Python, and you still write production code')).label).toBe('Python');
+  });
+});

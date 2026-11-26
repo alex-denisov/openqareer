@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { APPLICATION_STAGES } from '../../shared/applicationStage';
+import { approvedLetterApplicationIds } from './letterApprovalRead';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, withDeps } from './helpers';
 import { isoDateField } from './isoDateField';
@@ -26,6 +27,7 @@ import { registerVacancySkipRoutes } from './vacancySkipRoutes';
 import { registerCandidateAutomationRoutes } from './candidateAutomationRoutes';
 import {
   notificationRepositoryFor,
+  recordMergedNotification,
   recordNotificationFromSource,
 } from './notificationRepositoryAccess';
 import { readCampaign } from './campaignContext';
@@ -33,8 +35,21 @@ import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolC
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { readTargetLevel } from './vacancyRoleContext';
 import { buildTodaySnapshot, type TodayNewVacancy } from '../domain/todayDigest';
+import {
+  digestDay,
+  mergeDigestMarks,
+  ROLE_DIGEST_SOURCE_TYPE,
+  roleDigestKey,
+} from '../domain/roleVacancyDigest';
+import { salaryAboveFloor, type DigestFloor, type DigestVacancy } from '../domain/roleDigestMarks';
+import { getCurrencyRates } from '../currency/cbrRates';
 import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
 import { registerApplicationOperationsRoutes } from './applicationOperationsRoutes';
+import { registerRejectionReviewRoutes } from './rejectionReviewRoutes';
+import { registerHhRoutes } from './hhRoutes';
+import { registerQuestionnaireRoutes } from './questionnaireRoutes';
+import { registerTextVariantRoutes } from './textVariantRoutes';
+import { snapshotWithDescription } from './applicationVacancyText';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -118,6 +133,7 @@ const deliveryReceiptSchema = z
 const patchApplicationSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
   stage: stageSchema.optional(),
+  starred: z.boolean().optional(),
   occurredAt: isoDateField.optional(),
   notes: z.string().max(20_000).nullable().optional(),
   processProfile: z.enum(['standard', 'executive']).optional(),
@@ -133,9 +149,14 @@ const handleCreateApplication: Handler = async (deps, request, reply) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const body = createApplicationSchema.parse(request.body);
+  const clusterId = body.clusterId ?? null;
   const created = candidateStore.createApplication(candidate.id, {
-    clusterId: body.clusterId ?? null,
-    manualVacancy: body.manualVacancy ? normalizeVacancySnapshot(body.manualVacancy) : undefined,
+    clusterId,
+    manualVacancy: snapshotWithDescription(
+      deps.multiSourceEngine,
+      clusterId,
+      body.manualVacancy ? normalizeVacancySnapshot(body.manualVacancy) : undefined,
+    ),
     stage: body.stage,
     occurredAt: body.occurredAt,
   });
@@ -188,6 +209,7 @@ function recordApplicationNotifications(
       sourceId: applicationId,
       idempotencyKey: `employer-reply:${applicationId}:${updated.version}`,
       createdAt,
+      invitation: updated.stage === 'interview' || updated.stage === 'offer',
     });
   }
   if (input.deliveryReceipt?.kind === 'failure_note') {
@@ -292,7 +314,7 @@ const todayQuerySchema = z
  * с (C55). Кандидат без роли/навыков подбирать физически нечем — матчинг не
  * запускается, `matched` — пустой список, а не «неизвестно».
  */
-async function readTodayMatchedVacancies(
+export async function readTodayMatchedVacancies(
   deps: Pick<RouteDeps, 'candidateStore' | 'multiSourceEngine'>,
   candidateId: string,
 ): Promise<{
@@ -349,27 +371,49 @@ function todayNewVacancies(
     : undefined;
 }
 
+/** B671: одна запись «Новые вакансии по вашей роли» на роли поиска в сутки; набор дня дописывается. */
+/** Порог — «Зарплата от» в решениях кандидата; без него подписи «выше …» нет. */
+function digestFloorOf(deps: RouteDeps, candidateId: string): DigestFloor | null {
+  const profile = deps.candidateStore.decisionProfileRepo?.get(candidateId) ?? null;
+  const amount = profile?.salaryFloor;
+  return amount && amount > 0 ? { amount, currency: profile?.salaryCurrency ?? 'RUB' } : null;
+}
+
+function digestVacanciesOf(
+  vacancies: readonly TodayNewVacancy[],
+  floor: DigestFloor | null,
+): DigestVacancy[] {
+  const rates = floor ? getCurrencyRates() : undefined;
+  return vacancies.map((vacancy) => ({
+    id: vacancy.clusterId,
+    aboveFloor: floor ? salaryAboveFloor(vacancy.salary, floor, rates) : false,
+  }));
+}
+
 function recordFreshVacancyNotification(
   deps: RouteDeps,
   request: FastifyRequest,
   candidateId: string,
   vacancies: readonly TodayNewVacancy[],
+  roles: readonly string[],
 ): void {
   if (!vacancies.length) return;
-  const sourceId = createHash('sha256')
-    .update(
-      vacancies
-        .map((vacancy) => vacancy.clusterId)
-        .sort()
-        .join('\0'),
-    )
-    .digest('hex');
-  recordNotificationFromSource(deps, request, candidateId, {
-    kind: 'new_vacancies_by_role',
-    sourceType: 'matched_vacancy_batch',
-    sourceId,
-    idempotencyKey: `new-vacancies:${sourceId}`,
-  });
+  const now = new Date();
+  const floor = digestFloorOf(deps, candidateId);
+  const marked = digestVacanciesOf(vacancies, floor);
+  recordMergedNotification(
+    deps,
+    request,
+    candidateId,
+    {
+      kind: 'new_vacancies_by_role',
+      sourceType: ROLE_DIGEST_SOURCE_TYPE,
+      sourceId: '',
+      idempotencyKey: roleDigestKey(digestDay(now), roles),
+      createdAt: now.toISOString(),
+    },
+    (stored) => mergeDigestMarks(stored, marked, floor),
+  );
 }
 
 const TODAY_QUEUE_INITIAL_COUNT = 5;
@@ -416,6 +460,7 @@ async function readTodaySnapshot(
     ...sinceVisitCounts(candidateStore, candidateId, since),
     campaignRole: targetRoles[0] ?? null,
     shortlist: newVacancies,
+    approvedLetterIds: new Set(approvedLetterApplicationIds(deps, candidateId)),
     pendingLinkedinPosts: pendingLinkedinPosts(deps, candidateId),
     contacts: new Map(
       [...readApplicationContacts(deps, candidateId, applications)].map(([id, contact]) => [
@@ -434,7 +479,7 @@ async function readTodaySnapshot(
     changesDismissedAt: candidateStore.getCandidateWorkspace(candidateId)?.todayChangesDismissedAt,
     now: now.toISOString(),
   });
-  recordFreshVacancyNotification(deps, request, candidateId, freshNewVacancies);
+  recordFreshVacancyNotification(deps, request, candidateId, freshNewVacancies, targetRoles);
   return {
     snapshot: {
       ...snapshot,
@@ -453,7 +498,7 @@ function todayTeamSizeDecision(
   now: Date,
 ) {
   const experience = deps.candidateStore.getSnapshot(candidateId).resume?.draft.experience ?? [];
-  if (!experience.some((entry) => entry.current && !entry.teamSize)) return undefined;
+  if (!experience.some((entry) => entry.current && !entry.teamSize && !entry.teamSizeDeclined)) return undefined;
   const summaries = new Map(
     matched.map((item) => [item.cluster.id, item.cluster.descriptionSummary]),
   );
@@ -540,6 +585,10 @@ const handleToday: Handler = async (deps, request, reply) => {
 /** Трекер откликов (B251, S1–S2, architecture.md §4). */
 export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps): void {
   registerApplicationOperationsRoutes(app, deps);
+  registerRejectionReviewRoutes(app, deps);
+  registerQuestionnaireRoutes(app, deps);
+  registerTextVariantRoutes(app, deps);
+  registerHhRoutes(app, deps);
   app.post(
     '/api/v1/candidate/applications',
     { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },

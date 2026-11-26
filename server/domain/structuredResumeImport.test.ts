@@ -233,6 +233,8 @@ describe('collectMediaRequests / attachResumeMedia', () => {
     const draft = attachResumeMedia(plan.draft, profile, media);
 
     expect(draft.candidate.photoMediaId).toBe('photo-id');
+    // p08 «Взять из LinkedIn»: the imported photo is remembered apart from the shown one.
+    expect(draft.candidate.linkedinPhotoMediaId).toBe('photo-id');
     expect(draft.experience[0].employerLogoMediaId).toBeUndefined();
   });
 
@@ -467,6 +469,14 @@ describe('keepFilledSections (B266)', () => {
     const withPhoto = { ...(existing as object), candidate: { photoMediaId: 'photo-old' } } as never;
     const incoming = { candidate: {}, experience: [], education: [], languages: [] } as never;
     expect(keepFilledSections(incoming, withPhoto).candidate.photoMediaId).toBe('photo-old');
+  });
+
+  it('keeps the remembered LinkedIn photo when the re-import had none (p08)', () => {
+    const withPhoto = { ...(existing as object), candidate: { photoMediaId: 'own', linkedinPhotoMediaId: 'li-old' } } as never;
+    const incoming = { candidate: {}, experience: [], education: [], languages: [] } as never;
+    expect(keepFilledSections(incoming, withPhoto).candidate).toMatchObject({ photoMediaId: 'own', linkedinPhotoMediaId: 'li-old' });
+    const fresh = { candidate: { photoMediaId: 'li-new', linkedinPhotoMediaId: 'li-new' }, experience: [], education: [], languages: [] } as never;
+    expect(keepFilledSections(fresh, withPhoto).candidate.linkedinPhotoMediaId).toBe('li-new');
   });
 
   it('takes the freshly downloaded photo over the old one', () => {

@@ -42,4 +42,13 @@ describe('Работа России adapter (B647)', () => {
     expect(JSON.stringify(first)).not.toContain('Оленева');
     expect(agency?.employerSite).toBeUndefined();
   });
+
+  it('accepts empty results object when 0 vacancies were modified in the window', () => {
+    const vacancies = normalizeJsonSource(
+      'src-trudvsem',
+      { status: '200', meta: { total: 0, limit: 100 }, results: {} },
+      { observedAt: OBSERVED_AT },
+    );
+    expect(vacancies).toEqual([]);
+  });
 });

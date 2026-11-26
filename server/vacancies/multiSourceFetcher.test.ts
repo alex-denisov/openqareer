@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildMultiSourceFetcher } from './multiSourceFetcher';
+import {
+  buildMultiSourceFetcher,
+  jsonSourceTimeoutMs,
+  paceTelegramRequest,
+  TELEGRAM_REQUEST_DELAY_MS,
+  TELEGRAM_SOURCE_TIMEOUT_MS,
+} from './multiSourceFetcher';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 
 const refuse = () => {
@@ -464,3 +470,63 @@ describe('multi-source fetcher: Glassdoor Cloudflare 403 challenge fallback (B21
     expect(vacancies[0].url).toBe('https://careers.deliveryhero.com/job/lead-platform-engineer');
   });
 });
+
+describe('multi-source fetcher request timeout', () => {
+  it('allows large Greenhouse and SmartRecruitters board pages more time', () => {
+    expect(jsonSourceTimeoutMs('https://boards-api.greenhouse.io/v1/boards/cloudflare/jobs')).toBe(120_000);
+    expect(jsonSourceTimeoutMs('https://api.smartrecruiters.com/v1/companies/Eurofins/postings?limit=100&offset=200')).toBe(120_000);
+    expect(jsonSourceTimeoutMs('https://api.lever.co/v0/postings/Autify?mode=json')).toBe(45_000);
+  });
+});
+
+describe('multi-source fetcher: Telegram pacing (B646)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('paces sequential telegram requests by TELEGRAM_REQUEST_DELAY_MS (500ms)', async () => {
+    expect(TELEGRAM_REQUEST_DELAY_MS).toBe(500);
+    expect(TELEGRAM_SOURCE_TIMEOUT_MS).toBe(15_000);
+
+    const sleepCalls: number[] = [];
+    const recordSleep = async (ms: number) => {
+      sleepCalls.push(ms);
+    };
+
+    const p1 = paceTelegramRequest(recordSleep);
+    const p2 = paceTelegramRequest(recordSleep);
+
+    await Promise.all([p1, p2]);
+    expect(sleepCalls).toEqual([500, 500]);
+  });
+
+  it('paces fetcher calls for telegram channels through configured sleep', async () => {
+    const sleepCalls: number[] = [];
+    vi.stubGlobal('fetch', async () => {
+      return new Response(
+        `<!DOCTYPE html><html><body><div class="tgme_widget_message_wrap"></div></body></html>`,
+        { status: 200, headers: { 'content-type': 'text/html' } },
+      );
+    });
+
+    const fetcher = buildMultiSourceFetcher(refuse, refuse, undefined, {
+      sleep: async (ms) => {
+        sleepCalls.push(ms);
+      },
+      now: () => 0,
+    });
+
+    const tgSource: VacancySourceConfig = {
+      id: 'src-tg-testchan',
+      name: 'Test Channel',
+      type: 'telegram',
+      enabled: true,
+      targetUrl: 'https://t.me/s/testchan',
+      refreshIntervalMinutes: 60,
+      itemsFoundTotal: 0,
+      itemsActiveTotal: 0,
+    };
+
+    await fetcher(tgSource);
+    expect(sleepCalls).toContain(500);
+  });
+});
+

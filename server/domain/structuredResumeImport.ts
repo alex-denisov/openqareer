@@ -139,7 +139,7 @@ export function attachResumeMedia(
     ...draft,
     candidate: {
       ...draft.candidate,
-      ...(photoMediaId ? { photoMediaId } : {}),
+      ...(photoMediaId ? { photoMediaId, linkedinPhotoMediaId: photoMediaId } : {}),
     },
     experience: draft.experience.map((role, index) => {
       const sourceUrl = keptLogoUrls[index];
@@ -220,7 +220,16 @@ export function keepFilledSections(
     oldPhoto && !withRole.candidate?.photoMediaId
       ? { ...withRole, candidate: { ...withRole.candidate, photoMediaId: oldPhoto } }
       : withRole;
-  const withAbout = keepAbout(withPhoto, existing);
+  // «Взять из LinkedIn» (p08) keeps working when this read had no photo.
+  const oldLinkedinPhoto = existing.candidate?.linkedinPhotoMediaId;
+  const withLinkedinPhoto: ResumeDraft =
+    oldLinkedinPhoto && !withPhoto.candidate?.linkedinPhotoMediaId
+      ? {
+          ...withPhoto,
+          candidate: { ...withPhoto.candidate, linkedinPhotoMediaId: oldLinkedinPhoto },
+        }
+      : withPhoto;
+  const withAbout = keepAbout(withLinkedinPhoto, existing);
   const kept = STRUCTURED_LIST_SECTIONS.filter(
     (section) => (incoming[section]?.length ?? 0) === 0 && (existing[section]?.length ?? 0) > 0,
   );

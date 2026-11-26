@@ -60,3 +60,14 @@ data/private/
 .serena/
 prototypes/
 .vitest-reports/
+
+# B649: снимки нового кабинета для сверки с макетами
+.s13-shots/
+
+# Local check caches
+.eslintcache
+.prettiercache
+
+# Flaky test records (CI) and scripts/flaky-report.mjs cache
+reports/
+.flaky-cache/

@@ -1,4 +1,5 @@
 import { candidateGenderFromName } from '../../shared/candidateGender';
+import { preferredApplySource } from '../../shared/hhVacancySource';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -12,15 +13,26 @@ import { writeCoverLetterBody, type WrittenLetterBody } from './vacancyLetterBod
 import { translateLetterFacts } from '../domain/letterFactTranslation';
 import { letterFactsToTranslate, withTranslatedStatements } from '../domain/letterResults';
 import type { RouteDeps } from './deps';
+import { snapshotWithDescription } from './applicationVacancyText';
+import { resolveRowVacancyCluster } from '../vacancies/poolVacancyCluster';
 import { releaseTariffQuota, requireTariffQuota } from './tariffQuotaGuard';
 import {
   attachApprovedResume,
+  attachShownVersion,
+  canReplaceResume,
   generalResumeOf,
   letterResumeState,
   prepareLetterResume,
   ResumeSnapshotError,
 } from './letterApprovalResume';
+import type { ResumeEditChoices } from '../../shared/resumeVacancyEdits';
+import { appliesOnHh } from '../vacancies/applyOnHh';
+import { prepareVacancyLang } from './resumeDefaultLang';
 import { currentMaster, masterProjectionOf } from './resumeMaster';
+import { latestLetterApproval, APPROVED_LETTER_PREFIX, handleReadLetterApproval } from './letterApprovalRead';
+import { letterVacancyTexts, registerLetterDraftRoutes, type LetterDraftDeps } from './letterDraftRoutes';
+import { SqliteLetterDraftRepository } from '../candidate/sqliteLetterDraftRepository';
+import { letterFactMark, letterFactSource, type LetterFactMark } from '../domain/letterFreshness';
 import { candidateCompanyKey } from '../domain/candidateCompanies';
 import { wantedCompanyKeys } from '../domain/wantedCompanyOrder';
 import {
@@ -30,17 +42,22 @@ import {
   sendError,
   withDeps,
 } from './helpers';
+import { SqliteResumeEditChoicesRepository } from '../candidate/sqliteResumeEditChoicesRepository';
+import { refuseWhenSent } from './sentApplicationGuard';
+import { registerResumeEditRoutes, type ResumeEditDeps } from './resumeEditRoutes';
+import { DatabaseSync } from 'node:sqlite';
 import { pitchRankingContext } from './pitchRankingContext';
 import { letterEmployerNames, letterNotesToTranslate, letterProfileText } from '../domain/letterProfile';
 import { latinEmployerNames, withLatinEmployerNames } from '../domain/letterLatinEmployers';
 import { letterCompanyLink } from '../domain/letterCompanyLink';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { checkPitchOutputFacts } from '../domain/generatedTextFactGate';
+import { registerManualApplyRoutes, type ManualApplyService, type QueuedLetterWriter } from './manualApplyRoutes';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { vacancyDescriptionHash } from '../domain/vacancyRequirements';
 import { labelVacancyRequirement } from '../domain/vacancyRequirementLabel';
 
-type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
+type LetterDeps = ResumeEditDeps & LetterDraftDeps;
 
 const vacancyPitchInputSchema = z
   .object({
@@ -86,6 +103,10 @@ const approvedLetterSnapshotSchema = z.object({
   resumeAvailable: z.boolean().optional(),
   /** Снимок не создался, и кандидат выбрал своё общее резюме. */
   generalResumeId: z.string().trim().min(1).max(200).optional(),
+  /** B711: какой вариант письма одобрен — экран вернётся к нему. */
+  variantId: z.string().trim().min(1).max(200).optional(),
+  /** Профиль, по которому готовили черновик: он изменился и опроверг число письма — одобрения нет. */
+  profileHash: z.string().max(64).optional(),
 });
 
 /** Перевод результатов идёт до письма: модель цитирует и проверка сверяет один и тот же текст. */
@@ -100,9 +121,13 @@ function isWantedCompany(deps: RouteDeps, candidateId: string, company: string |
 export function resolvePitchVacancy(
   body: z.infer<typeof vacancyPitchInputSchema>,
   vacancyId: string,
-  cluster: ReturnType<RouteDeps['multiSourceEngine']['getActiveCluster']>,
+  storedCluster: ReturnType<RouteDeps['multiSourceEngine']['getActiveCluster']>,
   poolVacancy: ReturnType<NonNullable<RouteDeps['multiSourceEngine']['getVacancy']>> | undefined,
 ) {
+  // B778 (прод 23.11): строка подборки `cluster-<запись>` по ключу `member` находит сохранённый кластер,
+  // склеенный вокруг другого основателя (Arootah → Himalayas «Fractional CAO»). Его название и требования
+  // не берём: кластер годится, только если он и есть выбранная вакансия.
+  const cluster = storedCluster?.id === vacancyId ? storedCluster : undefined;
   return {
     id: vacancyId,
     title: body?.vacancy?.title ?? cluster?.canonicalTitle ?? poolVacancy?.title,
@@ -157,6 +182,20 @@ function letterWorkplaces(
   }));
 }
 
+/** Места и переезд из условий поиска и резюме: только их письмо может назвать. */
+function letterConditions(
+  deps: RouteDeps,
+  candidateId: string,
+  relocation: string | undefined,
+): string[] {
+  const profile = deps.candidateStore.decisionProfileRepo?.get(candidateId);
+  return [
+    ...(profile?.searchLocations ?? []),
+    ...(profile?.workFormats?.includes('relocation') ? ['Релокация'] : []),
+    ...(relocation ? [relocation] : []),
+  ];
+}
+
 /** Всё, что письму нужно из базы; занятая база здесь не доходит до вызова модели. */
 function readLetterContext(
   deps: RouteDeps,
@@ -179,8 +218,10 @@ function readLetterContext(
   return {
     rankingContext,
     candidateName: snapshot.resume?.draft?.candidate?.fullName,
+    profileHash: letterFactSource(snapshot).profileHash,
     resume: letterResumeState(deps, candidateId, masterProjectionOf(snapshot).master),
     facts: allFacts,
+    conditions: letterConditions(deps, candidateId, draft.additional?.relocation),
     candidateWorkplaces,
     workplaces,
     draft,
@@ -272,17 +313,19 @@ function latinProfile(
   return withLatinEmployerNames(profile, names);
 }
 
-async function writeVacancyPitch(
+export async function writeVacancyPitch(
   deps: RouteDeps,
-  request: FastifyRequest,
+  request: Pick<FastifyRequest, 'log'>,
   candidateId: string,
   body: z.infer<typeof vacancyPitchInputSchema>,
   vacancy: ReturnType<typeof resolvePitchVacancy> & { title: string },
+  /** B682: пожелание кандидата к другому варианту письма. */
+  wish?: string,
 ) {
   const context = await retryOnSqliteBusy(() =>
     readLetterContext(deps, candidateId, body, vacancy),
   );
-  const { candidateName, candidateWorkplaces, language, contextMs, resume } = context;
+  const { candidateName, candidateWorkplaces, language, contextMs, resume, profileHash } = context;
   const { toTranslate, translations, translatedFacts, profile } = await translatedLetterInput(
     deps,
     context,
@@ -292,12 +335,14 @@ async function writeVacancyPitch(
     vacancy: { ...vacancy, description: vacancy.fullDescription },
     profile,
     facts: translatedFacts,
+    conditions: context.conditions,
     language,
     ...(gender ? { gender } : {}),
     ...(body?.language ? { chosenLanguage: body.language } : {}),
     resumeAttached: resume.available, contextMs,
     ...(candidateName ? { candidateName } : {}),
     ...companyLinkInput(context, vacancy.company),
+    ...(wish ? { wish } : {}),
   });
   if (translations.size < toTranslate.length) {
     request.log.warn({ wanted: toTranslate.length, translated: translations.size }, 'letter-result-translation-incomplete');
@@ -313,9 +358,10 @@ async function writeVacancyPitch(
         atsCoverLetter,
         candidateWorkplaces,
         resume,
+        profileHash,
         outputFactChecks: { ...templateChecks, emailBody: written.factCheck, atsCoverLetter: written.factCheck },
       }
-    : { pitch, written, atsCoverLetter, candidateWorkplaces, resume, outputFactChecks: templateChecks };
+    : { pitch, written, atsCoverLetter, candidateWorkplaces, resume, profileHash, outputFactChecks: templateChecks };
 }
 
 function saveGeneratedCoverLetter(
@@ -397,7 +443,7 @@ export function readFreshPitchSkills(
   return [...new Set(skills.filter(Boolean))];
 }
 
-function pitchSourceId(vacancyId: string): string {
+export function pitchSourceId(vacancyId: string): string {
   return vacancyId.startsWith('cluster-') ? vacancyId.slice('cluster-'.length) : vacancyId;
 }
 
@@ -405,9 +451,12 @@ function pitchSourceId(vacancyId: string): string {
  * Занятая база на мгновение не доходит до кандидата (G3c, 03.11). Текст вакансии может идти по
  * сети, поэтому он читается один раз, вне повторов: повтор не запрашивает hh.ru второй раз.
  */
-async function prepareVacancyPitch(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
-  const access = await retryOnSqliteBusy(() => readPitchAccess(deps, request, reply));
-  if (!access) return undefined;
+async function prepareVacancyPitch(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  access: NonNullable<ReturnType<typeof readPitchAccess>>,
+) {
   const vacancyId = (request.params as { id: string }).id;
   const loaded = await deps.multiSourceEngine.loadVacancyDescription(pitchSourceId(vacancyId));
   const vacancy = await retryOnSqliteBusy(() => reservePitchVacancy(deps, request, reply, access, loaded));
@@ -426,9 +475,65 @@ export function letterNotices(
   return result.written.body ? [] : result.pitch.notices.slice(0, 1);
 }
 
-const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
+type PitchResult = Awaited<ReturnType<typeof writeVacancyPitch>>;
+
+/** Ответ экрану письма. */
+function pitchData(result: PitchResult) {
+  return {
+    ...result.pitch,
+    atsCoverLetter: result.atsCoverLetter,
+    candidateWorkplaces: result.candidateWorkplaces,
+    resumeAvailable: result.resume.available,
+    resumeKind: result.resume.kind,
+    profileHash: result.profileHash,
+    outputFactChecks: result.outputFactChecks,
+    ...(result.written.factCheck ? { factCheck: result.written.factCheck } : {}),
+    notices: letterNotices(result),
+    bodySource: result.written.body ? ('model' as const) : ('template' as const),
+    ...(result.written.body && result.written.stage ? { stage: result.written.stage } : {}),
+  };
+}
+
+/** Письмо отклика из очереди «отправить вручную» (B787): первое письмо к вакансии, без экрана. */
+const writeQueuedLetter: QueuedLetterWriter = async (deps, request, candidateId, vacancyId) => {
+  const loaded = await deps.multiSourceEngine.loadVacancyDescription(pitchSourceId(vacancyId));
+  const cluster = deps.multiSourceEngine.getActiveCluster(vacancyId);
+  const poolVacancy = loaded.vacancy ?? deps.multiSourceEngine.getVacancy?.(pitchSourceId(vacancyId));
+  const vacancy = resolvePitchVacancy({}, vacancyId, cluster, poolVacancy);
+  if (!vacancy.title) return null;
+  const requiredSkills = vacancy.requiredSkills.length > 0 ? vacancy.requiredSkills
+    : readFreshPitchSkills(deps.vacancyMechanics?.requirements, cluster, vacancyId,
+      poolVacancy?.fullDescription ?? poolVacancy?.description);
+  const result = await writeVacancyPitch(deps, request, candidateId, {}, { ...vacancy, requiredSkills, title: vacancy.title });
+  if (result.written.refused) return null;
+  return { text: result.pitch.emailPitch.body, pitch: pitchData(result) };
+};
+
+/** Тон экрана письма по умолчанию: только такое письмо собирается в очереди заранее. */
+const DEFAULT_LETTER_TONE = 'executive';
+
+type PitchDeps = RouteDeps & { readonly manualApply: ManualApplyService };
+
+/** Письмо, уже собранное для очереди: второй раз модель не зовём. */
+async function queuedPitch(deps: PitchDeps, request: FastifyRequest, access: NonNullable<ReturnType<typeof readPitchAccess>>) {
+  const { body, candidateId } = access;
+  if (body?.language || body?.recipient || body?.applicationId || body?.vacancy) return null;
+  if ((body?.tone ?? DEFAULT_LETTER_TONE) !== DEFAULT_LETTER_TONE) return null;
+  return deps.manualApply.preparedPitch(candidateId, (request.params as { id: string }).id);
+}
+
+const handleGenerateVacancyPitch = async (deps: PitchDeps, request: FastifyRequest, reply: FastifyReply) => {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
-  const prepared = await prepareVacancyPitch(deps, request, reply);
+  const access = await retryOnSqliteBusy(() => readPitchAccess(deps, request, reply));
+  if (!access) return undefined;
+  // Письмо знакомому и письмо самого отклика пишутся и после отправки.
+  if (!access.body?.recipient && !access.body?.applicationId) {
+    const vacancyId = (request.params as { id: string }).id;
+    if (await retryOnSqliteBusy(() => refuseWhenSent(deps, request, reply, access.candidateId, vacancyId))) return undefined;
+  }
+  const queued = await queuedPitch(deps, request, access);
+  if (queued) return { data: queued, meta: { requestId: request.id } };
+  const prepared = await prepareVacancyPitch(deps, request, reply, access);
   if (!prepared) return undefined;
   const { candidateId, body, vacancy } = prepared;
   const result = await writeVacancyPitch(deps, request, candidateId, body, vacancy);
@@ -442,21 +547,7 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
     await retryOnSqliteBusy(() =>
       saveGeneratedCoverLetter(deps.candidateStore, candidateId, applicationId, result.atsCoverLetter));
   }
-  return {
-    data: {
-      ...result.pitch,
-      atsCoverLetter: result.atsCoverLetter,
-      candidateWorkplaces: result.candidateWorkplaces,
-      resumeAvailable: result.resume.available,
-      resumeKind: result.resume.kind,
-      outputFactChecks: result.outputFactChecks,
-      ...(result.written.factCheck ? { factCheck: result.written.factCheck } : {}),
-      notices: letterNotices(result),
-      bodySource: result.written.body ? ('model' as const) : ('template' as const),
-      ...(result.written.body && result.written.stage ? { stage: result.written.stage } : {}),
-    },
-    meta: { requestId: request.id },
-  };
+  return { data: pitchData(result), meta: { requestId: request.id } };
 };
 
 const LETTER_GENERATION_FAILED = 'Не удалось подготовить письмо. Попробуйте ещё раз.';
@@ -481,25 +572,67 @@ function changedLetterResume(reply: FastifyReply, request: FastifyRequest) {
   return sendError(reply, request, 409, 'letter_resume_changed', 'Резюме в профиле изменилось. Письмо подготовлено заново: проверьте его и одобрите.', false);
 }
 
-/** «Подготовить резюме»: повторяет снимок резюме под вакансию до одобрения, письмо не трогает. */
-const handlePrepareLetterResume: Handler = async (deps, request, reply) => {
+function changedShownResume(reply: FastifyReply, request: FastifyRequest) {
+  return sendError(reply, request, 409, 'letter_resume_changed', 'К отклику приложено другое резюме. Откройте шаг «Резюме» ещё раз.', false);
+}
+
+function changedLetterFacts(reply: FastifyReply, request: FastifyRequest) {
+  return sendError(reply, request, 409, 'letter_facts_changed', 'Факты профиля изменились. Письмо подготовлено заново: проверьте его и одобрите.', false);
+}
+
+/** Отклик с одобренным письмом, у которого версию резюме ещё можно заменить. */
+function replaceableApplication(deps: RouteDeps, candidateId: string, vacancyId: string): string | null {
+  const source = letterFactSource(deps.candidateStore.getSnapshot(candidateId));
+  const approval = latestLetterApproval(deps, candidateId, vacancyId, source);
+  return approval?.resume?.kind === 'targeted' && canReplaceResume(deps, candidateId, approval.applicationId)
+    ? approval.applicationId
+    : null;
+}
+
+const shownResumeSchema = z.object({ versionId: z.uuid() });
+
+/** «Одобрить резюме» после одобрения письма: к отклику прикладывается показанная версия (B785). */
+const handleAttachLetterResume = async (deps: LetterDeps, request: FastifyRequest, reply: FastifyReply) => {
   const { authService, candidateStore, config, multiSourceEngine } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const vacancyId = (request.params as { id: string }).id;
-  const cluster = multiSourceEngine.getActiveCluster(vacancyId);
+  const parsed = shownResumeSchema.safeParse(request.body);
+  if (!parsed.success) return invalidLetterSnapshot(reply, request);
+  const cluster = resolveRowVacancyCluster(multiSourceEngine, vacancyId);
+  if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
+  if (refuseWhenSent(deps, request, reply, candidate.id, vacancyId)) return undefined;
+  const resume = candidateStore.transaction(() => {
+    const applicationId = replaceableApplication(deps, candidate.id, vacancyId);
+    return applicationId ? attachShownVersion(deps, candidate.id, applicationId, cluster, parsed.data.versionId) : null;
+  });
+  return resume ? { data: { resume }, meta: { requestId: request.id } } : changedShownResume(reply, request);
+};
+
+/** «Подготовить резюме»: повторяет снимок резюме под вакансию до одобрения, письмо не трогает. */
+const handlePrepareLetterResume = async (deps: ResumeEditDeps, request: FastifyRequest, reply: FastifyReply) => {
+  const { authService, candidateStore, config, multiSourceEngine } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const vacancyId = (request.params as { id: string }).id;
+  const cluster = resolveRowVacancyCluster(multiSourceEngine, vacancyId);
   if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
   try {
-    const state = prepareLetterResume(deps, candidate.id, cluster);
-    return { data: { resumeAvailable: state.available, resumeKind: state.kind, ready: state.available, versionId: state.versionId }, meta: { requestId: request.id } };
+    if (appliesOnHh(deps, candidate.id, vacancyId, cluster)) {
+      const state = letterResumeState(deps, candidate.id, currentMaster(deps, candidate.id).document);
+      return { data: { resumeAvailable: state.available, resumeKind: state.kind, ready: false, versionId: null }, meta: { requestId: request.id } };
+    }
+    const state = prepareLetterResume(deps, candidate.id, cluster, await prepareVacancyLang(deps, candidate.id, cluster));
+    return { data: { resumeAvailable: state.available, resumeKind: state.kind, ready: state.available, versionId: state.versionId, replaceable: replaceableApplication(deps, candidate.id, vacancyId) !== null }, meta: { requestId: request.id } };
   } catch (error) {
     if (error instanceof ResumeSnapshotError) return resumeSnapshotFailed(deps, reply, request, candidate.id, error);
     throw error;
   }
 };
 
-const handleApproveVacancyLetter: Handler = async (deps, request, reply) => {
+const handleApproveVacancyLetter = async (deps: LetterDeps, request: FastifyRequest, reply: FastifyReply) => {
   const { authService, candidateStore, config, multiSourceEngine } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
@@ -507,11 +640,11 @@ const handleApproveVacancyLetter: Handler = async (deps, request, reply) => {
   const vacancyId = (request.params as { id: string }).id;
   const parsed = approvedLetterSnapshotSchema.safeParse(request.body);
   if (!parsed.success) return invalidLetterSnapshot(reply, request);
-  const cluster = multiSourceEngine.getActiveCluster(vacancyId);
+  const cluster = resolveRowVacancyCluster(multiSourceEngine, vacancyId);
   if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
-  const evidenceIds = new Set(
-    filterUsablePitchFacts(candidateStore.getSnapshot(candidate.id).memory).map((fact) => fact.id),
-  );
+  if (!parsed.data.recipient && refuseWhenSent(deps, request, reply, candidate.id, vacancyId)) return undefined;
+  const profile = candidateStore.getSnapshot(candidate.id);
+  const evidenceIds = new Set(filterUsablePitchFacts(profile.memory).map((fact) => fact.id));
   if (parsed.data.usedEvidenceIds.some((id) => !evidenceIds.has(id))) {
     return changedLetterEvidence(reply, request);
   }
@@ -519,14 +652,24 @@ const handleApproveVacancyLetter: Handler = async (deps, request, reply) => {
   if (parsed.data.resumeAvailable !== undefined && parsed.data.resumeAvailable !== resumeNow.available) {
     return changedLetterResume(reply, request);
   }
+  const source = letterFactSource(profile);
+  const { body, profileHash } = parsed.data;
+  const factMark = letterFactMark(source, body, letterVacancyTexts(deps, vacancyId));
+  if (profileHash && profileHash !== source.profileHash && factMark.ownNumbers.length > 0) {
+    return changedLetterFacts(reply, request);
+  }
+  const onHh = appliesOnHh(deps, candidate.id, vacancyId, cluster);
+  const choices = onHh ? null : await prepareVacancyLang(deps, candidate.id, cluster);
   const approvedAt = new Date().toISOString();
   let stored: ReturnType<typeof persistApprovedLetterSnapshot>;
   try {
-    stored = persistApprovedLetterSnapshot(deps, candidate.id, vacancyId, cluster, parsed.data, approvedAt);
+    stored = persistApprovedLetterSnapshot(deps, candidate.id, vacancyId, cluster, parsed.data, approvedAt, factMark, choices);
   } catch (error) {
     if (error instanceof ResumeSnapshotError) return resumeSnapshotFailed(deps, reply, request, candidate.id, error);
     throw error;
   }
+  // Одобренный текст и есть черновик: правка больше не нужна.
+  deps.letterDrafts.remove(candidate.id, vacancyId);
   return {
     data: {
       applicationId: stored.application.id,
@@ -540,25 +683,40 @@ const handleApproveVacancyLetter: Handler = async (deps, request, reply) => {
   };
 };
 
+function letterVacancySnapshot(deps: RouteDeps, vacancyId: string, cluster: VacancyCluster) {
+  const route = preferredApplySource(cluster);
+  return snapshotWithDescription(deps.multiSourceEngine, vacancyId, {
+    title: cluster.canonicalTitle,
+    company: cluster.canonicalCompany,
+    url: route.url,
+    source: route.source ?? cluster.sources[0]?.sourceType ?? 'Источник не указан',
+  });
+}
+
 function persistApprovedLetterSnapshot(
-  deps: RouteDeps,
+  deps: LetterDeps,
   candidateId: string,
   vacancyId: string,
   cluster: NonNullable<ReturnType<RouteDeps['multiSourceEngine']['getActiveCluster']>>,
   input: z.infer<typeof approvedLetterSnapshotSchema>,
   approvedAt: string,
+  factMark: LetterFactMark,
+  /** `null` — отклик уходит на hh.ru резюме hh.ru, своё не прикладываем. */
+  choices: ResumeEditChoices | null,
 ) {
   const { candidateStore } = deps;
+  const manualVacancy = letterVacancySnapshot(deps, vacancyId, cluster);
   return candidateStore.transaction(() => {
     const application = candidateStore.createApplication(candidateId, {
       clusterId: vacancyId,
       stage: 'saved',
-      manualVacancy: {
-        title: cluster.canonicalTitle,
-        company: cluster.canonicalCompany,
-        url: cluster.primaryUrl,
-        source: cluster.sources[0]?.sourceName ?? cluster.sources[0]?.sourceType ?? 'Источник не указан',
-      },
+      draft: true,
+      manualVacancy,
+    });
+    // Сначала резюме: снимок письма помнит его, и одобрение читается целиком после перезапуска (B711).
+    const resume = choices === null ? null : attachApprovedResume(deps, candidateId, {
+      applicationId: application.id, cluster, approvedAt, choices,
+      ...(input.generalResumeId ? { generalResumeId: input.generalResumeId } : {}),
     });
     const approvalId = randomUUID();
     const snapshot = {
@@ -566,6 +724,7 @@ function persistApprovedLetterSnapshot(
       circle: input.circle, language: input.language, tone: input.tone,
       recipient: input.recipient ?? null, subject: input.subject ?? null, body: input.body,
       usedEvidenceIds: input.usedEvidenceIds, includedWorkplaceIds: input.includedWorkplaceIds, sent: false,
+      variantId: input.variantId ?? null, resume, factMark,
     };
     const document = candidateStore.saveDocumentAndLinkApplicationMaterial(
       candidateId,
@@ -574,37 +733,48 @@ function persistApprovedLetterSnapshot(
       {
         kind: 'cover_letter',
         source: 'generated',
-        fileName: 'approved-letter-' + approvalId + '.json',
+        fileName: APPROVED_LETTER_PREFIX + approvalId + '.json',
         mimeType: 'application/json',
         contentBase64: Buffer.from(JSON.stringify(snapshot), 'utf8').toString('base64'),
         extractedText: input.body,
         parseStatus: 'not_applicable',
       },
     ).document;
-    const resume = attachApprovedResume(deps, candidateId, {
-      applicationId: application.id,
-      cluster,
-      approvedAt,
-      ...(input.generalResumeId ? { generalResumeId: input.generalResumeId } : {}),
-    });
     return { application, document, resume };
   });
 }
 
 export function registerVacancyPitchRoutes(app: FastifyInstance, deps: RouteDeps): void {
+  const database = new DatabaseSync(deps.config.databasePath);
+  database.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  app.addHook('onClose', async () => database.close());
+  const editDeps: LetterDeps = {
+    ...deps,
+    letterDrafts: new SqliteLetterDraftRepository(database, deps.config.dataEncryptionKey),
+    resumeEdits: new SqliteResumeEditChoicesRepository(database, deps.config.dataEncryptionKey),
+  };
+  registerResumeEditRoutes(app, editDeps);
+  registerLetterDraftRoutes(app, editDeps);
+  const manualApply = registerManualApplyRoutes(app, editDeps, database, writeQueuedLetter);
   app.post(
     '/api/v1/candidate/vacancies/:id/pitch',
     { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
-    withDeps(deps, handleGenerateVacancyPitch),
+    withDeps({ ...deps, manualApply }, handleGenerateVacancyPitch),
   );
   app.post(
     '/api/v1/candidate/vacancies/:id/letter-approvals',
     { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
-    withDeps(deps, handleApproveVacancyLetter),
+    withDeps(editDeps, handleApproveVacancyLetter),
   );
+  app.get('/api/v1/candidate/vacancies/:id/letter-approvals/latest', withDeps(editDeps, handleReadLetterApproval));
   app.post(
     '/api/v1/candidate/vacancies/:id/letter-resume',
-    { config: { rateLimit: { max: 30, timeWindow: '1 hour' } } },
-    withDeps(deps, handlePrepareLetterResume),
+    { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
+    withDeps(editDeps, handlePrepareLetterResume),
+  );
+  app.put(
+    '/api/v1/candidate/vacancies/:id/letter-resume',
+    { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
+    withDeps(editDeps, handleAttachLetterResume),
   );
 }

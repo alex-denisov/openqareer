@@ -24,6 +24,7 @@ import {
 } from '../../shared/careerDiary';
 import type { SealedText } from './sealedText';
 import {
+  descendantsOf,
   openPayload,
   pagePayloadRows,
   sealPayload,
@@ -214,16 +215,18 @@ export class SqliteCareerDiaryRepository {
   return updated;
 }
 
+  /**
+   * Цель уходит вместе со своими показателями (B686): показатель без цели всплывал на d02
+   * отдельной целью. Замеры уходят по внешнему ключу, детали — при следующем чтении карточек.
+   */
   deleteGoal(candidateId: string, goalId: string): boolean {
   if (!this.getGoal(candidateId, goalId)) return false;
+  const goals = this.listGoals(candidateId);
+  const doomed = descendantsOf(goals, goalId);
   return this.inTransaction(() => {
-    for (const child of this.listGoals(candidateId).filter((goal) => goal.parentGoalId === goalId)) {
-      this.writeGoal(candidateId, { ...child, parentGoalId: null, updatedAt: new Date().toISOString() });
-    }
-    const result = this.database
-      .prepare('DELETE FROM career_diary_goals WHERE candidate_id = ? AND id = ?')
-      .run(candidateId, goalId);
-    return Number(result.changes) > 0;
+    const remove = this.database.prepare('DELETE FROM career_diary_goals WHERE candidate_id = ? AND id = ?');
+    for (const id of doomed) remove.run(candidateId, id);
+    return Number(remove.run(candidateId, goalId).changes) > 0;
   });
 }
 
@@ -577,7 +580,7 @@ export class SqliteCareerDiaryRepository {
         existing.title !== input.title ||
         existing.startDate !== input.startDate ||
         existing.endDate !== (input.endDate ?? null) ||
-        existing.sourceExperienceId !== (input.sourceExperienceId ?? null)
+        existing.sourceExperienceId !== (input.sourceExperienceId ?? null) || (existing.expectations ?? null) !== (input.expectations || null)
       ) throw new CareerDiaryIdempotencyConflictError();
       return existing;
     }
@@ -588,7 +591,7 @@ export class SqliteCareerDiaryRepository {
       title: input.title,
       startDate: input.startDate,
       endDate: input.endDate ?? null,
-      sourceExperienceId: input.sourceExperienceId ?? null,
+      sourceExperienceId: input.sourceExperienceId ?? null, expectations: input.expectations || null,
       status: input.endDate ? 'archived' : 'active',
       isPrimary,
       createdAt: now,

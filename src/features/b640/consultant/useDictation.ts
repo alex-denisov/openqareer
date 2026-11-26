@@ -1,0 +1,99 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { SpeechRecognitionScope } from '../../coach/localSpeechRecognition';
+import { VoiceInputController } from '../../coach/voiceInputController';
+import type { VoiceInputState } from '../../coach/voiceInputMachine';
+import type { ComposerDictation } from '../kit/Composer';
+
+const DENIED_TOAST_MS = 4000;
+// Макет рисует один исход сбоя диктовки (K3b): строка о микрофоне и возврат к тексту.
+const FAILED: readonly VoiceInputState[] = ['denied', 'unsupported', 'error'];
+
+export function speechSupported(): boolean {
+  if (typeof window === 'undefined') return false;
+  return typeof (window as SpeechRecognitionScope).SpeechRecognition?.available === 'function';
+}
+
+/** Чем кончилась диктовка (I2): нет микрофона — кнопка гаснет, не распознали — строка с повтором. */
+export type DictationFailure = 'mic' | 'speech' | null;
+
+export interface FieldDictation extends ComposerDictation {
+  readonly failure: DictationFailure;
+}
+
+function failureOf(state: VoiceInputState): DictationFailure {
+  if (state === 'denied' || state === 'unsupported') return 'mic';
+  if (state === 'unrecognized' || state === 'error') return 'speech';
+  return null;
+}
+
+/** Строка о микрофоне гаснет сама через четыре секунды. */
+function useExpiry(shown: boolean, setShown: (shown: boolean) => void): void {
+  useEffect(() => {
+    if (!shown) return undefined;
+    const timer = setTimeout(() => setShown(false), DENIED_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [shown, setShown]);
+}
+
+/** Прошлая диктовка закончена или сорвалась: машина возвращается в начало, текст не трогает. */
+function begin(voice: VoiceInputController, currentText: string): void {
+  voice.sent();
+  voice.request();
+  voice.approve(currentText);
+}
+
+/** Диктовка в поле ввода: распознанный текст приходит в `onText` по мере речи. */
+export function useDictation(onText: (text: string) => void): FieldDictation {
+  const [supported] = useState(speechSupported);
+  const [state, setState] = useState<VoiceInputState>('idle');
+  const [denied, setDenied] = useState(false);
+  const handler = useRef(onText);
+  const controller = useRef<VoiceInputController | null>(null);
+  // Эффект дочернего компонента идёт раньше нашего: запрос до готовности ждёт контроллер (B681).
+  const queued = useRef<string | null>(null);
+
+  useEffect(() => {
+    handler.current = onText;
+  }, [onText]);
+
+  useEffect(() => {
+    const created = new VoiceInputController({
+      onState: (next) => {
+        setState(next);
+        if (FAILED.includes(next)) setDenied(true);
+      },
+      onText: (text) => handler.current(text),
+      onVoiceDraft: () => undefined,
+      onTextMode: () => undefined,
+      onElapsedSeconds: () => undefined,
+    });
+    created.activate();
+    controller.current = created;
+    const waiting = queued.current;
+    queued.current = null;
+    if (waiting !== null) begin(created, waiting);
+    return () => {
+      created.dispose();
+      controller.current = null;
+    };
+  }, []);
+
+  useExpiry(denied, setDenied);
+
+  const start = useCallback((currentText: string) => {
+    const voice = controller.current;
+    if (voice) begin(voice, currentText);
+    else queued.current = currentText;
+  }, []);
+  const stop = useCallback(() => controller.current?.finish(), []);
+
+  return {
+    supported,
+    recording: state === 'starting' || state === 'recording',
+    settling: state === 'finishing',
+    denied,
+    failure: failureOf(state),
+    start,
+    stop,
+  };
+}

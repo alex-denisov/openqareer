@@ -309,3 +309,164 @@ describe('Workday list adapter', () => {
     expect(listed?.fullDescription).toBeUndefined();
   });
 });
+
+describe('площадка, где дочитывать нечего (B761)', () => {
+  const SOURCE = 'ats-workday-sonyglobal';
+  const IDLE_MS = 60 * 60_000;
+
+  function setup() {
+    const rows = new Map<string, UnifiedVacancy[]>([[SOURCE, []]]);
+    const pool = new FakePool(rows);
+    let scans = 0;
+    let nowMs = 0;
+    const load = pool.loadVacanciesWithoutFullText.bind(pool);
+    pool.loadVacanciesWithoutFullText = (...args) => {
+      scans += 1;
+      return load(...args);
+    };
+    const backfill = new WorkdayDescriptionBackfill({
+      pool,
+      sourceIds: () => [SOURCE],
+      now: () => nowMs,
+      defaultIntervalMs: 20_000,
+      random: () => 0.5,
+      fetchDetail: async () => ({ status: 429 }),
+    });
+    return {
+      rows,
+      backfill,
+      scans: () => scans,
+      at: (ms: number) => {
+        nowMs = ms;
+        return backfill.step();
+      },
+    };
+  }
+
+  it('не читается на каждом такте, а снова смотрится через час', async () => {
+    const { at, scans } = setup();
+    await at(0);
+    await at(20_000);
+    await at(IDLE_MS - 1);
+    expect(scans()).toBe(1);
+    await at(IDLE_MS);
+    expect(scans()).toBe(2);
+  });
+
+  it('просыпается, когда принято новое чтение площадки', async () => {
+    const { at, scans, rows, backfill } = setup();
+    await at(0);
+    rows.set(SOURCE, [vacancy('v1', SOURCE)]);
+    backfill.wake(SOURCE);
+    expect((await at(20_000)).requested).toBe(1);
+    expect(scans()).toBe(2);
+  });
+
+  it('пауза разбросана на ±20 %, чтобы площадки не сходились в один такт', async () => {
+    const seen: string[] = [];
+    let nowMs = 0;
+    const draws = [0, 1];
+    const pool = new FakePool(new Map());
+    pool.loadVacanciesWithoutFullText = (sourceId) => {
+      seen.push(sourceId);
+      return [];
+    };
+    const backfill = new WorkdayDescriptionBackfill({
+      pool,
+      sourceIds: () => ['ats-workday-a', 'ats-workday-b'],
+      now: () => nowMs,
+      random: () => draws.shift() ?? 0.5,
+    });
+    await backfill.step();
+    seen.length = 0;
+    nowMs = IDLE_MS * 0.8;
+    await backfill.step();
+    expect(seen).toEqual(['ats-workday-a']);
+    nowMs = IDLE_MS * 1.2;
+    await backfill.step();
+    expect(seen).toContain('ats-workday-b');
+  });
+
+  it('первый проход растянут по времени, доходит до всех и не задерживает площадки с работой', async () => {
+    const probes = Array.from({ length: 250 }, (_, index) => `ats-workday-s${index}`);
+    let ids = [SOURCE];
+    const seen: string[] = [];
+    let clock = 0;
+    const pool = new FakePool(new Map([[SOURCE, [vacancy('v1', SOURCE)]]]));
+    pool.loadVacanciesWithoutFullText = (sourceId) => {
+      seen.push(sourceId);
+      clock += 20;
+      return sourceId === SOURCE ? [vacancy('v1', SOURCE)] : [];
+    };
+    const backfill = new WorkdayDescriptionBackfill({
+      pool,
+      sourceIds: () => ids,
+      now: () => 0,
+      elapsed: () => clock,
+      maxAttempts: 100,
+      fetchDetail: async () => ({ status: 500 }),
+    });
+    await backfill.step();
+    ids = [...probes, SOURCE];
+    for (const expected of [100, 100, 50]) {
+      seen.length = 0;
+      await backfill.step();
+      expect(seen[0]).toBe(SOURCE);
+      expect(seen).toHaveLength(expected + 1);
+    }
+  });
+
+  it('обход продолжается с места остановки: разбуженные в начале не отодвигают хвост', async () => {
+    const ids = Array.from({ length: 250 }, (_, index) => `ats-workday-s${index}`);
+    const seen: string[] = [];
+    let clock = 0;
+    const pool = new FakePool(new Map());
+    pool.loadVacanciesWithoutFullText = (sourceId) => {
+      seen.push(sourceId);
+      clock += 20;
+      return [];
+    };
+    const backfill = new WorkdayDescriptionBackfill({
+      pool,
+      sourceIds: () => ids,
+      now: () => 0,
+      elapsed: () => clock,
+    });
+    for (let step = 0; step < 3; step += 1) {
+      await backfill.step();
+      for (const id of ids.slice(0, 100)) backfill.wake(id);
+    }
+    expect(seen.slice(0, 250)).toEqual(ids);
+    expect(seen.slice(250)).toEqual(ids.slice(0, 50));
+  });
+
+  it('бюджет считает и работу между площадками, а не только сам обход', async () => {
+    const ids = Array.from({ length: 10 }, (_, index) => `ats-workday-s${index}`);
+    let clock = 0;
+    let scans = 0;
+    const pool = new FakePool(new Map());
+    pool.loadVacanciesWithoutFullText = () => {
+      scans += 1;
+      // Чужая работа занимает цикл после обхода, до следующей площадки.
+      queueMicrotask(() => (clock += 1_000));
+      return [];
+    };
+    const backfill = new WorkdayDescriptionBackfill({
+      pool,
+      sourceIds: () => ids,
+      now: () => 0,
+      elapsed: () => clock,
+    });
+    await backfill.step();
+    expect(scans).toBe(2);
+  });
+
+  it('новое чтение не снимает паузу после 429', async () => {
+    const { at, scans, rows, backfill } = setup();
+    rows.set(SOURCE, [vacancy('v1', SOURCE)]);
+    await at(0);
+    backfill.wake(SOURCE);
+    await at(20_000);
+    expect(scans()).toBe(1);
+  });
+});

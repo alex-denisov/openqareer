@@ -70,6 +70,8 @@ export interface CoverLetterWriteInput {
   readonly companyLink?: string;
   /** B640: причина отказа проверки для второго вызова той же модели (`letterCorrection`). */
   readonly correction?: string;
+  /** B682: пожелание кандидата к другому варианту письма. */
+  readonly wish?: string;
 }
 
 /** Спрашивать модель не о чем: это не отказ провайдера. */
@@ -108,9 +110,19 @@ export interface CoverLetterWriter {
  * 10.11: с выбором провайдера по задержке DeepSeek max 15,6 с на 20 письмах, а зависший провайдер
  * держал 25 с, пока GLM отвечала за 3 с. Срок 18 с: запас над замером, зависание уступает GLM раньше.
  */
-const DEEPSEEK_LETTER_STAGE_MS = 18_000;
-const GLM_LETTER_STAGE_MS = 15_000;
-const VERTEX_LETTER_STAGE_MS = 60_000;
+/**
+ * B730, 22.11: замер с прода — DeepSeek с рассуждением low на письме 35–64 с (одно рассуждение
+ * 5–8,6 тыс. токенов), а GLM отвечает за 2–8 с. Решение оркестратора: рассуждение остаётся
+ * (без него письмо перечисляет факты), ступень DeepSeek 8 с — дольше она уступает GLM.
+ */
+export const LETTER_STAGE_MS = {
+  deepseek: 8_000,
+  glm: 15_000,
+  vertex: 60_000,
+} as const;
+const DEEPSEEK_LETTER_STAGE_MS = LETTER_STAGE_MS.deepseek;
+const GLM_LETTER_STAGE_MS = LETTER_STAGE_MS.glm;
+const VERTEX_LETTER_STAGE_MS = LETTER_STAGE_MS.vertex;
 /** Потолок учётного fetch Vertex на прод: его потолок для кандидата (18 с) оборвал бы письмо раньше ступени. */
 export const COVER_LETTER_VERTEX_TIMEOUT_MS = VERTEX_LETTER_STAGE_MS;
 /** Сумма ступеней: каждая успевает ответить даже после отказа предыдущей. */
@@ -241,6 +253,7 @@ export function letterPrompt(input: CoverLetterWriteInput): string {
     ...(input.resumeAttached === false ? { resumeAttached: false } : {}),
     ...(input.candidateName ? { candidateName: input.candidateName } : {}),
     ...(input.companyLink ? { companyLink: input.companyLink } : {}),
+    ...(input.wish ? { wish: input.wish } : {}),
     ...(input.correction ? { correction: input.correction } : {}),
   });
 }
@@ -345,6 +358,9 @@ function reviewed(outcome: CoverLetterOutcome, input: CoverLetterWriteInput): Co
   return { failure: { stage: outcome.stage ?? 'unknown', kind: 'unusable_response', detail } };
 }
 
+/** Повторов с причиной отказа на одно письмо. */
+const MAX_GATE_RETRIES = 2;
+
 interface RefusedByGate {
   readonly stage: number;
   readonly rules: readonly string[];
@@ -398,9 +414,16 @@ export class QueuedCoverLetterWriter implements CoverLetterWriter {
   private async retry(
     refused: RefusedByGate,
     input: CoverLetterWriteInput,
+    attempt = 1,
   ): Promise<CoverLetterOutcome | undefined> {
     const correction = letterCorrection(refused.rules, input.resumeAttached !== false);
-    return correction ? this.ask(refused.stage, { ...input, correction }) : undefined;
+    if (!correction) return undefined;
+    const outcome = await this.ask(refused.stage, { ...input, correction });
+    // B682: исправила одно, нарушила другое (прод 24.11: name, затем number) — ещё раз со всеми причинами.
+    const fresh = gateRules(outcome.failure?.detail).filter((rule) => !refused.rules.includes(rule));
+    if (fresh.length === 0 || attempt >= MAX_GATE_RETRIES) return outcome;
+    const next = await this.retry({ stage: refused.stage, rules: [...refused.rules, ...fresh] }, input, attempt + 1);
+    return next ?? outcome;
   }
 }
 
@@ -412,14 +435,18 @@ export interface CoverLetterWriterConfig {
   readonly vertexFetch?: typeof fetch;
 }
 
+/** Цепочки, по которым пишет писатель письма: само письмо и сообщение знакомому или рекрутёру. */
+type LetterChain = 'coverLetters' | 'contactMessages';
+
 /**
  * Цепочка письма (решение владельца, B601; B640): по одному вызову deepseek-v4.1-flash → glm-5.3-flash → Gemini на Vertex;
  * если отказали все, маршрут отвечает ошибкой с повтором, а не шаблоном.
  */
 export function buildCoverLetterWriter(
   config: CoverLetterWriterConfig,
+  chain: LetterChain = 'coverLetters',
 ): CoverLetterWriter | undefined {
-  const stages = coverLetterStages(config);
+  const stages = coverLetterStages(config, chain);
   if (stages.length === 0) return undefined;
   return new QueuedCoverLetterWriter(
     stages.map((stage) => stage.writer),
@@ -432,8 +459,9 @@ export function buildCoverLetterWriter(
 /** Ступени цепочки по отдельности: контрольный прогон зовёт каждую модель тем же путём, что и прод. */
 export function coverLetterStages(
   config: CoverLetterWriterConfig,
+  chain: LetterChain = 'coverLetters',
 ): readonly { readonly label: string; readonly writer: CoverLetterWriter }[] {
-  return resolveChain(MODEL_CHAINS.coverLetters, config.providerCredentials ?? {}, config.vertex).map((stage) => ({
+  return resolveChain(MODEL_CHAINS[chain], config.providerCredentials ?? {}, config.vertex).map((stage) => ({
     label: stage.label,
     writer: stage.kind === 'vertex'
       ? vertexCoverLetterWriter(stage.vertex, config.vertexFetch)
@@ -450,6 +478,14 @@ export function buildEnabledCoverLetterWriter(
   enabled: boolean = LETTER_MODEL_ENABLED,
 ): CoverLetterWriter | undefined {
   return enabled ? buildCoverLetterWriter(config) : undefined;
+}
+
+/** B753: сообщение знакомому и рекрутёру — тот же писатель по своей цепочке (GLM первым, без Vertex). */
+export function buildContactMessageWriter(
+  config: CoverLetterWriterConfig,
+  enabled: boolean = LETTER_MODEL_ENABLED,
+): CoverLetterWriter | undefined {
+  return enabled ? buildCoverLetterWriter(config, 'contactMessages') : undefined;
 }
 
 function vertexCoverLetterWriter(vertex: VertexConfig, fetchImpl?: typeof fetch): CoverLetterWriter {

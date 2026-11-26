@@ -1,0 +1,384 @@
+import type { Page, Route } from '@playwright/test';
+
+/** Сеть экранов «Адаптации» (B663): план 30-60-90, шаги, первая встреча и карта людей. */
+export interface AdaptationCalls {
+  readonly plans: unknown[];
+  readonly details: unknown[];
+  readonly people: Array<{ method: string; path: string; body: unknown }>;
+  readonly checks: Array<{ method: string; body: unknown }>;
+  readonly transfers: Array<{ goalId: string; body: unknown }>;
+}
+
+const START = '2026-12-01';
+const WORKPLACE = {
+  id: 'w1',
+  company: 'Вектор Банк',
+  title: 'руководитель разработки',
+  startDate: START,
+  endDate: null,
+  sourceExperienceId: null,
+  status: 'active',
+  isPrimary: true,
+  createdAt: '2026-11-14T10:00:00.000Z',
+  updatedAt: '2026-11-14T10:00:00.000Z',
+};
+type Task = {
+  id: string;
+  title: string;
+  stage: string;
+  dueDate: string;
+  completed: boolean;
+  step: string | null;
+  group: string | null;
+};
+const t = (
+  id: string,
+  title: string,
+  stage: string,
+  dueDate: string,
+  completed: boolean,
+  step: string | null,
+  group: string | null,
+): Task => ({ id, title, stage, dueDate, completed, step, group });
+const TASKS: Task[] = [
+  t(
+    'a1',
+    'Дата и время выхода, куда прийти',
+    'prep',
+    '2026-11-25',
+    true,
+    'before_start',
+    'Уточнить у HR',
+  ),
+  t(
+    'a2',
+    'Когда выдадут ноутбук и доступы',
+    'prep',
+    '2026-11-27',
+    true,
+    'before_start',
+    'Уточнить у HR',
+  ),
+  t(
+    'a3',
+    'Скрыть резюме на hh.ru',
+    'prep',
+    '2026-11-25',
+    false,
+    'before_start',
+    'Закрыть дела на старой работе',
+  ),
+  t(
+    'b1',
+    'Почта, мессенджер, календарь',
+    'days_1_30',
+    '2026-12-01',
+    true,
+    'first_two_weeks',
+    'Доступы',
+  ),
+  t(
+    'b2',
+    'Встречи один на один с 9 людьми',
+    'days_1_30',
+    '2026-12-11',
+    true,
+    'first_two_weeks',
+    'Встречи один на один',
+  ),
+  t(
+    'c1',
+    'Что для вас успех к 90-му дню и как он измеряется?',
+    'days_1_30',
+    '2026-12-02',
+    true,
+    'first_meeting',
+    null,
+  ),
+  t('d1', 'Своя тестовая среда для команды', 'days_31_60', '2027-01-15', false, null, null),
+  t('d2', 'Релиз за неделю 4 недели подряд', 'days_31_60', '2027-01-29', false, null, null),
+  t('e1', 'Итог 90 дней для директора', 'days_61_90', '2027-03-01', false, null, null),
+  t('f1', 'Зарплатная карта банка', 'days_1_30', '2026-12-04', true, 'settling', 'Банк'),
+];
+
+const PLANNING = {
+  adaptationPlan: {
+    id: 'plan-1',
+    workplaceId: 'w1',
+    startDate: START,
+    createdAt: '2026-11-14T10:00:00.000Z',
+    status: 'active',
+    closedAt: null,
+    tasks: TASKS.map(({ id, title, stage, dueDate, completed }) => ({
+      id,
+      title,
+      description: '',
+      stage,
+      category: 'delivery',
+      dueDate,
+      completed,
+      source: 'template',
+    })),
+  },
+};
+
+function stageView(stage: string, title: string, status: string) {
+  const tasks = TASKS.filter((task) => task.stage === stage).map((task) => ({
+    ...task,
+    description: '',
+    source: 'template',
+    goalId: null,
+  }));
+  return {
+    stage,
+    title,
+    goalId: null,
+    tasks,
+    tasksTotal: tasks.length,
+    tasksDone: tasks.filter((task) => task.completed).length,
+    status,
+  };
+}
+
+function stepView(id: string, status: string) {
+  const tasks = TASKS.filter((task) => task.step === id).map((task) => ({
+    ...task,
+    description: '',
+    source: 'template',
+    goalId: null,
+  }));
+  const names = [...new Set(tasks.map((task) => task.group))];
+  return {
+    id,
+    status,
+    tasksTotal: tasks.length,
+    tasksDone: tasks.filter((task) => task.completed).length,
+    groups: names.map((name) => ({ name, tasks: tasks.filter((task) => task.group === name) })),
+  };
+}
+
+export const VIEW = {
+  workplaceId: 'w1',
+  hasPlan: true,
+  startDate: START,
+  dayNumber: 34,
+  stages: [
+    stageView('prep', '', 'done'),
+    stageView('days_1_30', 'познакомиться с командой', 'done'),
+    stageView('days_31_60', 'первый заметный результат', 'active'),
+    stageView('days_61_90', 'цели команды на год', 'ahead'),
+  ],
+  steps: [
+    stepView('before_start', 'done'),
+    stepView('first_two_weeks', 'done'),
+    stepView('first_meeting', 'done'),
+    stepView('people_map', 'active'),
+    stepView('day_30_check', 'ahead'),
+    stepView('settling', 'done'),
+  ],
+  probation: { endsOn: '2027-03-01', reviewer: 'Ирина Лаврова, директор по технологиям' },
+  firstMeeting: {
+    heldOn: '2026-12-02',
+    expectations: 'Релизы предсказуемые, команда не теряет людей',
+    successByDay90: 'Релиз за неделю, 2 вакансии закрыты, никто не ушёл',
+    measures: 'Срок релиза в днях, закрытые вакансии',
+    cadence: 'Раз в 2 недели по средам',
+    needsApproval: 'Выкладки в периоды отчётности',
+    ownDecisions: 'Найм в рамках бюджета',
+    manager: 'Ирина Лаврова, директор по технологиям',
+  },
+  relocated: false,
+};
+
+const person = (
+  id: string,
+  name: string,
+  role: string,
+  group: string,
+  cadence: string,
+  lastMetOn: string | null,
+  status: string,
+  headcount = 1,
+) => ({
+  id,
+  name,
+  role,
+  group,
+  cadence,
+  headcount,
+  lastMetOn,
+  meeting: null,
+  createdAt: '',
+  status,
+});
+export const PEOPLE = {
+  workplaceId: 'w1',
+  total: 13,
+  withoutMeeting: 2,
+  nextMeeting: null,
+  groups: [
+    {
+      name: 'Руководитель',
+      headcount: 1,
+      people: [
+        person(
+          'p1',
+          'Ирина Лаврова',
+          'директор по технологиям',
+          'Руководитель',
+          'biweekly',
+          '2026-12-09',
+          'met',
+        ),
+      ],
+    },
+    {
+      name: 'Команда',
+      headcount: 9,
+      people: [
+        person('p2', 'Илья', 'ведущий разработчик', 'Команда', 'biweekly', '2026-12-30', 'met'),
+        person('p3', '', '', 'Команда', 'biweekly', '2026-12-28', 'met', 8),
+      ],
+    },
+    {
+      name: 'Соседние команды',
+      headcount: 3,
+      people: [
+        person(
+          'p4',
+          '',
+          'Руководитель тестовых сред',
+          'Соседние команды',
+          'on_demand',
+          null,
+          'none',
+        ),
+        person('p5', '', 'Отдел найма', 'Соседние команды', 'weekly', '2026-12-29', 'met'),
+        person(
+          'p6',
+          '',
+          'Руководитель эксплуатации',
+          'Соседние команды',
+          'on_demand',
+          null,
+          'none',
+        ),
+      ],
+    },
+  ],
+};
+
+export const CHECK = {
+  workplaceId: 'w1',
+  dueOn: '2026-12-30',
+  sentOn: null,
+  facts: [
+    { area: 'team', label: 'Команда', value: 'Встречи с 11 из 13 человек' },
+    { area: 'result', label: 'Результат', value: 'Срок релиза: 14 → 7 дней' },
+    { area: 'plan', label: 'План', value: 'Задачи первого месяца: 6 из 7' },
+  ],
+  signal: { area: 'team', text: 'Без встречи — 2 человека' },
+  letter:
+    '30 минут на этой неделе? Подвожу итоги первого месяца: встречи с 11 из 13 человек; срок релиза: 14 → 7 дней; задачи первого месяца: 6 из 7. Нужен ваш совет: без встречи — 2 человека. Как вы оцениваете мой старт?',
+};
+export const RESULTS = {
+  workplaceId: 'w1',
+  periodFrom: START,
+  periodTo: '2027-02-28',
+  items: [
+    { goalId: 'g1', title: 'Срок релиза', line: 'с 14 до 5 дней', status: 'done' },
+    { goalId: 'g2', title: 'Нанять 2 разработчиков', line: 'с 0 до 2 чел.', status: 'done' },
+    {
+      goalId: 'g3',
+      title: 'Инциденты после релиза',
+      line: 'с 6 до 3 в месяц, цель — 2',
+      status: 'behind',
+    },
+  ],
+  resumeText: 'Руководитель разработки: за первые 90 дней — срок релиза, нанять 2 разработчиков.',
+  talkText:
+    'За 90 дней 2 из 3 целей достигнуто, 1 в работе. Прошу зафиксировать критерии итоговой оценки и обсудить ожидания на следующий квартал.',
+};
+
+const goalCard = (id: string, title: string, unit: string, from: number, to: number) => ({
+  id,
+  title,
+  unit: '',
+  baselineValue: null,
+  targetValue: 0,
+  risk: { status: 'achieved', rule: 'target_reached', explanation: '' },
+  details: { setBy: 'manager', agreedOn: null, weight: null, archive: null, transfer: null },
+  indicators: [
+    {
+      id: `${id}-i`,
+      title,
+      unit,
+      baselineValue: from,
+      targetValue: to,
+      latestMeasurement: { id: 'm', goalId: `${id}-i`, value: to, measuredAt: '2027-01-10' },
+    },
+  ],
+});
+/** Достигнутые цели итогов: строки результата для «Добавить в профиль». */
+const GOAL_CARDS = [
+  goalCard('g1', 'Срок релиза', 'дней', 14, 5),
+  goalCard('g2', 'Нанять 2 разработчиков', 'чел.', 0, 2),
+];
+
+function handleTransfer(route: Route, calls: AdaptationCalls, path: string, body: unknown) {
+  const goalId = path.split('/')[2] ?? '';
+  calls.transfers.push({ goalId, body });
+  const card = GOAL_CARDS.find((item) => item.id === goalId) ?? GOAL_CARDS[0]!;
+  const transfer = {
+    experienceId: 'e1',
+    memoryId: `m-${goalId}`,
+    transferredAt: '2027-03-01T09:00:00.000Z',
+  };
+  return route.fulfill({
+    json: { data: { ...card, details: { ...card.details, transfer } } },
+  });
+}
+
+function handle(route: Route, calls: AdaptationCalls) {
+  const request = route.request();
+  const method = request.method();
+  const path = new URL(request.url()).pathname.replace('/api/v1/candidate/career-diary', '');
+  const body = method === 'GET' || method === 'DELETE' ? null : (request.postDataJSON() as unknown);
+  if (path === '' || path === '/')
+    return route.fulfill({
+      json: { data: { asOf: '2027-01-03', primaryWorkplace: WORKPLACE, summary: {} } },
+    });
+  if (path === '/workplaces/w1' && method === 'GET')
+    return route.fulfill({ json: { data: { ...WORKPLACE, planning: PLANNING } } });
+  if (path === '/workplaces/w1' && method === 'PATCH') {
+    calls.plans.push(body);
+    return route.fulfill({ json: { data: { ...WORKPLACE, ...(body as object) } } });
+  }
+  if (path === '/workplaces/w1/adaptation') {
+    if (method === 'PATCH') calls.details.push(body);
+    return route.fulfill({
+      json: { data: method === 'PATCH' ? { ...VIEW, ...(body as object) } : VIEW },
+    });
+  }
+  if (path === '/workplaces/w1/day-30' || path === '/workplaces/w1/day-30/sent') {
+    if (method !== 'GET') calls.checks.push({ method, body });
+    const sentOn = method === 'PUT' ? (body as { sentOn: string }).sentOn : null;
+    return route.fulfill({ json: { data: { ...CHECK, sentOn } } });
+  }
+  if (path === '/goal-cards' && method === 'GET')
+    return route.fulfill({ json: { data: { items: GOAL_CARDS, archived: [] } } });
+  if (/^\/goal-cards\/[^/]+\/transfer$/u.test(path) && method === 'POST')
+    return handleTransfer(route, calls, path, body);
+  if (path === '/workplaces/w1/results-90') return route.fulfill({ json: { data: RESULTS } });
+  if (path.startsWith('/workplaces/w1/people')) {
+    if (method !== 'GET') calls.people.push({ method, path, body });
+    return route.fulfill({ status: method === 'POST' ? 201 : 200, json: { data: PEOPLE } });
+  }
+  return route.fulfill({ status: 404, json: { error: { code: 'not_found', message: 'Нет' } } });
+}
+
+export async function mockAdaptation(page: Page): Promise<AdaptationCalls> {
+  const calls: AdaptationCalls = { plans: [], details: [], people: [], checks: [], transfers: [] };
+  await page.route('**/api/v1/candidate/career-diary**', (route) => handle(route, calls));
+  return calls;
+}

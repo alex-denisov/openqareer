@@ -353,13 +353,23 @@ describe('hh text priority queue (01.11)', () => {
     ['memory', () => new MemoryVacancyPoolStore()],
   ] as const)('%s: selection order, best rank wins, rows with text or expired leave', (_, open) => {
     const store = open();
-    const [a, b, c, d] = [hh(1, 1), hh(2, 1), hh(3, 1, 'Текст'), hh(4, 1)];
+    const [a, b, c, d] = [hh(1, 1), hh(2, 1), hh(3, 1, 'Текст. '.repeat(60)), hh(4, 1)];
     store.mergeSourceSlice(HH, [a, b, c, d]);
     store.requestHhTextPriority([b.id, a.id, c.id, 'src-other:9'], 10);
     store.requestHhTextPriority([d.id, a.id], 0);
     store.markExpired([d.id], new Date().toISOString());
     expect(store.peekHhTextPriority(10)).toEqual([a.id, b.id]);
     store.dropHhTextPriority([a.id]);
+    expect(store.peekHhTextPriority(10)).toEqual([b.id]);
+    // B794: обрывок текста читается ещё раз.
+    const stub = hh(5, 1, 'Обязанности:');
+    store.mergeSourceSlice(HH, [stub]);
+    store.requestHhTextPriority([stub.id], 0);
+    expect(store.peekHhTextPriority(10)).toEqual([stub.id, b.id]);
+    // Прочитан, текст и правда короткий: новый показ списка его не возвращает.
+    store.mergeSourceSlice(HH, [{ ...stub, descriptionShort: true }]);
+    store.mergeSourceSlice(HH, [hh(5, 1)]);
+    store.requestHhTextPriority([stub.id], 0);
     expect(store.peekHhTextPriority(10)).toEqual([b.id]);
   });
 });

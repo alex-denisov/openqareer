@@ -76,6 +76,8 @@ export const passwordChangeSchema = z
   .object({
     currentPassword: z.string().min(1).max(256),
     newPassword: passwordField,
+    /** B401: при включённой двухфакторной защите смена пароля требует код. */
+    twoFactorCode: z.string().trim().max(32).optional(),
   })
   .refine((value) => value.currentPassword !== value.newPassword, {
     path: ['newPassword'],

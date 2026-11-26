@@ -89,6 +89,26 @@ function withinExperience(
 }
 
 /**
+ * B748: проверенный перевод роли хранится у кандидата. Если новое называние его
+ * не дало (модель ответила без кириллицы), остаётся сохранённый — иначе роль
+ * снова показалась бы по-английски.
+ */
+export function withStoredTitlesRu(
+  campaign: { readonly careerRoles?: readonly CareerRoleRef[] } | undefined,
+  roles: readonly ProposedRole[],
+): ProposedRole[] {
+  const stored = new Map(
+    (campaign?.careerRoles ?? []).flatMap((role) =>
+      role.titleRu ? [[role.id, role.titleRu] as const] : [],
+    ),
+  );
+  return roles.map((role) => {
+    const titleRu = role.titleRu ?? stored.get(role.id);
+    return titleRu && titleRu !== role.titleRu ? { ...role, titleRu } : role;
+  });
+}
+
+/**
  * Запоминает роли, которые кандидат видит на «Карьере», чтобы подбор
  * «Вакансий» шёл по ним же: что на экране, то и в подборе. Роли рынка тоже
  * идут в подбор — на проде модель называния часто молчит, и все пять ролей
@@ -132,17 +152,26 @@ export function persistCareerRoles(
     )
     .sort((left, right) => Number(left.origin !== 'model') - Number(right.origin !== 'model'))
     .slice(0, MAX_CAREER_ROLES)
-    .map((role) => ({ id: role.id, title: role.title }));
+    .map((role) => ({
+      id: role.id,
+      title: role.title,
+      ...(role.titleRu ? { titleRu: role.titleRu } : {}),
+    }));
   const previous = campaign.careerRoles ?? [];
   if (sameRoles(previous, next)) return false;
   deps.candidateStore.saveCandidateWorkspace(candidateId, {
     ...workspace,
     campaign: { ...campaign, careerRoles: next },
   });
-  deps.matchedPoolPrecompute?.prioritizeCampaign(candidateId);
+  // B801: чтение «Карьеры» записывало роли и стирало все снимки подбора, следующее чтение ждало
+  // 12 с и получало 503 (прод 25.11, 13:28). Ключ снимка содержит роли: стирать нечего (B702).
+  deps.matchedPoolPrecompute?.refreshCampaign?.(candidateId);
   return true;
 }
 
 function sameRoles(a: readonly CareerRoleRef[], b: readonly CareerRoleRef[]): boolean {
-  return a.length === b.length && a.every((role, index) => role.id === b[index]?.id);
+  return (
+    a.length === b.length &&
+    a.every((role, index) => role.id === b[index]?.id && role.titleRu === b[index]?.titleRu)
+  );
 }

@@ -285,7 +285,7 @@ describe('resumeExport', () => {
     expect(jsonName).toBe('resume-germany-ivan-ivanov.json');
   });
 
-  it('exports the targeted slice and reports gaps without presenting them as candidate facts', () => {
+  it('exports the targeted slice and keeps vacancy gaps out of the text (B713)', () => {
     const doc = minimalDocument({
       contact: {
         fullName: 'Анна Пример',
@@ -333,9 +333,11 @@ describe('resumeExport', () => {
 
     expect(text).toContain('Автоматизировала развёртывание Kubernetes-сервисов.');
     expect(text).toContain('Менеджер продаж | Example Retail');
-    expect(text).not.toContain('Вела переговоры с партнёрами.');
-    expect(text).toContain('GraphQL');
-    expect(text).toContain('GraphQL - не найдено в мастер-резюме');
+    // B713: a place without a literal match keeps its bullets.
+    expect(text).toContain('- Вела переговоры с партнёрами.');
+    expect(slice.missingRequirements).toEqual(['GraphQL']);
+    expect(text).not.toContain('GraphQL');
+    expect(text).not.toMatch(/REQUIREMENT GAPS|не найдено/u);
     expect(resumeTargetedExportFileName(doc, 'pdf')).toBe('resume-targeted-anna-primer.pdf');
   });
 

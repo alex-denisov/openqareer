@@ -29,6 +29,10 @@ export function createCandidateWindowCache<V>(
     write(key: string, value: V): void {
       entries.set(candidateOf(key), { key, at: now(), value });
     },
+    /** Значение прошлого процесса: отвечает сразу, но окно уже вышло. */
+    writeStale(key: string, value: V): void {
+      entries.set(candidateOf(key), { key, at: now() - windowMs, value });
+    },
     size: () => entries.size,
   };
 }

@@ -13,6 +13,7 @@
  * server reads one primary-key row per closed card's request.
  */
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
+import { inWriteTransaction, writeInPortions } from '../data/writePortions';
 import { parseVacancyPath } from '../../shared/vacancyCatalogRoutes';
 import { applySqliteBusyTimeout, SQLITE_HTTP_BUSY_TIMEOUT_MS } from '../data/sqliteBusyTimeout';
 
@@ -91,16 +92,7 @@ const COPY_FROM_CATALOG_SQL = `INSERT INTO catalog_archive_cards (
     last_listed_at = coalesce(excluded.last_listed_at, last_listed_at),
     last_impression_at = coalesce(excluded.last_impression_at, last_impression_at)`;
 
-function inTransaction(database: DatabaseSync, work: () => void): void {
-  database.exec('BEGIN IMMEDIATE');
-  try {
-    work();
-    database.exec('COMMIT');
-  } catch (error: unknown) {
-    database.exec('ROLLBACK');
-    throw error;
-  }
-}
+const SNAPSHOT_WRITE_PORTION = 250;
 
 function keysOf(paths: readonly string[]): string[] {
   return [...new Set(paths.map((path) => parseVacancyPath(path)).filter((key) => key !== null))];
@@ -111,13 +103,17 @@ export function snapshotSitemapCards(
   database: DatabaseSync,
   paths: readonly string[],
   now: Date,
+  pause: () => void = () => undefined,
 ): number {
   database.exec(CATALOG_ARCHIVE_TABLE_SQL);
   const copy = database.prepare(COPY_FROM_CATALOG_SQL);
   const at = now.toISOString();
   let copied = 0;
-  inTransaction(database, () => {
-    for (const key of keysOf(paths)) copied += Number(copy.run(at, null, key).changes);
+  writeInPortions(database, keysOf(paths), SNAPSHOT_WRITE_PORTION, pause, (key) => {
+    copied += Number(copy.run(at, null, key).changes);
+  });
+  pause();
+  inWriteTransaction(database, () => {
     // A copy that can only answer 410 any more is dropped, so the table stays bounded.
     database
       .prepare(
@@ -154,7 +150,7 @@ export function recordArchiveImpressions(
   );
   const at = now.toISOString();
   let marked = 0;
-  inTransaction(database, () => {
+  inWriteTransaction(database, () => {
     for (const key of keysOf(paths)) {
       const copied = Number(copy.run(null, at, key).changes);
       marked += copied > 0 ? copied : Number(mark.run(at, key).changes);

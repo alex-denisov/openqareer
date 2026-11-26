@@ -1,5 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
+import { nextTurn } from '../data/chunkedRows';
+import { inWriteTransaction } from '../data/writePortions';
 import type { SitemapUrl } from './sitemapXml';
 
 // The shared endpoint relays to the participating engines; Yandex search is the
@@ -44,51 +46,71 @@ function absoluteUrl(path: string): string {
   return new URL(path, SITE_ORIGIN).toString();
 }
 
-function currentFingerprints(urls: readonly SitemapUrl[]): Map<string, string | null> {
+/** 24.11: ~290 тысяч адресов — порциями, с тактом цикла событий между ними. */
+const STATE_PORTION = 1_000;
+
+async function currentFingerprints(
+  urls: readonly SitemapUrl[],
+): Promise<Map<string, string | null>> {
   const result = new Map<string, string | null>();
-  for (const item of urls) result.set(absoluteUrl(item.path), item.lastmod ?? null);
+  for (const group of chunks(urls, STATE_PORTION)) {
+    for (const item of group) result.set(absoluteUrl(item.path), item.lastmod ?? null);
+    await nextTurn();
+  }
   return result;
 }
 
-function readSent(database: DatabaseSync): Map<string, string | null> {
+/** Paged by key: an open cursor would stay on the writer connection between turns. */
+async function readSent(database: DatabaseSync): Promise<Map<string, string | null>> {
   database.exec(INDEXNOW_TABLE_SQL);
-  const rows = database.prepare('SELECT url, lastmod FROM catalog_indexnow_sent').all() as Array<{
-    url: string;
-    lastmod: string | null;
-  }>;
-  return new Map(rows.map((row) => [row.url, row.lastmod]));
+  const page = database.prepare(
+    'SELECT url, lastmod FROM catalog_indexnow_sent WHERE url > ? ORDER BY url LIMIT ?',
+  );
+  const sent = new Map<string, string | null>();
+  for (let after = ''; ;) {
+    const rows = page.all(after, STATE_PORTION) as Array<{ url: string; lastmod: string | null }>;
+    for (const row of rows) sent.set(row.url, row.lastmod);
+    const last = rows.at(-1);
+    if (!last || rows.length < STATE_PORTION) return sent;
+    after = last.url;
+    await nextTurn();
+  }
 }
 
-function writeSent(database: DatabaseSync, batch: readonly IndexNowFingerprint[]): void {
+async function inPortions<T>(
+  database: DatabaseSync,
+  rows: readonly T[],
+  write: (row: T) => void,
+): Promise<void> {
+  for (const group of chunks(rows, STATE_PORTION)) {
+    inWriteTransaction(database, () => group.forEach(write));
+    await nextTurn();
+  }
+}
+
+async function writeSent(
+  database: DatabaseSync,
+  batch: readonly IndexNowFingerprint[],
+): Promise<void> {
   const upsert = database.prepare(
     `INSERT INTO catalog_indexnow_sent (url, lastmod) VALUES (?, ?)
      ON CONFLICT(url) DO UPDATE SET lastmod = excluded.lastmod`,
   );
-  database.exec('BEGIN IMMEDIATE');
-  try {
-    for (const item of batch) upsert.run(item.url, item.lastmod ?? null);
-    database.exec('COMMIT');
-  } catch (error: unknown) {
-    database.exec('ROLLBACK');
-    throw error;
-  }
+  await inPortions(database, batch, (item) => {
+    upsert.run(item.url, item.lastmod ?? null);
+  });
 }
 
-function forgetRemoved(database: DatabaseSync, current: ReadonlyMap<string, string | null>): void {
-  const rows = database.prepare('SELECT url FROM catalog_indexnow_sent').all() as Array<{
-    url: string;
-  }>;
-  const removed = rows.map((row) => row.url).filter((url) => !current.has(url));
-  if (removed.length === 0) return;
+async function forgetRemoved(
+  database: DatabaseSync,
+  sent: ReadonlyMap<string, string | null>,
+  current: ReadonlyMap<string, string | null>,
+): Promise<void> {
+  const removed = [...sent.keys()].filter((url) => !current.has(url));
   const remove = database.prepare('DELETE FROM catalog_indexnow_sent WHERE url = ?');
-  database.exec('BEGIN IMMEDIATE');
-  try {
-    for (const url of removed) remove.run(url);
-    database.exec('COMMIT');
-  } catch (error: unknown) {
-    database.exec('ROLLBACK');
-    throw error;
-  }
+  await inPortions(database, removed, (url) => {
+    remove.run(url);
+  });
 }
 
 function chunks<T>(values: readonly T[], size: number): T[][] {
@@ -170,21 +192,21 @@ async function sendChanged(
   log: IndexNowLog,
   fetcher: IndexNowFetcher,
 ): Promise<void> {
-  const current = currentFingerprints(urls);
-  const sent = readSent(database);
+  const current = await currentFingerprints(urls);
+  const sent = await readSent(database);
   const changed = [...current].filter(([url, lastmod]) => sent.get(url) !== lastmod);
   for (const group of chunks(changed, INDEXNOW_URL_LIMIT)) {
     const batch = group.map(([url, lastmod]) => ({ url, lastmod: lastmod ?? undefined }));
     if (!(await submitEverywhere(key, batch, log, fetcher))) return;
     try {
-      writeSent(database, batch);
+      await writeSent(database, batch);
     } catch (error: unknown) {
       log.error({ errorName: errorName(error) }, 'indexnow-state-write-failed');
       return;
     }
   }
   try {
-    forgetRemoved(database, current);
+    await forgetRemoved(database, sent, current);
   } catch (error: unknown) {
     log.error({ errorName: errorName(error) }, 'indexnow-state-cleanup-failed');
   }

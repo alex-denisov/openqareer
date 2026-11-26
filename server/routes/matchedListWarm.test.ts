@@ -120,5 +120,11 @@ describe('the list is built ahead of the reader (PRB-041)', () => {
       listMs: expect.any(Number),
       rows: 40,
     });
+    // B770: фазы сборки — время каждой без чужих ходов event loop.
+    expect(Object.keys(warmed.phasesMs)).toEqual(
+      expect.arrayContaining(['finish', 'levelGate', 'order', 'facets', 'filters', 'pagePlan']),
+    );
+    // B702-2: ход отдаётся по времени, на 40 известных названиях его может не быть.
+    expect(warmed.phasesMs.prepareRoleTurns).toEqual(expect.any(Number));
   });
 });

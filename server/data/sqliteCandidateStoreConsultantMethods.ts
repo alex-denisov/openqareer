@@ -14,6 +14,10 @@ type PublicHistoryMethods = Pick<CandidateStore,
   | 'listConsultantConversations'
   | 'getConsultantConversation'
   | 'deleteConsultantConversation'
+  | 'closeConsultantConversation'
+  | 'resumeConsultantConversation'
+  | 'currentConsultantConversation'
+  | 'consultantReplyResults'
   | 'exportConsultantConversations'
   | 'listPendingConsultantSummaries'
   | 'getConsultantSummaryInput'
@@ -65,6 +69,7 @@ function createPublicHistoryMethods(
       requireCandidate(candidateId);
       return input.transaction(() => input.history.delete(candidateId, conversationId));
     },
+    ...createConversationControls(input),
     exportConsultantConversations(candidateId) {
       requireCandidate(candidateId);
       return input.transaction(() => input.history.export(candidateId));
@@ -87,6 +92,38 @@ function createPublicHistoryMethods(
     releaseConsultantSummaryClaim(candidateId, task) {
       requireCandidate(candidateId);
       input.transaction(() => input.history.releaseSummaryClaim(candidateId, task));
+    },
+  };
+}
+
+/**
+ * B688: «Новый разговор» закрывает открытый разговор (`null` — открытого не было),
+ * продолжение открывает закрытый снова, `current` — открытый разговор для ленты панели.
+ * Сводку закрытого разговора подхватывает `pendingSummaryTasks` после следующего хода.
+ */
+function createConversationControls(
+  input: Parameters<typeof createSqliteCandidateStoreConsultantMethods>[0],
+): Pick<ConsultantStoreMethods, 'closeConsultantConversation' | 'resumeConsultantConversation' | 'currentConsultantConversation' | 'consultantReplyResults'> {
+  const now = () => new Date().toISOString();
+  return {
+    closeConsultantConversation(candidateId) {
+      input.requireCandidate(candidateId);
+      return input.transaction(() => input.history.closeActive(candidateId, now()).closedId);
+    },
+    resumeConsultantConversation(candidateId, conversationId) {
+      input.requireCandidate(candidateId);
+      return input.transaction(() => input.history.resume(candidateId, conversationId, now())?.conversation ?? null);
+    },
+    currentConsultantConversation(candidateId, stage) {
+      input.requireCandidate(candidateId);
+      return input.transaction(() => input.history.current(candidateId, stage, Date.now()));
+    },
+    consultantReplyResults(candidateId, conversationId) {
+      input.requireCandidate(candidateId);
+      return input.history.replyTurns(candidateId, conversationId).flatMap(({ messageId, key }) => {
+        const result = input.conversations.getCoachTurn(candidateId, key)?.result;
+        return result ? [{ messageId, result }] : [];
+      });
     },
   };
 }

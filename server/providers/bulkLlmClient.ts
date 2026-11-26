@@ -103,6 +103,16 @@ class BulkStageError extends Error {
 }
 /** Money is uncertain or a cap is hit: the chain stops, no later stage is asked. */
 class BulkSpendError extends Error {}
+const OVER_CEILING = 'request_over_ceiling';
+/**
+ * B757: the request is larger than one call may cost on every stage. Nothing was sent or reserved;
+ * the same input will never fit, so the caller settles it for good instead of asking again.
+ */
+export class BulkInputTooLarge extends Error {
+  constructor() {
+    super('Request exceeds reserved budget');
+  }
+}
 const UNKNOWN_USAGE = 'Unknown bulk usage; reservation retained';
 
 function isJsonAnswer(content: string): boolean {
@@ -131,7 +141,10 @@ function bodyFailureReason(error: unknown): string {
 /** The message of a 200 that carries a provider's error instead of an answer. */
 function upstreamError(body: unknown): string | undefined {
   const parsed = z
-    .object({ error: z.object({ message: z.string().optional() }), usage: z.undefined().optional() })
+    .object({
+      error: z.object({ message: z.string().optional() }),
+      usage: z.undefined().optional(),
+    })
     .safeParse(body);
   return parsed.success
     ? maskFailureText(`upstream: ${parsed.data.error.message ?? 'no message'}`)
@@ -181,7 +194,8 @@ export class BulkLlmClient {
     private readonly options: BulkLlmClientOptions = {},
   ) {
     this.stages = MODEL_CHAINS.bulk.flatMap((stage) => {
-      if (stage.provider === 'vertex') return [];
+      // Vertex is not an OpenRouter lane (and is out of the chain since 20.11).
+      if (!('model' in stage)) return [];
       const lane = config.lanes.find((item) => item.model === stage.model);
       return lane ? [lane] : [];
     });
@@ -194,15 +208,21 @@ export class BulkLlmClient {
   }
   /** Stages of the chain in order, cooling ones left out; all of them when every one cools. */
   private openStages(): readonly BulkOpenRouterLane[] {
-    const open = this.stages.filter((lane) => (this.down.get(lane.model)?.until ?? 0) <= this.now());
+    const open = this.stages.filter(
+      (lane) => (this.down.get(lane.model)?.until ?? 0) <= this.now(),
+    );
     return open.length > 0 ? open : this.stages;
   }
   /** The open stages with the input's own first lane ahead of them, unless that lane cools. */
   private stagesFor(input: BulkLlmInput): readonly BulkOpenRouterLane[] {
     const open = this.openStages();
     const pins = input.firstLane ? BULK_LANE_PINS[input.firstLane] : undefined;
-    if (!input.firstLane || !pins || (this.down.get(input.firstLane)?.until ?? 0) > this.now()) return open;
-    return [{ model: input.firstLane, ...pins }, ...open.filter((lane) => lane.model !== input.firstLane)];
+    if (!input.firstLane || !pins || (this.down.get(input.firstLane)?.until ?? 0) > this.now())
+      return open;
+    return [
+      { model: input.firstLane, ...pins },
+      ...open.filter((lane) => lane.model !== input.firstLane),
+    ];
   }
   private validate(input: BulkLlmInput): number {
     if (
@@ -226,8 +246,9 @@ export class BulkLlmClient {
     const inputUpperBound = Buffer.byteLength(input.prefix) + Buffer.byteLength(input.input) + 4096;
     const costUpperBound =
       (inputUpperBound * lane.inputPerMillionUsd + maxTokens * lane.outputPerMillionUsd) / 1e6;
+    // B757: a stage's own refusal, so a cheaper stage of the chain is still asked.
     if (inputUpperBound > 2_000_000 || costUpperBound > this.config.perRequestUsd)
-      throw new Error('Request exceeds reserved budget');
+      throw new BulkStageError(OVER_CEILING, false, 'Request exceeds reserved budget');
     return {
       model: lane.model,
       messages: [
@@ -278,7 +299,7 @@ export class BulkLlmClient {
     throw new Error('Unreachable');
   }
   /**
-   * The bulk chain (`MODEL_CHAINS.bulk`, owner 04.11): Vertex Gemini while the credit lasts, then deepseek-v4-flash, then glm-5.3-flash. A failed
+   * The bulk chain (`MODEL_CHAINS.bulk`): deepseek-v4-flash, then glm-5.3-flash; Vertex is off by the owner's decision of 20.11. A failed
    * call repeats on the stage with a pause and the next pinned host before the next stage is asked.
    * No stage left: `BulkChannelUnavailable`, the job waits. A spend cap or an uncertain charge stops at once.
    */
@@ -296,12 +317,16 @@ export class BulkLlmClient {
       this.unavailableSince = undefined;
       return vertex.result;
     }
-    if (input.onlyVertex) throw new Error(`Vertex gave no answer: ${vertex?.failure ?? 'no_stage'}`);
+    if (input.onlyVertex)
+      throw new Error(`Vertex gave no answer: ${vertex?.failure ?? 'no_stage'}`);
     let failure: BulkStageError | undefined;
     let rejected: Error | undefined;
+    let asked = 0;
+    let overCeiling = 0;
     for (const lane of this.stagesFor(input)) {
       if (this.now() - startedAt > CALL_DEADLINE_MS) break;
       const outcome = await this.askStage(lane, input, accept, startedAt);
+      asked += 1;
       if (outcome.result) {
         this.unavailableSince = undefined;
         const fallbackReason =
@@ -313,9 +338,11 @@ export class BulkLlmClient {
       }
       rejected = outcome.rejected ?? rejected;
       failure = outcome.failure ?? failure;
+      if (outcome.failure?.reason === OVER_CEILING) overCeiling += 1;
     }
     // A stage's own answer was unusable: the job's to count, not an outage.
     if (rejected) throw rejected;
+    if (overCeiling > 0 && overCeiling === asked) throw new BulkInputTooLarge();
     throw this.channelDown(failure?.reason ?? 'no_stage');
   }
 
@@ -383,7 +410,10 @@ export class BulkLlmClient {
     attempt = 0,
   ): Promise<BulkLlmResult> {
     const body = this.body(input, lane, attempt);
-    const id = this.ledger.reserve({ ...input, model: lane.model, provider: lane.provider }, this.config);
+    const id = this.ledger.reserve(
+      { ...input, model: lane.model, provider: lane.provider },
+      this.config,
+    );
     if (!id) throw new Error(BULK_BUDGET_EXCEEDED);
     let response: Response;
     try {

@@ -20,6 +20,8 @@ export interface AccountSnapshot {
     createdAt: string;
     lastSeenAt: string;
     expiresAt: string;
+    /** B754: «iPhone · Safari»; нет — устройство не распознано. */
+    deviceLabel?: string | null;
   }>;
 }
 
@@ -152,6 +154,8 @@ interface VacancyCluster {
     to?: number;
     currency?: string;
     gross?: boolean;
+    /** Период из источника; без него `salaryPeriodOf` решает по сумме. */
+    period?: 'hour' | 'month' | 'year';
   };
   descriptionSummary: string;
   skills: string[];
@@ -231,4 +235,6 @@ interface VacancyMatchExplanation {
 export interface MatchedVacancyItem {
   cluster: VacancyCluster;
   explanation: VacancyMatchExplanation;
+  /** Конечная цель отклика (B787): приходит в ответе одной вакансии. */
+  applyTarget?: import('../../../shared/applyTarget').ApplyTarget | null;
 }

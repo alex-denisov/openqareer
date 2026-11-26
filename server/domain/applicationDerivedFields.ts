@@ -20,9 +20,13 @@ export interface ApplicationInterviewSummary {
   readonly scheduledAt: string | null;
   readonly prepStatus: StoredApplicationInterview['prepStatus'];
   readonly round: number;
+  /** Как пройдёт встреча, словами кандидата (B749: полоса контекста I1). */
+  readonly format?: string | null;
 }
 
 export interface ApplicationView extends StoredApplication, ApplicationDerivedFields {
+  /** B798: «Сохранена» звездой кандидата; черновик отклика в той же стадии — нет. */
+  readonly starred?: boolean;
   readonly archiveStaleDays?: number;
   readonly offer?: StoredApplicationOffer | null;
 }
@@ -93,6 +97,7 @@ export function deriveApplicationFields(
           scheduledAt: nearestInterview.scheduledAt,
           prepStatus: nearestInterview.prepStatus,
           round: nearestInterview.round,
+          format: nearestInterview.format,
         }
       : null,
     ...deliveryReceiptEvidence(input.events),

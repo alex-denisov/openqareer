@@ -8,6 +8,7 @@ import { normalizeAtsBoard } from './atsBoardAdapters';
 import { clusterProjectionOf } from './vacancyPoolQuery';
 import { createClusterFromVacancy, mergeVacancyIntoCluster } from './vacancyDeduplicator';
 import { clusterBatchByKeys } from './keyedClusterer';
+import { withTextSalary } from './textSalary';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
 
 const tuple: VacancySalary = { from: 90000, to: 120000, currency: 'EUR' };
@@ -202,4 +203,58 @@ it('roundtrips period enrichment through the real keyed-cluster caller after reo
     pool.close();
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+// B803: недельная вилка Recruitee записана без периода до того, как его стали читать.
+function recruiteeWeek() {
+  return normalizeAtsBoard(
+    'ats-recruitee-example',
+    {
+      offers: [
+        {
+          id: 7,
+          title: 'Frontend Developer',
+          description: 'Build software.',
+          careers_url: 'https://example.recruitee.com/o/frontend',
+          salary: { min: '900', max: '1200', currency: 'EUR', period: 'week' },
+        },
+      ],
+    },
+    { observedAt: '2026-11-25T14:24:00Z', sourceName: 'Example' },
+  )[0]!;
+}
+
+it('снимает прежнюю недельную вилку при повторном чтении Recruitee', () => {
+  const incoming = recruiteeWeek();
+  expect(incoming.salary).toBeUndefined();
+  const cluster = createClusterFromVacancy({ ...incoming, salary: { ...tuple } });
+  mergeVacancyIntoCluster(cluster, incoming);
+  expect(cluster.salary).toBeUndefined();
+});
+
+it('не снимает вилку, если в кластере есть другая площадка или период доказан', () => {
+  const incoming = recruiteeWeek();
+  const shared = createClusterFromVacancy({ ...observed(), salary: { ...tuple } });
+  mergeVacancyIntoCluster(shared, incoming);
+  mergeVacancyIntoCluster(shared, incoming);
+  expect(shared.salary).toEqual(tuple);
+  const proven = createClusterFromVacancy({ ...incoming, salary: explicit() });
+  mergeVacancyIntoCluster(proven, incoming);
+  expect(proven.salary).toEqual(explicit());
+});
+
+it('отсутствие вилки у другой доски прежнюю не снимает', () => {
+  const incoming = { ...observed(), salary: undefined };
+  const cluster = createClusterFromVacancy({ ...incoming, salary: { ...tuple } });
+  mergeVacancyIntoCluster(cluster, incoming);
+  expect(cluster.salary).toEqual(tuple);
+});
+
+it('вилку из текста вакансии Recruitee повторное чтение не теряет', () => {
+  const incoming = { ...recruiteeWeek(), description: 'Salary: $100,000 - $120,000 per year.' };
+  const salary = withTextSalary(incoming).salary!;
+  expect(salary).toBeDefined();
+  const cluster = createClusterFromVacancy({ ...incoming, salary });
+  mergeVacancyIntoCluster(cluster, incoming);
+  expect(cluster.salary).toEqual(salary);
 });

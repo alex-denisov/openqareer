@@ -64,3 +64,62 @@ describe('openqareer-env-set: ворота кредита Vertex (04.11)', () =>
     expect(() => run('OPENQAREER_BULK_GEMINI_DAY_USD=1\n', file)).toThrow();
   });
 });
+
+describe('openqareer-env-set: флаг нового кабинета B640 (B649)', () => {
+  const KEY = 'OPENQAREER_CABINET_B640_USERNAMES';
+  const envFile = (): string => {
+    const file = join(mkdtempSync(join(tmpdir(), 'oq-env-')), 'openqareer.env');
+    writeFileSync(file, 'OPENQAREER_AI_MODEL=gpt-5.6-luna\n');
+    return file;
+  };
+
+  it.each([['first.test'], ['first.test,second_test,Third-3'], ['*']])(
+    'ставит значение %s и не печатает его',
+    (value) => {
+      const file = envFile();
+      const output = run(`${KEY}=${value}\n`, file);
+      expect(output).toContain(`${KEY} set`);
+      expect(output).not.toContain(`=${value}`);
+      expect(readFileSync(file, 'utf8')).toContain(`${KEY}=${value}\n`);
+      expect(run(`${KEY}=${value}\n`, file)).toContain('unchanged');
+    },
+  );
+
+  it.each([
+    ['пробел после запятой', 'first.test, second.test'],
+    ['точка с запятой', 'first.test;second.test'],
+    ['пустое значение', ''],
+    ['звёздочка рядом с именем', 'first.test,*'],
+    ['маска', '*.test'],
+    ['слишком короткое имя', 'ab'],
+    ['запятая в конце', 'first.test,'],
+    ['подстановка оболочки', '$(id)'],
+  ])('отклоняет значение: %s', (_name, value) => {
+    const file = envFile();
+    expect(() => run(`${KEY}=${value}\n`, file)).toThrow(/unexpected shape/u);
+    expect(readFileSync(file, 'utf8')).not.toContain(KEY);
+  });
+
+  it('заменяет прежний список, а не дописывает второй строкой', () => {
+    const file = envFile();
+    run(`${KEY}=first.test\n`, file);
+    run(`${KEY}=*\n`, file);
+    const lines = readFileSync(file, 'utf8')
+      .split('\n')
+      .filter((line) => line.startsWith(`${KEY}=`));
+    expect(lines).toEqual([`${KEY}=*`]);
+  });
+});
+
+describe('openqareer-env-set: ключ YouTube Data API (B668, 19.11)', () => {
+  it('ставит ключ, не печатает значение и повтором ничего не меняет', () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'oq-env-')), 'openqareer.env');
+    writeFileSync(file, 'OPENQAREER_AI_MODEL=gpt-5.6-luna\n');
+    const key = 'AIzaSyTest_key-0123456789abcdefghijklm';
+    const first = run(`OPENQAREER_YOUTUBE_API_KEY=${key}\n`, file);
+    expect(first).toContain('OPENQAREER_YOUTUBE_API_KEY set');
+    expect(first).not.toContain(key);
+    expect(readFileSync(file, 'utf8')).toContain(`OPENQAREER_YOUTUBE_API_KEY=${key}`);
+    expect(run(`OPENQAREER_YOUTUBE_API_KEY=${key}\n`, file)).toContain('unchanged');
+  });
+});

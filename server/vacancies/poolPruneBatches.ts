@@ -9,15 +9,26 @@ export interface PruneLimits {
   readonly chunkRows: number;
   /** Работы на транзакцию: дольше неё другой процесс ждёт запись. */
   readonly budgetMs: number;
-  /** Строк кластеров на одно чтение без индекса (B649-3); по умолчанию CLUSTER_SCAN_WINDOW_ROWS. */
-  readonly scanWindowRows?: number;
+  /** Кластеров ключей на одно чтение при поиске сирот (B759); по умолчанию KEY_WINDOW_ROWS. */
+  readonly keyWindowRows?: number;
 }
 
 /**
- * B649-3: у vacancy_clusters нет индекса по updated_at, и один поиск старых
- * кластеров шёл по 630 000 толстых строк 26 с. Окно по rowid ~0,4 с на проде.
+ * B759: старые кластеры ищутся по индексу vacancy_clusters_freshness
+ * (updated_at DESC, id) порциями, а не чтением всей таблицы: окна по rowid
+ * (B649-3) читали на проде все 919 000 строк за проход, ~160 с.
  */
-const CLUSTER_SCAN_WINDOW_ROWS = 10_000;
+export const STALE_CLUSTERS_SQL = `SELECT rowid AS key FROM vacancy_clusters
+  WHERE updated_at < ? ORDER BY updated_at LIMIT ?`;
+
+/** Порций за проход: дальше — следующий запуск. 50 000 кластеров за проход. */
+const MAX_CLUSTER_PORTIONS = 50;
+
+/**
+ * B759: ключи без кластера искались одним LEFT JOIN по всем ключам (47 с на
+ * проде). Теперь окна по индексу vacancy_cluster_keys_by_cluster с курсором.
+ */
+const KEY_WINDOW_ROWS = 5_000;
 
 export interface PruneReport {
   readonly scope: 'pool' | 'clusters';
@@ -294,12 +305,34 @@ function drain<T>(steps: PruneSteps<T>): T {
   }
 }
 
+/** Как идёт чистка после готовности (B759): пауза между шагами и остановка процесса. */
+export interface PruneControl {
+  /** Пауза между шагами, мс: фоновая чистка не держит диск подряд. 0 — только уступка. */
+  readonly pauseMs?: number;
+  readonly shouldStop?: () => boolean;
+}
+
+/** Чистку прервала остановка процесса; удалённое до неё уже записано. */
+export class PrunePassStopped extends Error {
+  constructor() {
+    super('prune pass stopped');
+    this.name = 'PrunePassStopped';
+  }
+}
+
 /** Отпускает цикл событий на каждой границе шага: для чистки после готовности. */
-async function drainYielding<T>(steps: PruneSteps<T>): Promise<T> {
+async function drainYielding<T>(steps: PruneSteps<T>, control: PruneControl = {}): Promise<T> {
+  const pauseMs = Math.max(0, control.pauseMs ?? 0);
   for (;;) {
+    if (control.shouldStop?.()) {
+      steps.return(undefined as T);
+      throw new PrunePassStopped();
+    }
     const next = steps.next();
     if (next.done) return next.value;
-    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) =>
+      pauseMs > 0 ? setTimeout(resolve, pauseMs) : setImmediate(resolve),
+    );
   }
 }
 
@@ -317,8 +350,12 @@ export function prunePoolInBatchesAsync(
   knownSourceIds: readonly string[],
   oldestPublishedAt: string,
   limits: PruneLimits,
+  control?: PruneControl,
 ): Promise<PruneReport> {
-  return drainYielding(poolPruneSteps(database, knownSourceIds, oldestPublishedAt, limits));
+  return drainYielding(
+    poolPruneSteps(database, knownSourceIds, oldestPublishedAt, limits),
+    control,
+  );
 }
 
 interface ClusterPruneResult {
@@ -338,38 +375,11 @@ export function pruneClustersInBatchesAsync(
   database: DatabaseSync,
   cutoffMs: number,
   limits: PruneLimits,
+  control?: PruneControl,
 ): Promise<ClusterPruneResult> {
-  return drainYielding(clusterPruneSteps(database, cutoffMs, limits));
+  return drainYielding(clusterPruneSteps(database, cutoffMs, limits), control);
 }
 
-/** Старые кластеры окнами по rowid с уступкой между окнами; не больше одной порции. */
-function* findStaleClusters(
-  pass: PrunePass,
-  database: DatabaseSync,
-  cutoffMs: number,
-  limits: PruneLimits,
-): PruneSteps<RowKey[]> {
-  const window = Math.max(1, limits.scanWindowRows ?? CLUSTER_SCAN_WINDOW_ROWS);
-  const top = database.prepare('SELECT max(rowid) AS top FROM vacancy_clusters').get() as {
-    top: number | null;
-  };
-  const stale: RowKey[] = [];
-  for (let from = 0; top.top !== null && from < top.top && stale.length < PRUNE_PORTION_ROWS; ) {
-    const to = from + window;
-    stale.push(
-      ...pass.find(
-        `SELECT rowid AS key FROM vacancy_clusters
-          WHERE rowid > ? AND rowid <= ? AND updated_at < ?`,
-        from,
-        to,
-        cutoffMs,
-      ),
-    );
-    from = to;
-    yield;
-  }
-  return stale.slice(0, PRUNE_PORTION_ROWS);
-}
 
 function* clusterPruneSteps(
   database: DatabaseSync,
@@ -377,23 +387,45 @@ function* clusterPruneSteps(
   limits: PruneLimits,
 ): PruneSteps<ClusterPruneResult> {
   const pass = startPass(database, limits, 'clusters');
-  const stale = yield* findStaleClusters(pass, database, cutoffMs, limits);
-  const clusters = yield* pass.remove(
-    'DELETE FROM vacancy_clusters WHERE rowid = ? AND updated_at < ?',
-    stale,
-    cutoffMs,
-  );
-  // Ключи без кластера — не соседи; чистятся той же порцией (B230).
-  const lostKeys = pass.find(
-    `SELECT k.cluster_id AS key FROM vacancy_cluster_keys k
-       LEFT JOIN vacancy_clusters c ON c.id = k.cluster_id
-      WHERE c.id IS NULL LIMIT ${PRUNE_PORTION_ROWS}`,
-  );
-  yield;
-  yield* pass.remove(
-    `DELETE FROM vacancy_cluster_keys WHERE cluster_id = ?1
-       AND NOT EXISTS (SELECT 1 FROM vacancy_clusters c WHERE c.id = ?1)`,
-    Array.from(new Set(lostKeys)),
-  );
+  let clusters = 0;
+  for (let portion = 0; portion < MAX_CLUSTER_PORTIONS; portion += 1) {
+    const stale = pass.find(STALE_CLUSTERS_SQL, cutoffMs, PRUNE_PORTION_ROWS);
+    yield;
+    clusters += yield* pass.remove(
+      'DELETE FROM vacancy_clusters WHERE rowid = ? AND updated_at < ?',
+      stale,
+      cutoffMs,
+    );
+    if (stale.length < PRUNE_PORTION_ROWS) break;
+  }
+  yield* removeOrphanKeys(pass, limits);
   return { clusters, report: pass.report() };
+}
+
+/** Ключи без кластера — не соседи (B230): окнами по cluster_id, без чтения всех ключей. */
+function* removeOrphanKeys(pass: PrunePass, limits: PruneLimits): PruneSteps<void> {
+  const window = Math.max(1, limits.keyWindowRows ?? KEY_WINDOW_ROWS);
+  let after = '';
+  for (;;) {
+    const ids = pass.find(
+      `SELECT DISTINCT cluster_id AS key FROM vacancy_cluster_keys
+        WHERE cluster_id > ? ORDER BY cluster_id LIMIT ?`,
+      after,
+      window,
+    );
+    if (ids.length === 0) return;
+    after = String(ids.at(-1));
+    const lost = pass.find(
+      `SELECT value AS key FROM json_each(?)
+        WHERE NOT EXISTS (SELECT 1 FROM vacancy_clusters c WHERE c.id = json_each.value)`,
+      JSON.stringify(ids),
+    );
+    yield;
+    yield* pass.remove(
+      `DELETE FROM vacancy_cluster_keys WHERE cluster_id = ?1
+         AND NOT EXISTS (SELECT 1 FROM vacancy_clusters c WHERE c.id = ?1)`,
+      lost,
+    );
+    if (ids.length < window) return;
+  }
 }

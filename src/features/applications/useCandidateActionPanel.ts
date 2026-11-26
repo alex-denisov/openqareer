@@ -69,8 +69,12 @@ function useActionPanelData() {
     ]);
     setUsage(nextUsage);
     setReceipts(nextReceipts);
-    setConsentGranted(nextConsent.granted);
-    setConsentGrantedAt(nextConsent.consent?.grantedAt ?? null);
+    // B787: принята прежняя версия — действующую нужно принять один раз.
+    const current =
+      nextConsent.granted &&
+      nextConsent.consent?.versionId === CAPABILITY_CONSENT_CURRENT_VERSION.actions_on_behalf;
+    setConsentGranted(current);
+    setConsentGrantedAt(current ? (nextConsent.consent?.grantedAt ?? null) : null);
   }, []);
   useEffect(() => {
     const controller = new AbortController();

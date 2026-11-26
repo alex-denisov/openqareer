@@ -161,9 +161,10 @@ describe('a list built ahead of the reader (PRB-041)', () => {
     expect(compute).not.toHaveBeenCalled();
   });
 
-  it('leaves a reader on another choice their list until it ages out', async () => {
+  it('leaves readers their lists: with every slot taken by fresh choices, warming waits', async () => {
     const { clock, cache } = setup();
-    await cache.read(at('d1', 'filtered'), async () => 'filtered');
+    for (const choice of ['a', 'b', 'c', 'd'])
+      await cache.read(at('d1', choice), async () => choice);
 
     const compute = vi.fn(async () => 'default');
     await cache.warm(at('d1', 'default'), compute);
@@ -172,5 +173,57 @@ describe('a list built ahead of the reader (PRB-041)', () => {
     clock.now = MAX_AGE;
     await cache.warm(at('d1', 'default'), compute);
     expect(compute).toHaveBeenCalledTimes(1);
+  });
+
+  it('with a free slot warming builds and the reader keeps their list (B770)', async () => {
+    const { cache } = setup();
+    await cache.read(at('d1', 'filtered'), async () => 'filtered');
+    await cache.warm(at('d1', 'default'), async () => 'default');
+    const compute = vi.fn(async () => 'unused');
+    expect(await cache.read(at('d1', 'filtered'), compute)).toEqual({
+      value: 'filtered',
+      served: 'fresh',
+    });
+    expect(await cache.read(at('d1', 'default'), compute)).toEqual({
+      value: 'default',
+      served: 'fresh',
+    });
+    expect(compute).not.toHaveBeenCalled();
+  });
+});
+
+describe('several choices of one candidate (B770)', () => {
+  it('going back to an earlier choice serves its list without a build: s07 and s09 both stay', async () => {
+    const { cache } = setup();
+    await cache.read(at('d1', 'role=CTO'), async () => 'cto');
+    await cache.read(at('d1', 'all'), async () => 'all');
+    const compute = vi.fn(async () => 'unused');
+    expect(await cache.read(at('d1', 'role=CTO'), compute)).toEqual({
+      value: 'cto',
+      served: 'fresh',
+    });
+    expect(compute).not.toHaveBeenCalled();
+  });
+
+  it('a fifth choice drops the one read longest ago', async () => {
+    const { cache } = setup();
+    for (const choice of ['a', 'b', 'c', 'd'])
+      await cache.read(at('d1', choice), async () => choice);
+    await cache.read(at('d1', 'a'), async () => 'unused');
+    await cache.read(at('d1', 'e'), async () => 'e');
+    expect(cache.holds('cand', 'a')).toBe(true);
+    expect(cache.holds('cand', 'b')).toBe(false);
+    expect(await cache.read(at('d1', 'b'), async () => 'b again')).toEqual({
+      value: 'b again',
+      served: 'built',
+    });
+  });
+
+  it('holds answers per choice: another choice in memory does not stop a stored list', async () => {
+    const { cache } = setup();
+    await cache.read(at('d1', 'all'), async () => 'all');
+    expect(cache.holds('cand', 'all')).toBe(true);
+    expect(cache.holds('cand', 'role=CTO')).toBe(false);
+    expect(cache.holds('other', 'all')).toBe(false);
   });
 });

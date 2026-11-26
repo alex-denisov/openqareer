@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-readonly RELEASE_ROOT=/srv/openqareer
-readonly SERVICE=openqareer-static.service
+readonly RELEASE_ROOT="${OPENQAREER_RELEASE_ROOT:-/srv/openqareer}"
+readonly SLOTS_LIB="${OPENQAREER_SLOTS_LIB:-/usr/local/lib/openqareer/openqareer-slots.sh}"
 readonly MAINTENANCE_SERVICE=openqareer-maintenance.service
-readonly HEALTH_URL=http://127.0.0.1:3210/health
+readonly MECHANICS_SERVICE=openqareer-vacancy-mechanics.service
 
 fail() {
   printf 'openqareer-rollback: %s\n' "$1" >&2
@@ -29,6 +29,9 @@ assert_maintenance_stop_timeout() {
   esac
   fail "maintenance service TimeoutStopSec must be at least 5 minutes (effective: ${timeout_value:-unknown})"
 }
+
+# shellcheck source=openqareer-slots.sh
+source "$SLOTS_LIB"
 
 [[ "$(id -un)" == "openqareer-deploy" ]] ||
   fail "must run as openqareer-deploy"
@@ -61,33 +64,43 @@ previous_target="$(readlink previous 2>/dev/null || true)"
   fail "current/previous release is unavailable"
 [[ -d "$previous_target" ]] || fail "previous release directory is missing"
 
+stop_reserve_watch
+expected="$(basename "$previous_target")"
+live_port="$(active_port)"
+back_port="$(other_port "$live_port")"
+
+# B705: если прежний релиз ещё работает на свободном порту, возврат мгновенный —
+# одно переключение Caddy. Иначе он поднимается рядом с текущим, и трафик
+# уходит на него только после ответа /health; сайт всё это время отвечает.
+if slot_is_active "$back_port" && [[ "$(slot_health "$back_port")" == "$expected" ]]; then
+  mode=instant
+else
+  mode=warm
+  start_slot "$back_port" "$previous_target" "$expected" ||
+    fail "rollback health failed on port $back_port; current release still serving"
+fi
+
 atomic_link "$previous_target" current
 atomic_link "$current_target" previous
-sudo -n /usr/bin/systemctl restart "$SERVICE"
-
-expected="$(basename "$previous_target")"
-healthy=0
-actual=""
-for _attempt in $(seq 1 60); do
-  actual="$(curl -fsS --max-time 3 "$HEALTH_URL" 2>/dev/null |
-    tr -d '\r\n' || true)"
-  if [[ "$actual" == "$expected" ]]; then
-    healthy=1
-    break
-  fi
-  sleep 1
-done
-
-if [[ "$healthy" != "1" ]]; then
+if ! switch_upstream "$back_port"; then
   atomic_link "$current_target" current
   atomic_link "$previous_target" previous
-  sudo -n /usr/bin/systemctl restart "$SERVICE"
-  fail "rollback health failed; original current release restored"
+  [[ "$mode" == "instant" ]] || stop_slot "$back_port"
+  fail "proxy switch to port $back_port failed; current release still serving"
 fi
+retire_slot "$back_port" "$live_port"
 
 if ! sudo -n /usr/bin/systemctl restart "$MAINTENANCE_SERVICE" ||
   ! systemctl is-active --quiet "$MAINTENANCE_SERVICE"; then
   fail "maintenance service is not active after rollback restart; check journalctl -u $MAINTENANCE_SERVICE"
 fi
 
-printf 'rollback=%s previous=%s health=ok\n' "$previous_target" "$current_target"
+if systemctl cat "$MECHANICS_SERVICE" >/dev/null 2>&1; then
+  if ! sudo -n /usr/bin/systemctl restart "$MECHANICS_SERVICE" ||
+    ! systemctl is-active --quiet "$MECHANICS_SERVICE"; then
+    fail "vacancy mechanics service is not active after rollback restart; check journalctl -u $MECHANICS_SERVICE"
+  fi
+fi
+
+printf 'rollback=%s previous=%s port=%s mode=%s health=ok\n' \
+  "$previous_target" "$current_target" "$back_port" "$mode"

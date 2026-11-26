@@ -66,6 +66,18 @@ describe('B384: профиль ограничений как жёсткий фи
     expect(await ids()).toEqual({ ids: ['high', 'unknown'], total: 2 });
   });
 
+  it('«Показывать вакансии без зарплаты»: выключено — без суммы нет; запись без поля его не меняет', async () => {
+    const { app, headers, ids } = await setup();
+    const put = (payload: object) =>
+      app.inject({ method: 'PUT', url: '/api/v1/candidate/decision-profile', headers, payload });
+    expect((await put({ showWithoutSalary: false })).statusCode).toBe(200);
+    expect(await ids()).toEqual({ ids: ['high', 'low'], total: 2 });
+    await put({ citizenship: ['RU'] });
+    expect((await ids()).total).toBe(2);
+    await put({ showWithoutSalary: true });
+    expect((await ids()).total).toBe(3);
+  });
+
   it('формат работы «только удалёнка» исключает офисные вакансии', async () => {
     const { app, headers, ids } = await setup();
     await app.inject({ method: 'PUT', url: '/api/v1/candidate/decision-profile', headers,

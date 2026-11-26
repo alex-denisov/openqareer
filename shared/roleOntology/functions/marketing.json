@@ -55,6 +55,11 @@
       "family": "marketing.core",
       "titleEn": "Marketing Specialist",
       "titleRu": "Специалист по маркетингу",
+      "forms": {
+        "toBecome": "маркетологи",
+        "genitive": "маркетолога",
+        "instrumental": "маркетологом"
+      },
       "levels": [
         "ic"
       ],
@@ -139,6 +144,11 @@
       "family": "marketing.growth",
       "titleEn": "SEO Specialist",
       "titleRu": "SEO-специалист",
+      "forms": {
+        "toBecome": "SEO-специалисты",
+        "genitive": "SEO-специалиста",
+        "instrumental": "SEO-специалистом"
+      },
       "levels": [
         "ic"
       ],
@@ -265,6 +275,11 @@
       "family": "marketing.product-brand",
       "titleEn": "Product Marketing Manager",
       "titleRu": "Продуктовый маркетолог",
+      "forms": {
+        "toBecome": "продуктовые маркетологи",
+        "genitive": "продуктового маркетолога",
+        "instrumental": "продуктовым маркетологом"
+      },
       "levels": [
         "ic"
       ],
@@ -307,6 +322,11 @@
       "family": "marketing.product-brand",
       "titleEn": "Brand Manager",
       "titleRu": "Бренд-менеджер",
+      "forms": {
+        "toBecome": "бренд-менеджеры",
+        "genitive": "бренд-менеджера",
+        "instrumental": "бренд-менеджером"
+      },
       "levels": [
         "ic"
       ],

@@ -45,34 +45,21 @@ const text = (markup: string) =>
     .trim();
 
 describe('VacancyMoneyCell (B546)', () => {
-  it('shows the market estimate with its badge, sample and cut date', () => {
+  it('shows the market estimate with its badge and date', () => {
     const markup = renderToStaticMarkup(
       <VacancyMoneyCell
         item={item(undefined, {
           low: 480_000,
           high: 560_000,
           currency: 'RUR',
-          sampleSize: 41,
-          basis: 'city',
+          period: 'month',
+          tax: 'unknown',
           computedAt,
         })}
         observedDate="05.10"
       />,
     );
-    expect(text(markup)).toBe('≈ 480–560 тыс. ₽ оценка оценка рынка по 41 вакансии, 05.10');
-  });
-
-  it('says «мало данных» without a number when the sample is thin', () => {
-    const markup = renderToStaticMarkup(
-      <VacancyMoneyCell
-        item={item(undefined, { currency: 'RUR', sampleSize: 3, basis: 'region', computedAt })}
-        observedDate="05.10"
-      />,
-    );
-    expect(text(markup)).toBe(
-      'мало данных без зарплаты нет зарплаты, оценка по 3 вакансиям, 05.10',
-    );
-    expect(markup).not.toContain('≈');
+    expect(text(markup)).toBe('≈ 480–560 тыс. ₽ оценка Оценка openqareer, 05.10');
   });
 
   it('keeps a stated salary as it was', () => {
@@ -87,18 +74,15 @@ describe('VacancyMoneyCell (B546)', () => {
 });
 
 describe('vacancyMoneySummary (G5 item 8: 390 push = 1440 row)', () => {
-  it('gives the push the market estimate, thin sample or missing salary', () => {
-    const estimate = { currency: 'RUR', sampleSize: 41, basis: 'city', computedAt } as const;
+  it('gives the push the openqareer estimate or missing salary', () => {
+    const estimate = { currency: 'RUR', period: 'month', tax: 'unknown', computedAt } as const;
     expect(
       vacancyMoneySummary(item(undefined, { ...estimate, low: 480_000, high: 560_000 })),
     ).toEqual({
       value: '≈ 480–560 тыс. ₽ оценка',
-      note: 'Оценка рынка по 41 вакансии, 05.10',
+      note: 'Оценка openqareer, 05.10',
       fromSource: false,
     });
-    expect(vacancyMoneySummary(item(undefined, { ...estimate, sampleSize: 1 })).value).toBe(
-      'мало данных',
-    );
     expect(vacancyMoneySummary(item(undefined))).toMatchObject({ value: 'не указана' });
   });
 });

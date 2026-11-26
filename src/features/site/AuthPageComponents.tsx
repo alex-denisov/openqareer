@@ -10,7 +10,7 @@ export function AuthCardHeader({
   titleId,
 }: {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   onNavigate: (path: string) => void;
   titleId?: string;
 }) {
@@ -29,7 +29,7 @@ export function AuthCardHeader({
         <BrandMark variant="lockup" size={32} />
       </a>
       <h1 id={titleId}>{title}</h1>
-      <p>{subtitle}</p>
+      {subtitle ? <p>{subtitle}</p> : null}
     </div>
   );
 }
@@ -79,6 +79,8 @@ export interface AuthInputFieldProps {
   errorId?: string;
   /** A secondary control rendered beside the label, e.g. «Забыли пароль?». */
   action?: React.ReactNode;
+  /** B401: код из приложения или резервный код. */
+  maxLength?: number;
 }
 
 export function AuthInputField({
@@ -93,8 +95,7 @@ export function AuthInputField({
   disabled,
   required,
   error,
-  errorId,
-  action,
+  errorId, action, ...limits
 }: AuthInputFieldProps) {
   const [revealed, setRevealed] = useState(false);
   const isPassword = type === 'password';
@@ -115,6 +116,7 @@ export function AuthInputField({
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
           required={required}
+          {...limits}
           aria-invalid={error && errorId ? true : undefined}
           aria-describedby={error && errorId ? errorId : undefined}
         />

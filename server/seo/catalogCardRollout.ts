@@ -54,23 +54,57 @@ const TEXT_LENGTH_SQL = `length(coalesce(
   nullif(trim(json_extract(p.payload, '$.description')), ''),
   trim(e.summary)))`;
 
-/** The text left: the pool row expired, and the snippet is too short to stand alone. */
-function dropWithoutText(database: DatabaseSync): number {
+/** The card lost its text: no catalog entry, or the pool row expired and the snippet is too short. */
+const LOST_TEXT_SQL = `FROM catalog_card_rollout r
+   LEFT JOIN catalog_entries e ON e.cluster_id = r.cluster_id
+   LEFT JOIN vacancy_pool_index i ON i.id = substr(r.cluster_id, ${POOL_ID_FROM})
+  WHERE (e.cluster_id IS NULL
+     OR (coalesce(i.expired, 1) = 1 AND length(trim(e.summary)) < ?))`;
+/** Cards read and deleted per window; each DELETE is a few-millisecond write. */
+const DROP_WINDOW = 500;
+
+/**
+ * B761 23.11: one DELETE with this scan as a subquery held the write lock 8.7 s
+ * on prod, longer than busy_timeout. Now the scan reads windows by key outside
+ * any transaction, and each DELETE names only the window's ids, re-checking the
+ * condition for them so a card that got its text back in between stays.
+ */
+async function dropWithoutText(
+  database: DatabaseSync,
+  pause: () => Promise<void>,
+): Promise<number> {
+  const window = database.prepare(
+    `SELECT r.cluster_id AS id ${LOST_TEXT_SQL} AND r.cluster_id > ?
+      ORDER BY r.cluster_id LIMIT ${DROP_WINDOW}`,
+  );
+  let dropped = 0;
+  let cursor = '';
+  for (;;) {
+    const ids = (window.all(INDEXED_CARD_SUMMARY_MIN, cursor) as Array<{ id: string }>).map(
+      (row) => row.id,
+    );
+    if (ids.length > 0) dropped += deleteLostText(database, ids);
+    if (ids.length < DROP_WINDOW) break;
+    cursor = ids[ids.length - 1]!;
+    // B761 23.11: 73 тыс. карточек подряд держали цикл 5–8 с на каждом проходе карт сайта.
+    await pause();
+  }
+  return dropped;
+}
+
+function deleteLostText(database: DatabaseSync, ids: readonly string[]): number {
+  const placeholders = ids.map(() => '?').join(', ');
   return Number(
     database
       .prepare(
         `DELETE FROM catalog_card_rollout WHERE cluster_id IN (
-           SELECT r.cluster_id FROM catalog_card_rollout r
-             LEFT JOIN catalog_entries e ON e.cluster_id = r.cluster_id
-             LEFT JOIN vacancy_pool_index i ON i.id = substr(r.cluster_id, ${POOL_ID_FROM})
-            WHERE e.cluster_id IS NULL
-               OR (coalesce(i.expired, 1) = 1 AND length(trim(e.summary)) < ?))`,
+           SELECT r.cluster_id ${LOST_TEXT_SQL} AND r.cluster_id IN (${placeholders}))`,
       )
-      .run(INDEXED_CARD_SUMMARY_MIN).changes,
+      .run(INDEXED_CARD_SUMMARY_MIN, ...ids).changes,
   );
 }
 
-interface CandidateRow {
+export interface CandidateRow {
   readonly cluster_id: string;
   readonly title: string;
   readonly location: string | null;
@@ -114,15 +148,43 @@ function candidates(database: DatabaseSync, now: Date): CandidateRow[] {
     ) as unknown as CandidateRow[];
 }
 
+/**
+ * The portion the scan picks: freshest day first, the longest text within a day, only cards
+ * with a posting location. Pure read — the heavy-read thread runs it on its own connection.
+ */
+export function chooseCardRolloutCandidates(
+  database: DatabaseSync,
+  now: Date,
+  quota: number,
+): CandidateRow[] {
+  const chosen: CandidateRow[] = [];
+  for (const row of candidates(database, now)) {
+    if (chosen.length >= quota) break;
+    const entry = { title: row.title, ...(row.location ? { location: row.location } : {}) };
+    // Without a location JobPosting is not built (`postingLocation`), and it is required.
+    if (hasPostingLocation(entry, row.is_remote === 1)) chosen.push(row);
+  }
+  return chosen;
+}
+
+export interface CardRolloutOptions {
+  /** B761: the scan held the loop 135–230 s on prod; maintenance runs it in the heavy-read thread. */
+  readonly choose?: (quota: number) => Promise<readonly CandidateRow[]>;
+  readonly pause?: () => Promise<void>;
+}
+
+const yieldToLoop = () => new Promise<void>((done) => setImmediate(done));
+
 /** One step, run before the sitemap files. Between portions the candidate scan is skipped. */
-export function admitCardRollout(
+export async function admitCardRollout(
   database: DatabaseSync,
   now: Date,
   dailyCap: number,
-): CardRolloutReport {
+  options: CardRolloutOptions = {},
+): Promise<CardRolloutReport> {
   database.exec(CATALOG_CARD_ROLLOUT_TABLE_SQL);
   database.exec(CATALOG_RU_SUMMARIES_TABLE_SQL);
-  const dropped = dropWithoutText(database);
+  const dropped = await dropWithoutText(database, options.pause ?? yieldToLoop);
   const { used, latest } = database
     .prepare(
       `SELECT count(*) AS used, max(admitted_ms) AS latest
@@ -135,15 +197,12 @@ export function admitCardRollout(
   const quota = Math.min(dailyCap - used, Math.ceil(dailyCap / PORTIONS_A_DAY));
   if (quota <= 0) return { admitted: 0, dropped };
 
-  const chosen: CandidateRow[] = [];
-  for (const row of candidates(database, now)) {
-    if (chosen.length >= quota) break;
-    const entry = { title: row.title, ...(row.location ? { location: row.location } : {}) };
-    // Without a location JobPosting is not built (`postingLocation`), and it is required.
-    if (hasPostingLocation(entry, row.is_remote === 1)) chosen.push(row);
-  }
+  const chosen = options.choose
+    ? await options.choose(quota)
+    : chooseCardRolloutCandidates(database, now, quota);
+  // The thread reads a snapshot: a card admitted meanwhile is skipped, not a failure.
   const insert = database.prepare(
-    'INSERT INTO catalog_card_rollout (cluster_id, admitted_ms, text_length) VALUES (?, ?, ?)',
+    'INSERT OR IGNORE INTO catalog_card_rollout (cluster_id, admitted_ms, text_length) VALUES (?, ?, ?)',
   );
   database.exec('BEGIN IMMEDIATE');
   try {

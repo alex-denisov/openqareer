@@ -28,7 +28,15 @@ import type { RoleNameLanguage } from './roleNameLanguage';
  * Версия инструкции: входит в ключ кэша названных ролей, иначе новая
  * инструкция неделю не доходила бы до кандидатов с прежними фактами (27.10).
  */
-export const ROLE_NAMING_PROMPT_VERSION = 3;
+export const ROLE_NAMING_PROMPT_VERSION = 7;
+
+/** B748 (переводы v8): уровень должности в titleRu — русским словом, латиницей только устоявшиеся C-level. */
+const LEVEL_RULE = [
+  'Уровень в titleRu — русским словом: VP — вице-президент, Head — руководитель, Lead — ведущий;',
+  'латиницей остаются только CEO, CTO, CIO, CFO, COO, другие C-level — в скобках после русского',
+  '(VP of IT Operations → Вице-президент по ИТ-эксплуатации,',
+  'Chief Customer Officer → Директор по работе с клиентами (CCO)).',
+].join(' ');
 
 export function roleNamingInstructions(language: RoleNameLanguage): string {
   return [
@@ -50,6 +58,14 @@ export function roleNamingInstructions(language: RoleNameLanguage): string {
         ]
       : ['Названия ролей давай по-английски — так, как их пишут в вакансиях.']),
     'Каждая роль — короткое название должности (до 60 символов).',
+    'Для каждой роли дай titleRu всегда русской формулировкой вакансии —',
+    'как эту должность пишут в русских вакансиях; аббревиатуры из названия',
+    '(COO, CTO, AI, IT) оставь, остальное переведи (AI Consultant → AI-консультант,',
+    'Transformation Director → Директор по трансформации, Head of IT Operations →',
+    'Руководитель ИТ-эксплуатации: Operations — эксплуатация сервисов, не инфраструктура).',
+    LEVEL_RULE,
+    'Если title уже',
+    'по-русски, повтори его в titleRu.',
     'Название компании, продукта, подразделения или бренда из фактов — не роль:',
     'работодатель кандидата никогда не становится названием должности.',
     'Для каждой роли объясни в одном предложении, что именно в фактах кандидата',
@@ -62,9 +78,9 @@ export function roleNamingInstructions(language: RoleNameLanguage): string {
     'слова «подходит», «не подходит», «уровень», «балл».',
     'Порядок ролей не важен: его определяет не ты.',
     'Формат ответа — ровно такой:',
-    '{"roles":[{"title":"Product Manager","reason":"девять лет вёл внутренние продукты",',
-    '"evidenceRefs":["memory:1"]}]}',
-    'Имена полей именно эти: title, reason, evidenceRefs.',
+    '{"roles":[{"title":"Product Manager","titleRu":"Продакт-менеджер",',
+    '"reason":"девять лет вёл внутренние продукты","evidenceRefs":["memory:1"]}]}',
+    'Имена полей именно эти: title, titleRu, reason, evidenceRefs.',
   ].join(' ');
 }
 
@@ -75,20 +91,74 @@ export function roleNamingInstructions(language: RoleNameLanguage): string {
  * чем терять названную роль из-за буквы; смысл при этом не размывается — поля
  * ровно те же три, и любое лишнее отбрасывается.
  */
+const CYRILLIC = /[а-яё]/iu;
+const TITLE_RU_MAX = 80;
+/** B748: вторая попытка — перевод одной пачкой только отвергнутых названий. */
+export const ROLE_TITLE_TRANSLATION_INSTRUCTIONS = [
+  'Переведи названия должностей так, как их пишут в русских вакансиях.',
+  'titleRu всегда русской формулировкой вакансии; аббревиатуры (COO, CTO, AI, IT)',
+  'оставь латиницей, остальное переведи (AI Consultant → AI-консультант,',
+  'Head of IT Operations → Руководитель ИТ-эксплуатации: Operations — эксплуатация',
+  'сервисов, не инфраструктура).',
+  LEVEL_RULE,
+  'Не добавляй слов,',
+  'которых нет в названии.',
+  'Ответ — только JSON: {"titles":[{"title":"…","titleRu":"…"}]}, title без изменений.',
+].join('\n');
+
+/** Уровни, которые переводят словом: в русском названии их не ищут и не допускают. */
+const LEVEL_ABBREVIATIONS = new Set(['VP', 'SVP', 'EVP']);
+/** Устоявшиеся C-level пишут латиницей; остальные уровни латиницей вне скобок — недоперевод. */
+const ESTABLISHED_C_LEVEL = new Set(['CEO', 'CTO', 'CIO', 'CFO', 'COO']);
+const LATIN_LEVEL = /(?<![A-Za-z])(?:S?VP|EVP|Head|Lead|C[A-Z]{1,3}O)(?![A-Za-z])/gu;
+
+function hasLatinLevel(text: string): boolean {
+  const outsideBrackets = text.replace(/\([^)]*\)/gu, ' ');
+  return (outsideBrackets.match(LATIN_LEVEL) ?? []).some((word) => !ESTABLISHED_C_LEVEL.has(word));
+}
+
+/** «ИТ» и «ИИ» в русском названии — те же аббревиатуры, что «IT» и «AI». */
+const CYRILLIC_ABBREVIATIONS: Readonly<Record<string, string>> = { IT: 'ИТ', AI: 'ИИ' };
+
+/**
+ * B748: русское название роли от модели берётся, только если оно правда русское,
+ * короткое и не потеряло аббревиатур исходного (COO, AI): иначе показываем исходное.
+ */
+export function checkedTitleRu(title: string, titleRu: string | undefined): string | null {
+  const text = titleRu?.trim() ?? '';
+  if (!text || text.length > TITLE_RU_MAX || !CYRILLIC.test(text) || CYRILLIC.test(title))
+    return null;
+  if (hasLatinLevel(text)) return null;
+  const abbreviations = (title.match(/\b[A-Z]{2,5}\b/gu) ?? []).filter(
+    (abbr) => !LEVEL_ABBREVIATIONS.has(abbr),
+  );
+  const kept = abbreviations.every(
+    (abbr) => text.includes(abbr) || text.includes(CYRILLIC_ABBREVIATIONS[abbr] ?? abbr),
+  );
+  // B767: латинское «AI» в русском названии — «ИИ» («ИИ-консультант»).
+  return kept ? text.replace(/(?<!\p{L})AI(?!\p{L})/gu, CYRILLIC_ABBREVIATIONS.AI!) : null;
+}
+
 const namedRoleSchema = z
   .object({
     title: z.string().trim().min(2).max(60).optional(),
+    titleRu: z.string().max(200).optional(),
     role: z.string().trim().min(2).max(60).optional(),
     reason: z.string().trim().min(1).max(400).optional(),
     explanation: z.string().trim().min(1).max(400).optional(),
     evidenceRefs: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
     refs: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
   })
-  .transform((value) => ({
-    title: value.title ?? value.role ?? '',
-    reason: value.reason ?? value.explanation ?? '',
-    evidenceRefs: value.evidenceRefs ?? value.refs ?? [],
-  }))
+  .transform((value) => {
+    const title = value.title ?? value.role ?? '';
+    const titleRu = checkedTitleRu(title, value.titleRu);
+    return {
+      title,
+      ...(titleRu ? { titleRu } : {}),
+      reason: value.reason ?? value.explanation ?? '',
+      evidenceRefs: value.evidenceRefs ?? value.refs ?? [],
+    };
+  })
   .refine((value) => value.title.length >= 2 && value.reason.length >= 1);
 
 export const roleNamingSchema = z
@@ -109,9 +179,10 @@ export const ROLE_NAMING_JSON_SCHEMA = {
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['title', 'reason', 'evidenceRefs'],
+          required: ['title', 'titleRu', 'reason', 'evidenceRefs'],
           properties: {
             title: { type: 'string' },
+            titleRu: { type: 'string' },
             reason: { type: 'string' },
             evidenceRefs: { type: 'array', items: { type: 'string' } },
           },

@@ -62,7 +62,7 @@ describe('platform action runners use only fixture pages and stop on unsafe surf
 
     expect(result).toEqual({ status: 'delivered', providerStatus: 'hh_response_submitted' });
     expect(await page.locator('#letter').inputValue()).toBe('Здравствуйте. Меня заинтересовала вакансия.');
-    expect(await page.locator('input[name="resume"]').isChecked()).toBe(true);
+    expect(await page.locator('input[name="resumeId"]').isChecked()).toBe(true);
     expect(await page.evaluate(() => (window as Window & { syntheticSubmitted?: boolean }).syntheticSubmitted)).toBe(true);
   });
 

@@ -1,0 +1,185 @@
+/* Сгенерировано scripts/b640/port-mockup-css.mjs из макетов B640. Руками не править:
+   правки вносятся в макет и переносятся скриптом. */
+@layer b640.tokens {
+  .b640 {
+    --hue: 200;
+    --career-bg: oklch(15.5% 0.012 var(--hue));
+    --career-bg-elevated: oklch(18.5% 0.014 var(--hue));
+    --career-surface: oklch(21.5% 0.016 var(--hue));
+    --career-surface-raised: oklch(25.5% 0.018 var(--hue));
+    --career-line: oklch(92% 0.01 var(--hue) / 0.12);
+    --career-line-strong: oklch(92% 0.01 var(--hue) / 0.24);
+    --career-text: oklch(96% 0.006 var(--hue));
+    --career-text-soft: oklch(81% 0.014 var(--hue));
+    --career-text-dim: oklch(70% 0.018 var(--hue));
+    --career-accent: oklch(85% 0.115 170);
+    --career-accent-hover: oklch(89% 0.1 170);
+    --career-accent-ink: oklch(21% 0.035 175);
+    --career-accent-soft: oklch(29% 0.045 172);
+    --career-success: oklch(82% 0.13 135);
+    --career-success-soft: oklch(27% 0.04 135);
+    --career-warning: oklch(83% 0.12 80);
+    --career-warning-soft: oklch(28% 0.04 80);
+    --career-danger: oklch(75% 0.14 28);
+    --career-brand-linkedin: #0a66c2;
+    --career-brand-hh: #d6001c;
+    --career-brand-ink: #ffffff;
+
+    --career-radius-sm: 10px;
+    --career-radius-ctl: 12px;
+    --career-radius-md: 16px;
+    --career-radius-lg: 24px;
+    --career-radius-pill: 9999px;
+    --career-border-width: 1px;
+
+    --career-text-xs: 0.8125rem;
+    --career-text-sm: 0.875rem;
+    --career-text-md: 1rem;
+    --career-text-lg: 1.25rem;
+    --career-text-xl: 1.75rem;
+    --career-text-display: 2.5rem;
+
+    --career-space-1: 4px;
+    --career-space-2: 8px;
+    --career-space-3: 12px;
+    --career-space-4: 16px;
+    --career-space-5: 20px;
+    --career-space-6: 24px;
+    --career-space-8: 32px;
+    --career-space-10: 40px;
+    --career-space-12: 48px;
+
+    --career-target-min: 44px;
+    --career-rail-width: 76px;
+    --career-topbar-height: 64px;
+    --career-expert-panel-width: 360px;
+    --career-mobile-topbar-height: 44px;
+    --career-mobile-nav-height: 74px;
+    --career-back-shadow: 0 2px 10px oklch(0% 0 0 / 0.28);
+    --career-sheet-bar-height: 56px;
+    --career-aside-width: 320px;
+    --career-icon-sm: 18px;
+    --career-icon-md: 20px;
+    --career-icon-nav: 22px;
+    --career-icon-lg: 24px;
+    --career-control-sm: 28px;
+    --career-control-md: 36px;
+    --career-avatar: 32px;
+    --career-tip-width: 300px;
+    --career-focus-offset: 2px;
+    --career-topbar-height: 64px;
+    --career-page-max: 1160px;
+    --career-measure: 34rem;
+    --career-motion-quick: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    --career-backdrop: oklch(8% 0.01 var(--hue) / 0.6);
+    color-scheme: dark;
+  }
+  .b640 {
+    --career-col-min: 15rem;
+    --career-label-col: 8.5rem;
+    --career-dot: 18px;
+    --career-step: 28px;
+    --career-thumb: 220px;
+  }
+  .b640 {
+    color-scheme: light;
+    --career-bg: oklch(98.2% 0.004 var(--hue));
+    --career-bg-elevated: oklch(100% 0 0);
+    --career-surface: oklch(95.6% 0.007 var(--hue));
+    --career-surface-raised: oklch(92.6% 0.009 var(--hue));
+    --career-line: oklch(30% 0.02 var(--hue) / 0.14);
+    --career-line-strong: oklch(30% 0.02 var(--hue) / 0.28);
+    --career-text: oklch(21% 0.016 var(--hue));
+    --career-text-soft: oklch(36% 0.016 var(--hue));
+    --career-text-dim: oklch(46% 0.018 var(--hue));
+    --career-accent: oklch(44% 0.085 172);
+    --career-accent-hover: oklch(38% 0.08 172);
+    --career-accent-ink: oklch(99% 0.004 172);
+    --career-accent-soft: oklch(92.5% 0.035 172);
+    --career-success: oklch(43% 0.11 140);
+    --career-success-soft: oklch(94% 0.04 135);
+    --career-warning: oklch(47% 0.1 70);
+    --career-warning-soft: oklch(94.5% 0.045 80);
+    --career-danger: oklch(50% 0.17 28);
+    --career-backdrop: oklch(20% 0.01 var(--hue) / 0.35);
+    --career-shadow-pop: 0 8px 24px oklch(20% 0.02 var(--hue) / 0.16);
+    --career-danger-soft: oklch(94% 0.035 28);
+  }
+  .b640[data-theme="dark"] {
+    --career-bg: oklch(15.5% 0.012 var(--hue));
+    --career-bg-elevated: oklch(18.5% 0.014 var(--hue));
+    --career-surface: oklch(21.5% 0.016 var(--hue));
+    --career-surface-raised: oklch(25.5% 0.018 var(--hue));
+    --career-line: oklch(92% 0.01 var(--hue) / 0.12);
+    --career-line-strong: oklch(92% 0.01 var(--hue) / 0.24);
+    --career-text: oklch(96% 0.006 var(--hue));
+    --career-text-soft: oklch(81% 0.014 var(--hue));
+    --career-text-dim: oklch(70% 0.018 var(--hue));
+    --career-accent: oklch(85% 0.115 170);
+    --career-accent-hover: oklch(89% 0.1 170);
+    --career-accent-ink: oklch(21% 0.035 175);
+    --career-accent-soft: oklch(29% 0.045 172);
+    --career-success: oklch(82% 0.13 135);
+    --career-success-soft: oklch(27% 0.04 135);
+    --career-warning: oklch(83% 0.12 80);
+    --career-warning-soft: oklch(28% 0.04 80);
+    --career-danger: oklch(75% 0.14 28);
+    --career-brand-linkedin: #0a66c2;
+    --career-brand-hh: #d6001c;
+    --career-brand-ink: #ffffff;
+    --career-backdrop: oklch(8% 0.01 var(--hue) / 0.6);
+    --career-shadow-pop: 0 8px 24px oklch(5% 0.01 var(--hue) / 0.5);
+    --career-danger-soft: oklch(28% 0.05 28);
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    .b640[data-theme="system"] {
+    --career-bg: oklch(15.5% 0.012 var(--hue));
+    --career-bg-elevated: oklch(18.5% 0.014 var(--hue));
+    --career-surface: oklch(21.5% 0.016 var(--hue));
+    --career-surface-raised: oklch(25.5% 0.018 var(--hue));
+    --career-line: oklch(92% 0.01 var(--hue) / 0.12);
+    --career-line-strong: oklch(92% 0.01 var(--hue) / 0.24);
+    --career-text: oklch(96% 0.006 var(--hue));
+    --career-text-soft: oklch(81% 0.014 var(--hue));
+    --career-text-dim: oklch(70% 0.018 var(--hue));
+    --career-accent: oklch(85% 0.115 170);
+    --career-accent-hover: oklch(89% 0.1 170);
+    --career-accent-ink: oklch(21% 0.035 175);
+    --career-accent-soft: oklch(29% 0.045 172);
+    --career-success: oklch(82% 0.13 135);
+    --career-success-soft: oklch(27% 0.04 135);
+    --career-warning: oklch(83% 0.12 80);
+    --career-warning-soft: oklch(28% 0.04 80);
+    --career-danger: oklch(75% 0.14 28);
+    --career-brand-linkedin: #0a66c2;
+    --career-brand-hh: #d6001c;
+    --career-brand-ink: #ffffff;
+    --career-backdrop: oklch(8% 0.01 var(--hue) / 0.6);
+    --career-shadow-pop: 0 8px 24px oklch(5% 0.01 var(--hue) / 0.5);
+    --career-danger-soft: oklch(28% 0.05 28);
+    color-scheme: dark;
+    }
+  }
+  .b640 { --career-motion-pulse: 1.6s; }
+  .b640 {
+    --career-paper: oklch(100% 0 0);
+    --career-paper-ink: oklch(21% 0.016 var(--hue));
+    --career-paper-accent: oklch(44% 0.085 172);
+    --career-paper-muted: color-mix(in oklch, var(--career-paper-ink) 62%, var(--career-paper));
+    --career-paper-line: color-mix(in oklch, var(--career-paper-ink) 22%, var(--career-paper));
+    --career-paper-mark: oklch(92.5% 0.035 172);
+    --career-paper-serif: "DejaVu Serif", Georgia, "Times New Roman", serif;
+    --career-paper-sans: "DejaVu Sans", var(--font-main);
+  }
+  .b640 { --career-shadow-tooltip: 0 8px 24px oklch(10% 0.02 255 / 0.28); }
+  .b640 { --career-focus-max: 920px; }
+  .b640 { --career-wide-max: 1080px; }
+  .b640 { --career-focus-max: calc(640px + 2 * var(--career-space-10)); }
+  .b640 {
+    --career-ios-title: 17px;
+    --career-ios-btn: 38px;
+    --career-ios-icon: 19px;
+    --career-dlg-pad: var(--career-space-4);
+  }
+}

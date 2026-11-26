@@ -1,0 +1,193 @@
+import { describe, expect, it } from 'vitest';
+import { applyWays, type WaysInput } from './waysModel';
+
+const hh = {
+  sourceType: 'hh',
+  sourceId: 'hh',
+  sourceUrl: 'https://hh.ru/vacancy/1',
+  observedAt: '2026-11-11',
+};
+const site = {
+  sourceType: 'html',
+  sourceId: 'co',
+  sourceUrl: 'https://ladoga.example/jobs/1',
+  observedAt: '2026-11-11',
+};
+const friend = {
+  name: 'Роман Ефимов',
+  sub: '1-й круг · работали вместе',
+  label: 'Написать Роману',
+  message: { kind: 'known_contact' as const, target: { contactId: 'c-p1' } },
+};
+
+function input(overrides: Partial<WaysInput> = {}): WaysInput {
+  return { sources: [hh], primaryUrl: 'https://hh.ru/vacancy/1', company: 'Ладога', ...overrides };
+}
+
+describe('applyWays', () => {
+  it('источник hh.ru даёт способ «hh.ru» и ведёт в письмо', () => {
+    expect(applyWays(input())).toEqual([
+      {
+        id: 'hh',
+        title: 'hh.ru — письмо и ваше резюме',
+        icon: 'responses',
+        action: { kind: 'letter', label: 'Откликнуться на hh.ru' },
+      },
+    ]);
+  });
+
+  it('на проде hh приходит как json_api с sourceId hh — это тоже hh.ru', () => {
+    const prod = {
+      sourceType: 'json_api',
+      sourceId: 'hh',
+      sourceName: 'hh.ru',
+      sourceUrl: 'https://hh.ru/vacancy/9',
+      observedAt: '2026-11-11',
+    };
+    expect(
+      applyWays(input({ sources: [prod], primaryUrl: prod.sourceUrl })).map((way) => way.id),
+    ).toEqual(['hh']);
+  });
+
+  it('hh.ru узнаётся по адресу и по названию источника', () => {
+    const byUrl = {
+      sourceType: 'x',
+      sourceId: 'y',
+      sourceUrl: 'https://spb.hh.ru/vacancy/2',
+      observedAt: '',
+    };
+    const byName = {
+      sourceType: 'x',
+      sourceId: 'y',
+      sourceName: 'hh.ru (страница поиска)',
+      sourceUrl: 'https://z.example/2',
+      observedAt: '',
+    };
+    expect(
+      applyWays(input({ sources: [byUrl], primaryUrl: byUrl.sourceUrl })).map((way) => way.id),
+    ).toEqual(['hh']);
+    expect(
+      applyWays(input({ sources: [byName], primaryUrl: byName.sourceUrl })).map((way) => way.id),
+    ).toContain('hh');
+  });
+
+  it('порядок макета: знакомый (рекомендуем), hh.ru, сайт', () => {
+    const ways = applyWays(input({ sources: [hh, site], primaryUrl: site.sourceUrl, friend }));
+    expect(ways.map((way) => way.id)).toEqual(['friend', 'hh', 'site']);
+    expect(ways[0]).toMatchObject({
+      title: 'Через знакомого — Роман Ефимов',
+      sub: '1-й круг · работали вместе',
+      recommended: true,
+      action: {
+        kind: 'compose',
+        label: 'Написать Роману',
+        recipient: 'Роман Ефимов',
+        message: { kind: 'known_contact', target: { contactId: 'c-p1' } },
+      },
+    });
+  });
+
+  it('у знакомого без черновика (message: null) кнопки «Написать» нет', () => {
+    const [way] = applyWays(input({ friend: { ...friend, message: null } }));
+    expect(way?.id).toBe('friend');
+    expect(way?.action).toBeUndefined();
+  });
+
+  it('без знакомого hh.ru и сайт остаются', () => {
+    const ways = applyWays(input({ sources: [hh, site], primaryUrl: site.sourceUrl }));
+    expect(ways.map((way) => way.id)).toEqual(['hh', 'site']);
+    expect(ways[1]).toMatchObject({
+      title: 'Сайт компании',
+      action: { kind: 'external', label: 'Открыть на сайте работодателя', url: site.sourceUrl },
+    });
+  });
+
+  it('анкета работодателя: «анкета из N вопросов» и «Заполнить анкету»', () => {
+    const ways = applyWays(input({ questionCount: 3 }));
+    expect(ways.at(-1)).toMatchObject({
+      id: 'site',
+      title: 'Сайт компании — анкета из 3 вопросов',
+      action: { kind: 'letter', label: 'Заполнить анкету' },
+    });
+    expect(applyWays(input({ questionCount: 21 })).at(-1)?.title).toContain('из 21 вопроса');
+    expect(applyWays(input({ questionCount: 22 })).at(-1)?.title).toContain('из 22 вопросов');
+  });
+
+  it('небезопасная ссылка не становится способом', () => {
+    const bad = { ...site, sourceUrl: 'javascript:alert(1)' };
+    expect(applyWays(input({ sources: [bad], primaryUrl: 'javascript:alert(1)' }))).toEqual([]);
+  });
+
+  it('без источника hh.ru только ссылка primaryUrl на чужой сайт', () => {
+    const ways = applyWays(input({ sources: [], primaryUrl: 'https://ladoga.example/x' }));
+    expect(ways.map((way) => way.id)).toEqual(['site']);
+  });
+});
+
+/** B726 (B645, prod 23.11): у поста Telegram без компании кнопка звала его «сайтом работодателя». */
+describe('applyWays: источник без сайта работодателя называется своим именем', () => {
+  const telegram = {
+    sourceType: 'telegram',
+    sourceId: 'tg-it_vakansii_udalenka',
+    sourceName: 'IT вакансии удалёнка',
+    sourceUrl: 'https://t.me/it_vakansii_udalenka/2838',
+    observedAt: '2026-11-22',
+  };
+
+  it('пост Telegram: «Пост в Telegram» и «Открыть пост в Telegram», ссылка та же', () => {
+    const ways = applyWays({ sources: [telegram], primaryUrl: telegram.sourceUrl, company: '' });
+    expect(ways).toEqual([
+      {
+        id: 'site',
+        title: 'Пост в Telegram',
+        icon: 'out',
+        action: { kind: 'external', label: 'Открыть пост в Telegram', url: telegram.sourceUrl },
+      },
+    ]);
+  });
+
+  it('Telegram узнаётся по адресу t.me и с компанией', () => {
+    const bare = {
+      sourceType: 'html',
+      sourceId: 'x',
+      sourceUrl: 'https://t.me/jobs/1',
+      observedAt: '2026-11-22',
+    };
+    const ways = applyWays({ sources: [bare], primaryUrl: bare.sourceUrl, company: 'Ладога' });
+    expect(ways[0]).toMatchObject({
+      title: 'Пост в Telegram',
+      action: { label: 'Открыть пост в Telegram' },
+    });
+  });
+
+  it('без компании другой источник назван своим именем, не «сайтом компании»', () => {
+    const board = { ...site, sourceName: 'Himalayas', sourceUrl: 'https://himalayas.app/jobs/1' };
+    const ways = applyWays({ sources: [board], primaryUrl: board.sourceUrl, company: null });
+    expect(ways[0]).toMatchObject({
+      title: 'Himalayas',
+      action: { kind: 'external', label: 'Открыть на Himalayas', url: board.sourceUrl },
+    });
+  });
+
+  it('без компании и без имени источника — адрес сайта', () => {
+    const board = {
+      sourceType: 'html',
+      sourceId: 'x',
+      sourceUrl: 'https://www.jobs.example/1',
+      observedAt: '2026-11-22',
+    };
+    const ways = applyWays({ sources: [board], primaryUrl: board.sourceUrl, company: '' });
+    expect(ways[0]).toMatchObject({
+      title: 'jobs.example',
+      action: { label: 'Открыть на jobs.example' },
+    });
+  });
+
+  it('с компанией сайт остаётся «Сайтом компании»', () => {
+    const ways = applyWays({ sources: [site], primaryUrl: site.sourceUrl, company: 'Ладога' });
+    expect(ways[0]).toMatchObject({
+      title: 'Сайт компании',
+      action: { label: 'Открыть на сайте работодателя' },
+    });
+  });
+});

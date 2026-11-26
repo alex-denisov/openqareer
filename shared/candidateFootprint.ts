@@ -1,6 +1,7 @@
 import type { FootprintFinding } from '../server/osint/adapters/footprintAdapter';
+import type { FootprintRemoval } from './footprintRemoval';
 
-export type FootprintAdapterId = 'sherlock' | 'maigret' | 'hibp' | 'wayback' | 'exa';
+export type FootprintAdapterId = 'sherlock' | 'maigret' | 'hibp' | 'wayback' | 'exa' | 'youtube';
 export type FootprintReview = 'unreviewed' | 'confirmed_self' | 'not_self' | 'hidden';
 export type FootprintChecklistMark =
   | 'password_changed'
@@ -22,6 +23,10 @@ export interface CandidateFootprintFinding extends FootprintFinding {
   readonly staleAccount?: boolean;
   /** B544: the profile fact «Добавить в профиль» created from this finding. */
   readonly profileFactId?: string;
+  /** B382: «В профиль» само подтвердило находку; «Отменить» возвращает её в неразобранные. */
+  readonly confirmedByAdd?: boolean;
+  /** B382: removal request sent by the candidate and the last recheck of the finding URL. */
+  readonly removal?: FootprintRemoval;
 }
 
 export interface CandidateFootprintAdapterStatus {
@@ -42,6 +47,10 @@ export interface CandidateFootprintAudit {
   readonly ownershipConfirmedAt: string;
   readonly startedAt: string;
   readonly completedAt?: string;
+  /** B668: запросы по ссылкам, добавленным кандидатом после запуска, — для повтора. */
+  readonly addedQueryIds?: readonly string[];
+  /** B645 p02: расхождения с резюме, отмеченные «Это не проблема», — по ключу содержания. */
+  readonly hiddenMismatches?: readonly string[];
 }
 
 export interface CandidateFootprintConsentState {

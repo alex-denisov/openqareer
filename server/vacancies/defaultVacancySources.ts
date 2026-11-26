@@ -127,11 +127,17 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     accessClass: 'api',
     market: 'Россия',
     // B647: официальный API открытых данных (trudvsem.ru/opendata/api). robots.txt
-    // opendata-хоста запрещает обход; подключено решением владельца 11.11 —
+    // opendata-хоста запрещает обход; подключено решением владельца 11.11 / 16.11 —
     // читаем только документированный API, контакты не храним.
     addressStatus: 'live',
     enabled: true,
     targetUrl: 'https://opendata.trudvsem.ru/api/v1/vacancies?limit=100',
+    robotsOverride: {
+      grantedBy: 'owner',
+      grantedOn: '2026-11-16',
+      basis:
+        'Официальный API открытых данных (trudvsem.ru/opendata/api) — документированный API для интеграций; robots.txt хоста запрещает веб-краулинг страниц',
+    },
     refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,

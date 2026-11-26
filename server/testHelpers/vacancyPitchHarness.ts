@@ -56,9 +56,19 @@ function pitchTestConfig(directory: string, databasePath: string): ServerConfig 
   };
 }
 
-export async function createApp(
-  clusters: VacancyCluster[] = [],
-  options: {
+function harnessConfig(
+  directory: string,
+  databasePath: string,
+  options: { readonly billingEnforcement?: boolean; readonly cabinetB640?: boolean },
+): ServerConfig {
+  return {
+    ...pitchTestConfig(directory, databasePath),
+    ...(options.billingEnforcement ? { billingEnforcement: true } : {}),
+    ...(options.cabinetB640 ? { cabinetB640Usernames: ['candidate.pitch'] } : {}),
+  };
+}
+
+export interface PitchAppOptions {
     persisted?: boolean;
     coverLetterWriter?: CoverLetterWriter;
     titleParse?: TitleParseEntry;
@@ -66,7 +76,13 @@ export async function createApp(
     experienceFactRewriter?: RouteDeps['experienceFactRewriter'];
     /** Тарифы включены: новый кандидат на Free (B601). */
     billingEnforcement?: boolean;
-  } = {},
+    /** B682: тестовому кандидату включён новый кабинет. */
+    cabinetB640?: boolean;
+  }
+
+export async function createApp(
+  clusters: VacancyCluster[] = [],
+  options: PitchAppOptions = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-pitch-routes-'));
   const databasePath = join(directory, 'app.db');
@@ -99,7 +115,7 @@ export async function createApp(
     (multiSourceEngine as unknown as { clusters: VacancyCluster[] }).clusters = clusters;
   }
 
-  const config = { ...pitchTestConfig(directory, databasePath), ...(options.billingEnforcement ? { billingEnforcement: true } : {}) };
+  const config = harnessConfig(directory, databasePath, options);
 
   const app = await buildApp({
     config,

@@ -13,6 +13,8 @@ import { buildRoleProposals } from '../vacancies/roleHypotheses';
 import { sameCareerRole } from '../vacancies/careerRoleKey';
 import { withPositionRoles } from '../vacancies/careerRoleLadder';
 import { deriveCandidateTargetLevel } from '../vacancies/candidateLevel';
+import { inferSeniorityLevel } from '../vacancies/levelMatcher';
+import { ontologyRoleLevel } from '../vacancies/ontologyRoleLevel';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
@@ -49,12 +51,31 @@ export function readTargetLevel(
   const experience = candidateStore.getSnapshot(candidateId)?.resume?.draft.experience ?? [];
   const workspace = candidateStore.getCandidateWorkspace(candidateId);
   const automaticRoles = workspace?.campaign?.auto?.roles ?? [];
-  const automaticPrimary = automaticRoles.find((role) => role.kind === 'primary') ?? automaticRoles[0];
+  const automaticPrimary =
+    automaticRoles.find((role) => role.kind === 'primary') ?? automaticRoles[0];
   return deriveCandidateTargetLevel({
     targetRoles,
     experience,
     ...(automaticPrimary?.level ? { campaignLevel: automaticPrimary.level } : {}),
   });
+}
+
+/**
+ * Уровень выборки одной названной роли (B741): профессия, требования и
+ * проверка навыков меряются по уровню самой роли, а не по главной роли
+ * кампании. Слово уровня в названии → уровень роли в онтологии → прежний
+ * порядок (кампания, последняя должность).
+ */
+export function readRoleLevel(
+  candidateStore: Pick<RouteDeps['candidateStore'], 'getSnapshot' | 'getCandidateWorkspace'>,
+  candidateId: string,
+  roleTitle: string,
+) {
+  return (
+    inferSeniorityLevel(roleTitle) ??
+    ontologyRoleLevel(roleTitle) ??
+    readTargetLevel(candidateStore, candidateId, [roleTitle])
+  );
 }
 
 // Ответы на задания меняют порядок ролей одного яруса и никогда — состав
@@ -154,9 +175,10 @@ async function nameCandidateRoles(
     targetRoles,
     resumeText: facts.map((fact) => fact.statement).join(' '),
   });
-  const naming = roleNamer && candidateHasLlmAccess(deps, candidateId)
-    ? await roleNamer.nameRoles(facts, language)
-    : { roles: [] as NamedRole[] };
+  const naming =
+    roleNamer && candidateHasLlmAccess(deps, candidateId)
+      ? await roleNamer.nameRoles(facts, language)
+      : { roles: [] as NamedRole[] };
   reportRoleNamingFailures(request, roleNamingFailures, naming.failures ?? []);
   // Работодатель из резюме — не роль, что бы модель ни ответила (PRB-039).
   const named = dropOrganisationTitles(

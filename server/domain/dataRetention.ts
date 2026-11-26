@@ -54,6 +54,30 @@ export const RETENTION_POLICIES: readonly RetentionPolicy[] = [
     rule: { kind: 'while-account-active' },
   },
   {
+    // B642: звук сегмента живёт только в памяти до ответа распознавания
+    // (recordingTranscriptionService.run), в базу и на диск не пишется.
+    subject: 'аудио записей разговоров',
+    period: 'удаляется сразу после распознавания, в том числе при ошибке',
+    rule: { kind: 'not-stored' },
+  },
+  {
+    // B642: interview_recordings и сегменты удаляются каскадом с аккаунтом и по DELETE записи.
+    // B751: сюда же разбор модели (interview_debrief_analyses), разметка говорящих
+    // загруженного файла (interview_recording_voices), имя собеседника
+    // (interview_interviewers) и диктовка ответа (source 'dictation'): её клиент удаляет сразу
+    // после чтения текста, недочитанная живёт не дольше этой строки.
+    subject: 'расшифровка, разметка говорящих и разбор записей разговоров, имя собеседника',
+    period: 'пока активен аккаунт или до удаления по обращению пользователя',
+    rule: { kind: 'while-account-active' },
+  },
+  {
+    // «Верно — в отклик» дописывает договорённость в заметки отклика (interviewDebriefRoutes),
+    // удаление записи их не трогает.
+    subject: 'договорённости, перенесённые в отклик',
+    period: 'как заметки отклика, в том числе после удаления записи',
+    rule: { kind: 'while-account-active' },
+  },
+  {
     subject: 'записи об акцепте юридических документов',
     period: '3 года с даты прекращения договора',
     rule: { kind: 'purge-after-contract-end', years: 3, stored: 'legal_consents' },

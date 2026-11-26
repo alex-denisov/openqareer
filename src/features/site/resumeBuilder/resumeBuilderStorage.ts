@@ -1,3 +1,4 @@
+import { appSignInReturnPath } from '../appSignIn';
 import {
   builderResumeSchema,
   RESUME_TEMPLATES,
@@ -66,6 +67,8 @@ export function writeBuilderState(state: StoredBuilderState): boolean {
  * while it waits to hand over a file, otherwise the workspace.
  */
 export function authReturnPath(search: string): string {
+  const fromAppSignIn = appSignInReturnPath(search);
+  if (fromAppSignIn) return fromAppSignIn;
   const fromBuilder = new URLSearchParams(search).get('from') === 'resume';
   return fromBuilder || readBuilderState()?.pendingExport ? '/tools/resume' : '/app';
 }

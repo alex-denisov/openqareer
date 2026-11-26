@@ -1,4 +1,9 @@
 import {
+  CLUSTER_SPLIT_START_DELAY_MS,
+  readClusterSplitConfig,
+  startClusterSplit,
+} from './maintenance/clusterSplitDriver';
+import {
   PlacementBackfill,
   PlacementBackfillTicker,
 } from './companyDirectory/placement/placementBackfill';
@@ -27,12 +32,14 @@ import { linkedinProfileDirectory } from './linkedinPool/linkedinProfileDirector
 import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
 import { createScriptPageRenderer, launchSiteRenderBrowser } from './vacancies/scriptPageRenderer';
 import { createRenderInWorker } from './vacancies/siteRenderInWorker';
+import { createHhTransportInWorker } from './vacancies/hhFetchInWorker';
 import { existsSync } from 'node:fs';
 import { Worker } from 'node:worker_threads';
 import type { LinkedinPoolExecutorConfig } from './linkedinPool/companyPageExecutorPolicy';
 import { notifyOwner } from './notifications/ownerTelegram';
 import { startEventLoopDelayLog } from './maintenance/eventLoopDelayLog';
 import { recordStepStall, startStepTimingLog } from './maintenance/stepTiming';
+import { startCpuProfileLog } from './maintenance/cpuProfileTop';
 import { recordEventLoopStall } from './vacancies/freehire/atsFuse';
 import { RoleLinkStep } from './vacancies/titleParse/roleLinkStep';
 import { SemanticBackfill } from './vacancies/titleParse/semanticBackfill';
@@ -47,6 +54,7 @@ import { logPoolWrites } from './maintenance/poolWriteLog';
 import { watchWriteHolds } from './observability/sqliteWriteHolds';
 import { composeVacancyEngine } from './vacancies/composeVacancyEngine';
 import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
+import { createHhFetchSummary } from './vacancies/hhFetchSummary';
 import { useFanDemand } from './vacancies/jobspyFan';
 import { SqliteVacancyDemandStore } from './vacancies/vacancyDemandStore';
 import { scheduleSalaryMarketSnapshots } from './salaryMarket/salaryMarketSchedule';
@@ -57,8 +65,12 @@ import { scheduleCatalogSitemapJob } from './seo/catalogSitemapSchedule';
 import { scheduleSitemapHealth } from './seo/sitemapHealth';
 import { scheduleCatalogRuSummaryJob } from './seo/catalogRuSummarySchedule';
 import { scheduleOpenRouterBalanceAlert } from './providers/openRouterBalanceSchedule';
+import { scheduleSalaryUpkeep } from './vacancies/openqareerSalary/salaryUpkeep';
+import { scheduleEmployerCountryJob } from './vacancies/vacancyCountry/employerCountryJob';
 import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
 import { scheduleRemoteScopeBackfill } from './vacancies/remoteScopeBackfillSchedule';
+import { scheduleSemanticCoverIndex } from './vacancies/semanticCoverIndex';
+import { scheduleOpenStatisticsJob } from './vacancies/occupationEarnings/occupationEarningSchedule';
 import { pauseClusterWrite } from './vacancies/clusterWritePause';
 import { createLinkedinGuestBudget } from './vacancies/linkedinGuestBudget';
 import {
@@ -71,6 +83,8 @@ import { scheduleLinkedinOrgResolver } from './companyDirectory/linkedinOrg/link
 import { scheduleSiteDiscovery } from './companyDirectory/siteDiscovery/siteDiscoverySchedule';
 import { scheduleFreehireRepo } from './companyDirectory/freehire/freehireRepoSchedule';
 import { scheduleFreehirePages } from './companyDirectory/freehire/freehirePagesSchedule';
+import { shutdownMaintenance } from './maintenance/maintenanceShutdown';
+import { createStorePassMark } from './maintenance/storePassMark';
 
 /**
  * Вход процесса обслуживания пула (B230). Без HTTP: тот же движок, что у
@@ -143,8 +157,26 @@ const renderScriptPage = existsSync(siteRenderWorkerFile)
         ),
       log: renderLog,
     });
+// B756: сбой hh.ru — строкой warn сразу, ответы — сводкой раз в 5 минут.
+const HH_FETCH_SUMMARY_MS = 5 * 60_000;
+const hhFetchSummary = createHhFetchSummary(log);
+setInterval(() => hhFetchSummary.flush(), HH_FETCH_SUMMARY_MS).unref();
+// B756 22.11: цикл обслуживания стоит до 24 с, и тело страницы hh.ru не дочитывается
+// за 30 с. Выборка целиком — в своём потоке (dist/hh-fetch-worker.mjs), один на процесс;
+// без файла потока (tsx в разработке) — в этом процессе, как раньше.
+const hhFetchWorkerFile = new URL('./hh-fetch-worker.mjs', import.meta.url);
+const hhFetchInWorker = existsSync(hhFetchWorkerFile)
+  ? createHhTransportInWorker({
+      spawn: () => new Worker(hhFetchWorkerFile),
+      onFetch: (event) => hhFetchSummary.record(event),
+      log: (fields, message) => log.warn(fields, message),
+    })
+  : undefined;
+// B759: SIGTERM отменяет обход — курсор сохраняется по прочитанному, а не через минуту ожидания.
+const collection = new AbortController();
 const composed = composeVacancyEngine({
   databasePath: config.databasePath,
+  signal: collection.signal,
   registerRequestedAts: true,
   linkedinBudget,
   linkedinFetch,
@@ -154,6 +186,9 @@ const composed = composeVacancyEngine({
   // Итог каждой замены среза и любая транзакция дольше секунды — в журнал:
   // контракт B230 проверяется по `journalctl`, а не по 500 на входе (PRB-043).
   onPoolWrite: logPoolWrites(log),
+  // B756: где стоит выборка hh.ru — соединение, тело или цикл событий процесса.
+  onHhFetch: (event) => hhFetchSummary.record(event),
+  ...(hhFetchInWorker ? { hhDirect: hhFetchInWorker.transport } : {}),
   // HTTP ждёт запись на главном потоке: между транзакциями кластеров ему нужен зазор.
   clusterWritePause: pauseClusterWrite,
 });
@@ -224,6 +259,8 @@ const titleModelParser = titleBulkRuntime.client
 const worker = new MaintenanceWorker({
   engine: composed.engine,
   log,
+  // B759: полная чистка пула не чаще раза в 6 ч, сколько бы рестартов ни было.
+  storePassMark: createStorePassMark(semanticDatabase),
   // Откат малой партии связи с ролью: OPENQAREER_ROLE_LINK_OFF=1 останавливает вызовы модели.
   ...(titleBulkRuntime.client && process.env.OPENQAREER_ROLE_LINK_OFF !== '1'
     ? { roleLink: new RoleLinkStep(semanticDatabase, titleBulkRuntime.client, log) }
@@ -270,7 +307,7 @@ const worker = new MaintenanceWorker({
     ? {}
     : {
         aggregatorCompanies: new AggregatorCompanyTicker(
-          new AggregatorCompanyBackfill(semanticDatabase),
+          new AggregatorCompanyBackfill(semanticDatabase, { autoResolve: true }),
         ),
       }),
   // B643: careers pages that are not vacancy pages or stay closed leave the directory; off — OPENQAREER_CAREERS_PRUNE_OFF=1.
@@ -299,6 +336,8 @@ function readNonNegativeInteger(value: string | undefined, fallback: number): nu
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+/** B759: фоновые задания по расписанию — после SIGTERM новые не начинаются. */
+const stopJobs: Array<() => void> = [];
 let stopSalaryMarketSnapshots: (() => void) | undefined;
 let stopCatalogRuSummaries: (() => void) | undefined;
 let stopOpenRouterBalance: (() => void) | undefined;
@@ -306,37 +345,34 @@ let stopCatalogSearchEvidence: (() => void) | undefined;
 let stopLinkedinOrgResolver: (() => void) | undefined;
 let shuttingDown = false;
 let restoreInFlight: Promise<unknown> | undefined;
-async function shutdown(signal: string): Promise<void> {
-  if (shuttingDown) return;
+function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return Promise.resolve();
   shuttingDown = true;
-  stopSalaryMarketSnapshots?.();
-  stopCatalogRuSummaries?.();
-  stopOpenRouterBalance?.();
-  stopCatalogSearchEvidence?.();
-  stopLinkedinOrgResolver?.();
-  log.info({ signal }, 'maintenance-shutdown-started');
-  // `restoreAsync` reads the large SQLite pool in bounded chunks, but a
-  // single restore can still take more than the old systemd stop window on
-  // production. Wait for it before closing the shared database; otherwise a
-  // deploy can interrupt restore between its chunks and close the connection
-  // underneath the still-running promise.
-  await restoreInFlight?.catch(() => undefined);
-  const { waveFinished } = await worker.stop();
-  if (!waveFinished) {
-    // Не закрываем SQLite, пока незавершённая волна ещё может вернуться из
-    // fetcher и записать результат. Процесс должен завершиться целиком, иначе
-    // следующий systemd restart получает закрытое соединение вместо честного
-    // fail-and-restart.
-    log.error({ signal }, 'maintenance-shutdown-forced');
-    process.exit(1);
-    return;
-  }
-  semanticDatabase.close();
-  titleBulkRuntime.close();
-  linkedinPoolRepository?.close();
-  composed.close();
-  log.info({ signal, waveFinished }, 'maintenance-shutdown-finished');
-  process.exit(0);
+  return shutdownMaintenance(signal, {
+    stopTimers: () => {
+      for (const stop of stopJobs.splice(0)) stop();
+      stopSalaryMarketSnapshots?.();
+      stopCatalogRuSummaries?.();
+      stopOpenRouterBalance?.();
+      stopCatalogSearchEvidence?.();
+      stopLinkedinOrgResolver?.();
+    },
+    abortCollection: () => {
+      collection.abort();
+      // Выборки в потоке получают отказ сразу: обход сохраняет курсор по прочитанному.
+      void hhFetchInWorker?.close();
+    },
+    stopWorker: () => worker.stop(),
+    startup: restoreInFlight,
+    closeStores: () => {
+      semanticDatabase.close();
+      titleBulkRuntime.close();
+      linkedinPoolRepository?.close();
+      composed.close();
+    },
+    log,
+    exit: (code) => process.exit(code),
+  });
 }
 process.once('SIGINT', () => void shutdown('SIGINT'));
 process.once('SIGTERM', () => void shutdown('SIGTERM'));
@@ -353,16 +389,34 @@ try {
     },
   });
   startStepTimingLog(log);
+  // B761: что держит цикл — минута профиля процессора на старте и через 15 минут, дальше раз в час.
+  startCpuProfileLog(log, { atStart: true });
   worker.start();
+  // B752: разбиение склеенных кластеров — только по флагу и не в такте старта.
+  const clusterSplitConfig = readClusterSplitConfig(process.env);
+  if (clusterSplitConfig.enabled) {
+    setTimeout(() => {
+      void startClusterSplit({
+        db: semanticDatabase,
+        databasePath: config.databasePath,
+        config: clusterSplitConfig,
+        log,
+        isStopped: () => shuttingDown,
+        dropClusterSnapshot: () => composed.engine.dropClusterSnapshot(),
+      }).catch((error: unknown) =>
+        log.error({ message: (error as Error).message }, 'cluster_split_failed'),
+      );
+    }, CLUSTER_SPLIT_START_DELAY_MS);
+  }
   // B535: landing numbers are counted here, never on the web server's event loop.
-  scheduleLandingStatsJob(semanticDatabase, log);
+  stopJobs.push(scheduleLandingStatsJob(semanticDatabase, log));
   // CPO 27.10: курсы ЦБ для фильтра «Зарплата», раз в сутки, наружу ходит только этот процесс.
-  scheduleCurrencyRatesJob(semanticDatabase, log);
+  stopJobs.push(scheduleCurrencyRatesJob(semanticDatabase, log));
   stopSalaryMarketSnapshots = scheduleSalaryMarketSnapshots(semanticDatabase, log);
   // Sitemap files: the listings query groups the whole catalog, so it runs here too.
-  scheduleCatalogSitemapJob(semanticDatabase, log, config);
+  stopJobs.push(scheduleCatalogSitemapJob(semanticDatabase, log, config));
   // 11.11: 2 000 random sitemap addresses a day by the same rules as verify-sitemap.
-  scheduleSitemapHealth(semanticDatabase, log, config);
+  stopJobs.push(scheduleSitemapHealth(semanticDatabase, log, config));
   // 04.11: listings with impressions in Google keep `index` below their threshold.
   stopCatalogSearchEvidence = scheduleCatalogSearchEvidence(
     semanticDatabase,
@@ -379,16 +433,24 @@ try {
     log,
   );
   // B546: market salary estimates stream every salaried vacancy, so only here.
-  scheduleMarketSalaryEstimateJob(semanticDatabase, log);
+  stopJobs.push(scheduleMarketSalaryEstimateJob(semanticDatabase, log));
+  // B803: страны работодателей и словарь городов для вакансий без названной страны.
+  stopJobs.push(scheduleEmployerCountryJob(semanticDatabase, log));
+  // B803: рост цен, пересборка, покрытие и свежесть оценок.
+  stopJobs.push(scheduleSalaryUpkeep(semanticDatabase, log));
   // 03.11: область удалёнки для проекций, записанных до неё, пачками по 200.
-  scheduleRemoteScopeBackfill(semanticDatabase, log);
+  stopJobs.push(scheduleRemoteScopeBackfill(semanticDatabase, log));
+  // B803: открытая статистика заработков, раз в неделю.
+  stopJobs.push(scheduleOpenStatisticsJob(semanticDatabase, log));
+  // B725: покрывающий индекс подбора — один раз, вне старта веб-процесса.
+  stopJobs.push(scheduleSemanticCoverIndex(semanticDatabase, log));
   // B627 / B643-9: домен, карьеры и ATS без модели (решение владельца 11.11), ≤480 компаний в сутки.
   if (process.env.OPENQAREER_SITE_DISCOVERY_OFF !== '1')
-    scheduleSiteDiscovery(semanticDatabase, log);
+    stopJobs.push(scheduleSiteDiscovery(semanticDatabase, log));
   // B644: компании и доски ATS из каталога репозитория freehire (файл), вместо API freehire.me (B641).
-  scheduleFreehireRepo(semanticDatabase, log, process.env);
+  stopJobs.push(scheduleFreehireRepo(semanticDatabase, log, process.env));
   // B645: все ~520 тыс. компаний freehire по публичным страницам (__data.json), ~3 запроса/с, без модели.
-  scheduleFreehirePages(semanticDatabase, log, process.env);
+  stopJobs.push(scheduleFreehirePages(semanticDatabase, log, process.env));
   // B621: LinkedIn ID компаний реестра через гостевой доступ, одна компания за такт.
   if (process.env.OPENQAREER_LINKEDIN_ORG_RESOLVER_OFF !== '1') {
     stopLinkedinOrgResolver = scheduleLinkedinOrgResolver(

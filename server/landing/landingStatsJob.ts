@@ -16,6 +16,8 @@ import {
 } from '../../shared/landingStats';
 import { isNamedEmployer } from '../../shared/employerLabel';
 import { type FeedPlaceRow, landingFeedMeta, readLandingReach } from './landingReach';
+import type { WindowedReadOptions } from '../data/windowedRead';
+import { readPoolCounts, type PoolCounts } from '../vacancies/catalogSources';
 
 export const LANDING_STATS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS landing_stats (
   id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -221,22 +223,32 @@ function alternateRows(
   return vacancies;
 }
 
-export function computeLandingStats(database: DatabaseSync, now: Date): LandingStats {
-  const counts = database
-    .prepare(
-      `SELECT count(*) AS active, sum(is_remote = 1) AS remote, count(DISTINCT source_id) AS sources
-       FROM vacancy_pool_index WHERE is_active = 1 AND expired = 0`,
-    )
-    .get() as { active: number; remote: number | null; sources: number };
+/**
+ * B776: свежие удалённые — hh по индексу источника (35 с → 0,15 с на проде 23.11),
+ * остальные — по индексу свежести пула.
+ */
+const RECENT_HH_SQL = `SELECT id FROM vacancy_pool_index
+  WHERE source_id = 'src-hh-search' AND expired = 0 AND is_active = 1 AND is_remote = 1
+  ORDER BY published_ms DESC LIMIT ?`;
+const RECENT_ABROAD_SQL = `SELECT id FROM vacancy_pool_index
+  WHERE is_active = 1 AND expired = 0 AND is_remote = 1 AND source_id <> 'src-hh-search'
+  ORDER BY published_ms DESC LIMIT ?`;
+
+export interface LandingStatsOptions extends WindowedReadOptions {
+  /** Подсчёт пула, если его уже прочитали для «Источников»: второй проход не нужен. */
+  readonly pool?: PoolCounts;
+}
+
+export function computeLandingStats(
+  database: DatabaseSync,
+  now: Date,
+  options: LandingStatsOptions = {},
+): LandingStats {
+  const counts = options.pool ?? readPoolCounts(database, options);
   const recent = (hh: boolean) =>
-    database
-      .prepare(
-        `SELECT id FROM vacancy_pool_index
-         WHERE is_active = 1 AND expired = 0 AND is_remote = 1
-           AND (source_id = 'src-hh-search') = ?
-         ORDER BY published_ms DESC LIMIT ?`,
-      )
-      .all(hh ? 1 : 0, CANDIDATE_ROWS) as { id: string }[];
+    database.prepare(hh ? RECENT_HH_SQL : RECENT_ABROAD_SQL).all(CANDIDATE_ROWS) as {
+      id: string;
+    }[];
   const readPayload = database.prepare('SELECT payload FROM vacancy_pool WHERE id = ?');
   const load = (rows: { id: string }[]) => {
     const payloads: PoolPayload[] = [];
@@ -256,9 +268,9 @@ export function computeLandingStats(database: DatabaseSync, now: Date): LandingS
   const abroad = pickLandingVacancies(load(recent(false)));
   const vacancies = alternateRows(abroad, russian);
   return {
-    activeCount: catalogTotal(database) ?? Number(counts.active),
-    sourceCount: Number(counts.sources),
-    remoteCount: Number(counts.remote ?? 0),
+    activeCount: catalogTotal(database) ?? counts.active,
+    sourceCount: counts.bySource.size,
+    remoteCount: counts.remote,
     updatedAt: now.toISOString().slice(0, 10),
     vacancies,
     feed: readLandingFeed(database),

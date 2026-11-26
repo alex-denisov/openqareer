@@ -1,0 +1,56 @@
+name: Merge batch
+
+# Group merge for main: our stand-in for GitHub merge queue, which a personal
+# repository does not get. Logic and design: scripts/merge-batch.mjs.
+# Off unless the repository variable MERGE_BATCH_ENABLED is 'true'; a manual
+# run with dry_run (the default) only prints the plan.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  pull_request:
+    branches: [main]
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # One batcher at a time; a waiting tick is replaced by the newest one.
+  group: merge-batch
+  cancel-in-progress: false
+
+jobs:
+  batch:
+    name: Merge batch
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.dry_run)
+      || (vars.MERGE_BATCH_ENABLED == 'true'
+          && (github.event_name != 'pull_request' || github.event.label.name == 'merge-ready'))
+    runs-on: ubuntu-latest
+    # Two rounds of full runs (~10 min each) plus bisection fit in the hour.
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      pull-requests: write
+      statuses: write
+      actions: write
+    steps:
+      # Always main's batcher, never the labelled PR's copy of the script.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Run batcher
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          TRIGGER: ${{ github.event_name == 'pull_request' && 'label' || github.event_name == 'workflow_dispatch' && 'dispatch' || 'schedule' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node scripts/merge-batch.mjs --trigger "$TRIGGER" $([ "$DRY" = "true" ] && echo --dry-run)

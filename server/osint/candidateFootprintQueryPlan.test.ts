@@ -204,3 +204,45 @@ describe('candidate footprint query plan', () => {
   });
 });
 
+
+describe('B668: YouTube в плане проверки', () => {
+  const draft = (links: readonly string[]): ResumeDraft => ({
+    candidate: { fullName: 'Мария Соколова', contact: { links: [...links] } },
+    experience: [],
+  }) as unknown as ResumeDraft;
+  const links = [
+    'https://www.youtube.com/@msokolova',
+    'https://www.instagram.com/msokolova',
+    'https://www.reddit.com/user/msokolova',
+    'https://www.tiktok.com/@msokolova',
+  ];
+
+  it('с флагом — пункт канала YouTube; Instagram, Reddit и TikTok остаются ссылками без запроса', () => {
+    const plan = buildCandidateFootprintQueryPlan(draft(links), { youtube: true });
+    const youtube = plan.filter((item) => item.adapterId === 'youtube');
+    expect(youtube).toEqual([
+      expect.objectContaining({
+        kind: 'profile_url',
+        preview: 'Проверить архив публичной страницы https://www.youtube.com/@msokolova',
+        input: { profileUrl: 'https://www.youtube.com/@msokolova' },
+      }),
+    ]);
+    expect(plan.some((item) => item.adapterId === 'youtube' && /instagram|reddit|tiktok/u.test(item.preview))).toBe(false);
+  });
+
+  it('без флага план прежний: пункта YouTube нет', () => {
+    const before = buildCandidateFootprintQueryPlan(draft(links));
+    expect(before.some((item) => item.adapterId === 'youtube')).toBe(false);
+    const withFlag = buildCandidateFootprintQueryPlan(draft(links), { youtube: true });
+    expect(withFlag.filter((item) => item.adapterId !== 'youtube')).toEqual(before);
+  });
+});
+
+describe('B668: квота YouTube', () => {
+  it('не больше трёх каналов за проверку', () => {
+    const links = ['a', 'b', 'c', 'd'].map((n) => `https://www.youtube.com/@${n}`);
+    const draft = { candidate: { fullName: 'A B', contact: { links } }, experience: [] } as unknown as ResumeDraft;
+    const plan = buildCandidateFootprintQueryPlan(draft, { youtube: true });
+    expect(plan.filter((item) => item.adapterId === 'youtube')).toHaveLength(3);
+  });
+});

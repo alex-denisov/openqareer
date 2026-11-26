@@ -1,3 +1,4 @@
+import { CONSULTANT_REPLY_ACTIONS } from '../../shared/consultantReply';
 import {
   adaptationStageSchema,
   adaptationTaskSuggestionSchema,
@@ -170,6 +171,7 @@ const resumeContextSchema = z
             endDate: z.string().nullable().optional(),
             current: z.boolean().optional(),
             teamSize: z.number().int().positive().nullable().optional(),
+            teamSizeDeclined: z.boolean().optional(),
             descriptionMemoryId: z.string().min(1).max(80).nullable().optional(),
             bulletMemoryIds: z.array(z.string().min(1).max(80)).max(MAX_BULLETS_PER_PLACE),
           })
@@ -325,6 +327,28 @@ const knowledgeContextSchema = z.object({
     .optional(),
 });
 
+const selectionGroupsSchema = z
+  .array(
+    z
+      .object({
+        label: z.string().max(200),
+        count: z.number().int().min(1),
+        vacancies: z.array(z.string().max(402)).max(20),
+      })
+      .strict(),
+  )
+  .max(20);
+
+/** B735: счёт строк подборки по месту, стране и формату; без данных — «неизвестно». */
+const selectionSummarySchema = z
+  .object({
+    shown: z.number().int().min(0).max(20),
+    byPlace: selectionGroupsSchema,
+    byCountry: selectionGroupsSchema,
+    byFormat: selectionGroupsSchema,
+  })
+  .strict();
+
 export const coachTurnInputSchema = z.object({
   candidateReference: z.string().min(8).max(80),
   dataClass: z.enum(['synthetic', 'personal']).default('personal'),
@@ -343,6 +367,29 @@ export const coachTurnInputSchema = z.object({
       formats: z.array(z.enum(CAREER_CHANGE_FORMATS)).max(3),
       relocation: z.boolean(),
       stopCompanies: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
+      /** B735: подборка кандидата — первые 20 строк его списка и их общее число. */
+      selection: z
+        .object({
+          total: z.number().int().min(0),
+          summary: selectionSummarySchema,
+          rows: z
+            .array(
+              z
+                .object({
+                  title: z.string().max(200),
+                  company: z.string().max(200).nullable(),
+                  location: z.string().max(200).nullable(),
+                  country: z.string().max(120).nullable(),
+                  format: z.string().max(120).nullable(),
+                  salary: z.string().max(120).nullable(),
+                  fitPercent: z.number().min(0).max(100).nullable(),
+                })
+                .strict(),
+            )
+            .max(20),
+        })
+        .strict()
+        .optional(),
     })
     .strict()
     .optional(),
@@ -420,6 +467,11 @@ export const coachTurnResultSchema = z.object({
     .preprocess(normalizeQuickReplies, z.array(z.string().min(2).max(40)).max(3))
     .optional(),
   actionProposals: z.array(careerActionProposalSchema).max(20).default([]),
+  /**
+   * B745: раздел кабинета, где делается совет консультанта; кнопку под репликой
+   * подписывает сервер из своего словаря. Прежние ходы без поля читаются как раньше.
+   */
+  nextSection: z.enum(CONSULTANT_REPLY_ACTIONS).nullable().optional(),
   /** 28.10: the consultant answered first; the expert/strategist analysis is `pending` until merged in. */
   analysis: z.enum(['pending', 'ready', 'failed']).optional(),
   /** When the background analysis started; a stale `pending` is read as failed (28.10). */
@@ -464,7 +516,16 @@ export const coachTurnResultSchema = z.object({
     .optional(),
 });
 
-export type CoachTurnInput = z.infer<typeof coachTurnInputSchema>;
+/** B796: карточка правки факта с «Применить», которая встанет под репликой. */
+export interface CorrectionCard {
+  readonly place: string;
+  readonly from: string;
+  readonly to: string;
+}
+export type CoachTurnInput = z.infer<typeof coachTurnInputSchema> & {
+  /** Считает сервер перед вызовом модели; в схеме входа этого поля нет. */
+  readonly correctionCards?: readonly CorrectionCard[];
+};
 export type ResumeRevisionProposal = z.infer<typeof resumeRevisionProposalSchema>;
 // The provider limit stays unchanged; only stored server-labeled replies have extra headroom.
 export const coachProviderTurnResultSchema = coachTurnResultSchema.extend({
@@ -645,6 +706,9 @@ export const COACH_TURN_JSON_SCHEMA = {
       maxItems: 3,
       items: { type: 'string', minLength: 2, maxLength: 40 },
     },
+    nextSection: {
+      anyOf: [{ type: 'string', enum: CONSULTANT_REPLY_ACTIONS }, { type: 'null' }],
+    },
     actionProposals: {
       type: 'array',
       maxItems: 20,
@@ -758,6 +822,7 @@ export const COACH_TURN_JSON_SCHEMA = {
     'careerTrack',
     'actionProposals',
     'quickReplies',
+    'nextSection',
     'adaptationTask',
   ],
   additionalProperties: false,

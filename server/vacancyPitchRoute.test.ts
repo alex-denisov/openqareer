@@ -427,12 +427,13 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
       expect(data.emailPitch.subject).toMatch(/ — Alexey Denisov$/u);
     });
 
-    it('модель не вернула имя или вернула его не на языке письма: остаётся имя из профиля', async () => {
+    // B714 (19.11): латиница профиля в русском письме не остаётся — имя профиля транслитерируется.
+    it('модель не вернула имя или вернула его не на языке письма: имя профиля на языке письма', async () => {
       const silent = await signedLetter('Alexey Denisov', { body: RU });
-      expect(silent.data.senderName).toBe('Alexey Denisov');
-      expect(silent.data.emailPitch.subject).toMatch(/ — Alexey Denisov$/u);
+      expect(silent.data.senderName).toBe('Алексей Денисов');
+      expect(silent.data.emailPitch.subject).toMatch(/ — Алексей Денисов$/u);
       const wrong = await signedLetter('Alexey Denisov', { body: RU, senderName: 'Alexey Denisov' });
-      expect(wrong.data.senderName).toBe('Alexey Denisov');
+      expect(wrong.data.senderName).toBe('Алексей Денисов');
       expect(wrong.data.emailPitch.body).toBe(RU);
     });
   });

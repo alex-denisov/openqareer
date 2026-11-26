@@ -101,6 +101,10 @@ export interface ApprovedVacancyLetterInput {
   readonly resumeAvailable?: boolean;
   /** Снимок не создался, и кандидат выбрал своё общее резюме. */
   readonly generalResumeId?: string;
+  /** B711: какой вариант письма одобрен — экран вернётся к нему. */
+  readonly variantId?: string;
+  /** Профиль, по которому готовили черновик: сервер сверяет его с текущим. */
+  readonly profileHash?: string;
 }
 
 export interface LetterGeneralResume {
@@ -149,11 +153,99 @@ export async function approveVacancyLetter(
   return readData<ApprovedVacancyLetterResult>(response);
 }
 
+/** Письмо и текущие факты профиля. */
+export interface LetterFreshness {
+  /** В письме число, которое профиль больше не подтверждает. */
+  readonly factsChanged?: boolean;
+  /** Профиль письма стал другим: «Изменить письмо» пересобирает текст. */
+  readonly profileChanged?: boolean;
+}
+
+/** Правка письма до одобрения, сохранённая на сервере. */
+export interface StoredLetterDraft extends LetterFreshness {
+  readonly body: string;
+  readonly variantId: string | null;
+  readonly savedAt: string;
+}
+
+/** Одобрение, сохранённое на сервере (B711): текст и вариант, к которым экран возвращается. */
+export interface StoredLetterApproval extends ApprovedVacancyLetterResult, LetterFreshness {
+  readonly subject: string | null;
+  readonly body: string;
+  readonly variantId: string | null;
+  /** Язык и тон одобренного письма (B645); `null` — в старом снимке их нет. */
+  readonly language?: LetterLanguage | null;
+  readonly tone?: LetterTone | null;
+}
+
+export interface StoredLetter {
+  /** Последнее одобренное письмо вакансии; `null` — письмо ещё не одобряли. */
+  readonly approval: StoredLetterApproval | null;
+  /** Правка, которую ещё не одобрили. */
+  readonly draft?: StoredLetterDraft | null;
+}
+
+/** Одобренное письмо вакансии и правка до одобрения. */
+export async function readStoredLetter(
+  vacancyId: string,
+  signal?: AbortSignal,
+): Promise<StoredLetter> {
+  const response = await apiFetch(
+    '/api/v1/candidate/vacancies/' + encodeURIComponent(vacancyId) + '/letter-approvals/latest',
+    { method: 'GET', signal },
+  );
+  return readData<StoredLetter>(response);
+}
+
+function letterDraftUrl(vacancyId: string): string {
+  return '/api/v1/candidate/vacancies/' + encodeURIComponent(vacancyId) + '/letter-draft';
+}
+
+export interface LetterDraftInput {
+  readonly body: string;
+  readonly variantId?: string;
+  readonly profileHash?: string;
+}
+
+/** Правка сохраняется и при уходе со страницы: `keepalive` доводит запрос до сервера. */
+export async function saveLetterDraft(vacancyId: string, input: LetterDraftInput): Promise<void> {
+  const response = await apiFetch(letterDraftUrl(vacancyId), {
+    method: 'PUT',
+    keepalive: true,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  await readData<{ readonly savedAt: string }>(response);
+}
+
+export async function removeLetterDraft(vacancyId: string): Promise<void> {
+  const response = await apiFetch(letterDraftUrl(vacancyId), { method: 'DELETE', keepalive: true });
+  await readData<{ readonly removed: boolean }>(response);
+}
+
 /** «Подготовить резюме»: повторяет снимок резюме под вакансию, письмо не одобряет. */
 export interface PreparedLetterResume {
   readonly ready: boolean;
   /** B631: the targeted version the approval will attach; `null` on Free or without experience. */
   readonly versionId?: string | null;
+  /** Письмо одобрено, не отправлено и версию под вакансию можно заменить этой (B785). */
+  readonly replaceable?: boolean;
+}
+
+/** «Одобрить резюме» после одобрения письма: прикладывает ровно эту версию. */
+export async function attachLetterResume(
+  vacancyId: string,
+  versionId: string,
+): Promise<ApprovedVacancyLetterResult['resume']> {
+  const response = await apiFetch(
+    '/api/v1/candidate/vacancies/' + encodeURIComponent(vacancyId) + '/letter-resume',
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ versionId }),
+    },
+  );
+  return (await readData<{ readonly resume: ApprovedVacancyLetterResult['resume'] }>(response)).resume;
 }
 
 export async function prepareVacancyLetterResume(vacancyId: string): Promise<PreparedLetterResume> {

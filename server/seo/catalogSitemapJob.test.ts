@@ -239,7 +239,7 @@ describe('computeCatalogSitemaps', () => {
     ]);
   });
 
-  it('remembers published listings and when they last qualified', () => {
+  it('remembers published listings and when they last qualified', async () => {
     const db = database([
       ...berlinRows('h'),
       { id: 'p1', place: 'paris', role: null },
@@ -248,7 +248,7 @@ describe('computeCatalogSitemaps', () => {
       { id: 'one', place: 'oslo', role: null },
     ]);
     computeCatalogSitemaps(db, NOW);
-    const history = readListingHistory(db);
+    const history = await readListingHistory(db);
     expect(history.get('berlin/')).toEqual({
       firstQualifiedAt: NOW.toISOString(),
       lastQualifiedAt: NOW.toISOString(),

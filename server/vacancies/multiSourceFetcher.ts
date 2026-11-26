@@ -54,16 +54,17 @@ type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<Vac
  */
 const JSON_SOURCE_TIMEOUT_MS = 45_000;
 /**
- * B622: Greenhouse с текстом — до 33 МБ (SpaceX), Stripe 6 МБ, Cloudflare 8 МБ.
- * С прода они скачиваются за 0,3–1,5 с, но в волне на занятом цикле событий
- * 45 с не хватало: 10 досок падали «aborted due to timeout» 08.11.
+ * B622: большие ответы Greenhouse и SmartRecruiters могут занимать весь слот
+ * опроса, пока maintenance обслуживает другие источники. На загруженном цикле
+ * событий прежних 45 с не хватало и страница терялась как timeout.
  */
 const LARGE_BOARD_TIMEOUT_MS = 120_000;
 
 export function jsonSourceTimeoutMs(url: string): number {
-  return /^https:\/\/boards-api\.greenhouse\.io\//.test(url)
-    ? LARGE_BOARD_TIMEOUT_MS
-    : JSON_SOURCE_TIMEOUT_MS;
+  const isLargeBoard =
+    /^https:\/\/boards-api\.greenhouse\.io\//i.test(url) ||
+    /^https:\/\/api\.smartrecruiters\.com\/v1\/companies\/[^/]+\/postings(?:\?|$)/i.test(url);
+  return isLargeBoard ? LARGE_BOARD_TIMEOUT_MS : JSON_SOURCE_TIMEOUT_MS;
 }
 const LINKEDIN_PAGE_TIMEOUT_MS = 20_000;
 
@@ -121,11 +122,33 @@ function remotiveSampleToUnified(sample: VacancySample, sourceId: string): Unifi
   }));
 }
 
-async function fetchTelegramChannel(source: VacancySourceConfig): Promise<UnifiedVacancy[]> {
+/** B646: 500 ms spacing between requests to https://t.me/s/ to avoid throttling / ETIMEDOUT. */
+export const TELEGRAM_REQUEST_DELAY_MS = 500;
+export const TELEGRAM_SOURCE_TIMEOUT_MS = 15_000;
+
+let telegramPacingQueue: Promise<void> = Promise.resolve();
+
+export function paceTelegramRequest(
+  sleep: (ms: number) => Promise<void> = defaultSleep,
+  paceMs: number = TELEGRAM_REQUEST_DELAY_MS,
+): Promise<void> {
+  const prior = telegramPacingQueue;
+  let release: () => void;
+  telegramPacingQueue = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return prior.then(() => sleep(paceMs).then(release));
+}
+
+async function fetchTelegramChannel(
+  source: VacancySourceConfig,
+  sleep: (ms: number) => Promise<void> = defaultSleep,
+): Promise<UnifiedVacancy[]> {
   const channelMatch = source.targetUrl.match(/t\.me\/(?:s\/)?([a-zA-Z0-9_]+)/i);
   const channelName = channelMatch ? channelMatch[1] : source.id.replace(/^src-tg-/, '');
   try {
-    const html = await withRequestTimeout(8_000, async (signal) => {
+    await paceTelegramRequest(sleep);
+    const html = await withRequestTimeout(TELEGRAM_SOURCE_TIMEOUT_MS, async (signal) => {
       const res = await fetch(`https://t.me/s/${channelName}`, {
         headers: { ...FETCH_HEADERS, Accept: 'text/html,application/xhtml+xml' },
         signal,
@@ -692,7 +715,7 @@ export function buildMultiSourceFetcher(
       const sample = await remotive({ text: options?.query || 'Engineer', perPage: 20 });
       return remotiveSampleToUnified(sample, source.id);
     }
-    if (source.type === 'telegram') return fetchTelegramChannel(source);
+    if (source.type === 'telegram') return fetchTelegramChannel(source, sleep);
     if (source.type === 'rss') return fetchRssFeed(source, options);
     if (source.type === 'career_site' || source.type === 'json_api') {
       return fetchJsonOrCareerSite(source, options, deps, sleep, now, linkedinBudget);

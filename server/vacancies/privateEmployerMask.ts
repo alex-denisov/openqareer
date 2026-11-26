@@ -1,3 +1,4 @@
+import { isJobCommunityName } from '../../shared/jobCommunity';
 import { PRIVATE_EMPLOYER, publicEmployerName } from '../../shared/privateEmployer';
 
 interface EmployerCluster {
@@ -15,16 +16,20 @@ export function isPrivateEmployerCluster(cluster: EmployerCluster): boolean {
 /**
  * CPO 26.10: кабинет, как публичный каталог (#100), не показывает ФИО
  * работодателя. Имя заменяется до ответа, поэтому в клиент оно не уходит.
+ * Имя страницы-сообщества вакансий работодателем не показывается (B801).
  */
 export function maskPrivateEmployers<T extends { readonly cluster: EmployerCluster }>(
   items: readonly T[],
 ): T[] {
-  return items.map((item) =>
-    isPrivateEmployerCluster(item.cluster)
-      ? {
-          ...item,
-          cluster: { ...item.cluster, canonicalCompany: PRIVATE_EMPLOYER, employerIsPerson: true },
-        }
-      : item,
-  );
+  return items.map((item) => {
+    if (isPrivateEmployerCluster(item.cluster)) {
+      return {
+        ...item,
+        cluster: { ...item.cluster, canonicalCompany: PRIVATE_EMPLOYER, employerIsPerson: true },
+      };
+    }
+    return isJobCommunityName(item.cluster.canonicalCompany)
+      ? { ...item, cluster: { ...item.cluster, canonicalCompany: '' } }
+      : item;
+  });
 }

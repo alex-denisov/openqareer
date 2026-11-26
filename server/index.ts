@@ -1,4 +1,7 @@
 import { buildApp } from './app';
+import { DatabaseSync } from 'node:sqlite';
+import { candidateFlagLookup, queueDueRaises } from './candidate/hhRaiseQueue';
+import { SqliteHhRaiseRepository } from './candidate/sqliteHhRaiseRepository';
 import { captureCpuProfileOnSignal } from './observability/cpuProfileOnSignal';
 import { readServerConfig } from './config';
 import { scheduleLandingStatsRefresh } from './landing/landingStatsSchedule';
@@ -9,7 +12,9 @@ import { buildResumeStructurer } from './providers/resumeStructurer';
 import { buildRoleNamer } from './providers/roleNamer';
 import { buildCampaignRoleModel } from './providers/campaignRoleModel';
 import { buildSkillQuizModel } from './providers/skillQuizModel';
+import { buildSkillNameTranslator } from './providers/skillNameTranslator';
 import {
+  buildContactMessageWriter,
   buildEnabledCoverLetterWriter,
   COVER_LETTER_VERTEX_TIMEOUT_MS,
 } from './providers/coverLetterWriter';
@@ -33,6 +38,8 @@ import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { readSmmConfig, startSmmAssistant } from './smm/smmRuntime';
 import { AuthService } from './auth/authService';
 import { buildEmailVerificationSender } from './auth/emailVerificationEmail';
+import { buildAppSignInNotifier } from './auth/appSignInEmail';
+import { buildPasskeyAddedNotifier } from './auth/passkeyAddedEmail';
 import { buildPasswordResetNotifier } from './auth/passwordResetEmail';
 import { searchHhVacancies } from './connectors/hhVacancySearch';
 import { searchRemotiveVacancies } from './connectors/remotiveVacancySearch';
@@ -56,6 +63,11 @@ import { linkedinProfileDirectory } from './linkedinPool/linkedinProfileDirector
 import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
 import { FOREIGN_COMMIT_GRACE_MS } from './data/sqliteSnapshotMemo';
 import { MatchedPoolPrecompute } from './vacancies/matchedPoolPrecompute';
+import { labelledTimer } from './observability/backgroundSteps';
+import { backfillApplicationDescriptions } from './data/applicationDescriptionBackfill';
+import { applySqliteBusyTimeout } from './data/sqliteBusyTimeout';
+import { SealedText } from './data/sealedText';
+import { snapshotWithDescription } from './routes/applicationVacancyText';
 import { openVacancyDemandStore } from './vacancies/vacancyDemandStore';
 
 const config = readServerConfig(process.env);
@@ -79,6 +91,16 @@ const authService = new AuthService({
   ...(config.accountEmail
     ? {
         onPasswordReset: buildPasswordResetNotifier({
+          apiKey: config.accountEmail.apiKey,
+          from: config.accountEmail.from,
+          publicBaseUrl: config.accountEmail.publicBaseUrl,
+        }),
+        onPasskeyAdded: buildPasskeyAddedNotifier({
+          apiKey: config.accountEmail.apiKey,
+          from: config.accountEmail.from,
+          publicBaseUrl: config.accountEmail.publicBaseUrl,
+        }),
+        onAppSignIn: buildAppSignInNotifier({
           apiKey: config.accountEmail.apiKey,
           from: config.accountEmail.from,
           publicBaseUrl: config.accountEmail.publicBaseUrl,
@@ -196,7 +218,20 @@ const linkedinRemoteLogin = new LinkedinRemoteLoginService({
     warn: (fields, message) => app.log.warn(fields, message),
   },
 });
+// SMM-агент владельца (09.11): только на проде, где задан OPENQAREER_SMM_ENABLED=1.
+// B732: обновления своего чата он получает с общего вебхука бота, опроса Bot API нет.
+const smmConfig = process.env.OPENQAREER_SMM_ENABLED === '1' ? readSmmConfig(process.env) : null;
+const smmAssistant = smmConfig
+  ? startSmmAssistant({
+      databasePath: config.databasePath,
+      config: smmConfig,
+      getResumeCandidate: (candidateId) => candidateStore.getResumeCandidate(candidateId),
+      log: (event, detail = {}) =>
+        process.stdout.write(`${JSON.stringify({ level: 30, time: Date.now(), msg: event, ...detail })}\n`),
+    })
+  : null;
 const app = await buildApp({
+  ...(smmAssistant ? { smmTelegram: smmAssistant } : {}),
   config,
   coachProvider,
   bulkLlmRuntime,
@@ -256,6 +291,8 @@ const app = await buildApp({
     vertex: config.vertex,
     vertexFetch: meteredVertexFetchFor(config.vertex, config.databasePath, 'campaignRoles'),
   }),
+  // B734: русские названия навыков проверки роли — та же дешёвая цепочка, что у квиза.
+  skillNameTranslator: buildSkillNameTranslator({ providerCredentials: config.providerCredentials }),
   // В журнал: какая ступень ответила на вопросы квиза и за сколько.
   skillQuizModel: buildSkillQuizModel({
     providerCredentials: config.providerCredentials,
@@ -275,6 +312,8 @@ const app = await buildApp({
       COVER_LETTER_VERTEX_TIMEOUT_MS,
     ),
   }),
+  // B753: сообщение знакомому и рекрутёру — своя цепочка, GLM первым, без Vertex.
+  contactMessageWriter: buildContactMessageWriter({ providerCredentials: config.providerCredentials }),
   serveStatic: process.env.NODE_ENV === 'production',
 });
 matchedPoolPrecompute.setLogger(app.log);
@@ -285,6 +324,7 @@ let recruiterIntelligenceTimer: NodeJS.Timeout | undefined;
 let documentRetentionTimer: NodeJS.Timeout | undefined;
 let retentionSweepTimer: NodeJS.Timeout | undefined;
 let matchedPoolPrecomputeTimer: NodeJS.Timeout | undefined;
+let hhRaiseQueueTimer: NodeJS.Timeout | undefined;
 let linkedinPoolSessionExpiryTimer: NodeJS.Timeout | undefined;
 let linkedinPoolSessionExpiryRetryTimer: NodeJS.Timeout | undefined;
 
@@ -366,6 +406,28 @@ function runRetentionSweep(): void {
   }
 }
 
+/** B635: раз за запуск — описание вакансии старым откликам, пока она в пуле. */
+async function runApplicationDescriptionBackfill(): Promise<void> {
+  const database = new DatabaseSync(config.databasePath);
+  try {
+    applySqliteBusyTimeout(database);
+    const result = await backfillApplicationDescriptions({
+      database,
+      sealedText: new SealedText(config.dataEncryptionKey),
+      enrich: (clusterId, snapshot) => snapshotWithDescription(vacancyEngine.engine, clusterId, snapshot),
+      pause: () => new Promise((resolve) => setTimeout(resolve, 50).unref()),
+    });
+    app.log.info({ ...result }, 'application-description-backfill-completed');
+  } catch (error) {
+    app.log.error(
+      { errorName: error instanceof Error ? error.name : 'UnknownError' },
+      'application-description-backfill-failed',
+    );
+  } finally {
+    database.close();
+  }
+}
+
 function runLinkedinPoolSessionExpiryPurge(): void {
   try {
     const purged = linkedinPool.purgeExpiredSessionCookies();
@@ -395,6 +457,7 @@ async function shutdown(signal: string): Promise<void> {
   if (recruiterIntelligenceTimer) clearInterval(recruiterIntelligenceTimer);
   if (documentRetentionTimer) clearInterval(documentRetentionTimer);
   if (retentionSweepTimer) clearInterval(retentionSweepTimer);
+  if (hhRaiseQueueTimer) clearInterval(hhRaiseQueueTimer);
   if (matchedPoolPrecomputeTimer) clearInterval(matchedPoolPrecomputeTimer);
   if (linkedinPoolSessionExpiryTimer) clearInterval(linkedinPoolSessionExpiryTimer);
   if (linkedinPoolSessionExpiryRetryTimer) clearTimeout(linkedinPoolSessionExpiryRetryTimer);
@@ -423,21 +486,15 @@ try {
     info: (details: Record<string, unknown>, message: string) => app.log.info(details, message),
     error: (details: Record<string, unknown>, message: string) => app.log.error(details, message),
   };
+  // B776: periodic web work under its own name, so a stall is not blamed on a catalog page waiting behind it.
+  const webStep = (name: string, run: () => unknown) =>
+    labelledTimer(name, run, (error) =>
+      app.log.error({ step: name, errorName: error instanceof Error ? error.name : 'UnknownError' }, 'web-step-failed'),
+    );
   scheduleLandingStatsRefresh(config.databasePath, scheduleLog);
   scheduleCurrencyRatesRefresh(config.databasePath, scheduleLog);
   // Sitemap files written by the maintenance process; the HTTP path reads memory only.
   scheduleCatalogSitemapRefresh(config.databasePath, scheduleLog);
-  // SMM-агент владельца (09.11): только на проде, где задан OPENQAREER_SMM_ENABLED=1, —
-  // иначе настольное приложение с тем же токеном перебивало бы опрос Bot API (409).
-  const smmConfig = process.env.OPENQAREER_SMM_ENABLED === '1' ? readSmmConfig(process.env) : null;
-  if (smmConfig) {
-    startSmmAssistant({
-      databasePath: config.databasePath,
-      config: smmConfig,
-      getResumeCandidate: (candidateId) => candidateStore.getResumeCandidate(candidateId),
-      log: (event, detail = {}) => app.log.info(detail, event),
-    });
-  }
   // Сервер слушает и отвечает на /health мгновенно (<10 мс). Пул читается
   // из базы постранично, пополняет его обслуживатель (B230) — на этом цикле
   // событий ни восстановления, ни сведения, ни опросов нет.
@@ -446,13 +503,15 @@ try {
       { mode: 'lazy-read', clusters: 'deferred', sourceSync: 'maintenance-process' },
       'vacancy-pool-ready',
     );
-    runDocumentRetentionPurge();
-    runRetentionSweep();
+    webStep('web:document-retention', runDocumentRetentionPurge)();
+    webStep('web:retention-sweep', runRetentionSweep)();
   }, 30_000)?.unref();
+  // После окна здоровья выкатки.
+  setTimeout(() => void runApplicationDescriptionBackfill(), 90_000).unref();
   // Первый semantic-read не платит за создание отдельного SQLite-процесса.
   // Это только запуск reader: данные и SQL остаются запросом кандидата, а
   // HTTP уже слушает, когда OS начинает создавать дочерний процесс.
-  setImmediate(() => vacancyEngine.pool.warmMatchReader()).unref();
+  setImmediate(webStep('web:match-reader-start', () => vacancyEngine.pool.warmMatchReader())).unref();
   // Снимки считаются через тот же изолированный reader, но до первого
   // кандидатского запроса и далее без параллельного дискового шквала.
   setImmediate(() => {
@@ -465,17 +524,34 @@ try {
     5 * 60 * 1_000,
   );
   matchedPoolPrecomputeTimer.unref();
-  vacancyRefreshTimer = setInterval(runVacancyRefresh, 5 * 60 * 1_000);
+  vacancyRefreshTimer = setInterval(webStep('web:vacancy-refresh', runVacancyRefresh), 5 * 60 * 1_000);
   vacancyRefreshTimer.unref();
-  recruiterIntelligenceTimer = setInterval(runRecruiterIntelligence, 5_000);
+  recruiterIntelligenceTimer = setInterval(webStep('web:recruiter-intelligence', runRecruiterIntelligence), 5_000);
   recruiterIntelligenceTimer.unref();
-  documentRetentionTimer = setInterval(runDocumentRetentionPurge, 5 * 60 * 1_000);
+  documentRetentionTimer = setInterval(webStep('web:document-retention', runDocumentRetentionPurge), 5 * 60 * 1_000);
   documentRetentionTimer.unref();
   // Сроки измеряются годами и месяцами, поэтому час — достаточная частота.
-  retentionSweepTimer = setInterval(runRetentionSweep, 60 * 60 * 1_000);
+  retentionSweepTimer = setInterval(webStep('web:retention-sweep', runRetentionSweep), 60 * 60 * 1_000);
   retentionSweepTimer.unref();
+  // B699: только ставит поднятия резюме в очередь кандидатам с флагом; в hh не ходит.
+  // Включается OPENQAREER_HH_AUTO_RAISE=1 после первого живого подъёма, показанного оркестратору.
+  if (process.env.OPENQAREER_HH_AUTO_RAISE === '1') {
+    const hhRaiseRepository = new SqliteHhRaiseRepository({ databasePath: config.databasePath });
+    const hhRaiseFlag = candidateFlagLookup(new DatabaseSync(config.databasePath, { readOnly: true }), config);
+    hhRaiseQueueTimer = setInterval(
+      webStep('web:hh-raise-queue', () => {
+        try {
+          queueDueRaises(hhRaiseRepository, new Date(), hhRaiseFlag);
+        } catch (error) {
+          app.log.error({ errorName: error instanceof Error ? error.name : 'UnknownError' }, 'hh-raise-queue-failed');
+        }
+      }),
+      60_000,
+    );
+    hhRaiseQueueTimer.unref();
+  }
   // Expired LinkedIn bearer cookies are removed at most fifteen minutes after li_at expiry.
-  linkedinPoolSessionExpiryTimer = setInterval(runLinkedinPoolSessionExpiryPurge, 15 * 60 * 1_000);
+  linkedinPoolSessionExpiryTimer = setInterval(webStep('web:linkedin-session-purge', runLinkedinPoolSessionExpiryPurge), 15 * 60 * 1_000);
   linkedinPoolSessionExpiryTimer.unref();
 } catch (error) {
   app.log.fatal(

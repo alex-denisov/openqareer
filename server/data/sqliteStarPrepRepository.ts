@@ -6,7 +6,8 @@ export interface StarPrepParagraphRecord {
   readonly questionId: string;
   readonly field: 'situation' | 'task' | 'action' | 'result';
   readonly text: string;
-  readonly sourceFactId: string;
+  /** `null` — ответ кандидат написал сам. */
+  readonly sourceFactId: string | null;
 }
 
 export interface StoredStarPrep {
