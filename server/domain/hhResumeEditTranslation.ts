@@ -51,6 +51,10 @@ function inLanguage(text: string, language: HhEditLanguage): boolean {
  * исходнике. Это перевод уже подтверждённого текста, а не новый пункт: длина и «я» берутся от исходника.
  * «О себе» — собственный текст кандидата от первого лица: проверка личного действия нужна только опыту.
  */
+/** B787: exit через продажу — продажа компании; «вышла из бизнеса» по-русски значит «закрылась». */
+const EXIT_SOURCE = /\b(?:exit|acquisition|acquired)\b/iu;
+const EXIT_AS_CLOSURE = /(?:вы(?:шл|ход|ше)\p{L}*|покину\p{L}*|уш[её]л\p{L}*)\s+(?:из\s+)?бизнес/iu;
+
 export function checkedTranslation(
   source: string,
   answer: string | undefined,
@@ -61,6 +65,7 @@ export function checkedTranslation(
   if (!text || text.length > Math.max(LENGTH_FLOOR, source.length * LENGTH_RATIO)) return null;
   if (!numbersAreSourced(text, [source]) || arithmeticFails(text) || !inLanguage(text, language)) return null;
   if (speaksInFirstPerson(text) && !speaksInFirstPerson(source)) return null;
+  if (language === 'ru' && EXIT_SOURCE.test(source) && EXIT_AS_CLOSURE.test(text)) return null;
   if (section === 'experience' && !opensWithOwnVerb(source) && addsPersonalAction(source, text)) return null;
   return text;
 }

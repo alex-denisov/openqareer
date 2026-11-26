@@ -77,3 +77,20 @@ describe('B678: «станет» на языке резюме hh.ru', () => {
     expect(sent).toBe(TRANSLATED_LINES_MAX);
   });
 });
+
+describe('B787: exit через продажу не переводится как закрытие', () => {
+  const source = 'Led the company to a successful exit through acquisition by a US fund.';
+  it('«вышла из бизнеса» отклоняется', async () => {
+    const { checkedTranslation } = await import('./hhResumeEditTranslation');
+    expect(checkedTranslation(source, 'Компания успешно вышла из бизнеса в результате приобретения фондом США.', 'ru')).toBeNull();
+  });
+  it('«состоялась продажа компании» принимается', async () => {
+    const { checkedTranslation } = await import('./hhResumeEditTranslation');
+    const text = 'Вывел компанию на продажу: состоялась продажа компании фонду США.';
+    expect(checkedTranslation(source, text, 'ru')).toBe(text);
+  });
+  it('промпт перевода называет exit продажей', async () => {
+    const { BULLET_TRANSLATION_INSTRUCTIONS } = await import('./experienceBulletLanguage');
+    expect(BULLET_TRANSLATION_INSTRUCTIONS).toContain('состоялась продажа компании');
+  });
+});
