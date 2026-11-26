@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { RewriteMemory } from './experienceFactRewrite';
+import {
+  buildFactRewriteRequest,
+  factRewriteDigest,
+  type RewriteMemory,
+} from './experienceFactRewrite';
 import type { ResumeDraft } from './resumeDraft';
 import { asksResumeEdit, resumeEditRequest } from './resumeEditRequest';
 
@@ -37,12 +41,27 @@ const draftOf = (extra: Partial<ResumeDraft> = {}): ResumeDraft =>
   }) as ResumeDraft;
 
 const memory = [
-  fact('placed', 'Россети Цифра: стоит в резюме'),
+  fact('placed', 'Improved profitability from 16% to 40%.', { provenance: { kind: 'import' } }),
   fact('margin', 'Россети Цифра: рентабельность 40 %'),
   fact('opti', 'OptiLab AI: 12 внедрений агентов'),
 ];
 
 const ASK = 'Поправь в резюме формулировку опыта в Россети Цифра';
+
+/** Предложение консультанта, сохранённое под текущим входом. */
+function withProposal(draft: ResumeDraft): ResumeDraft {
+  const proposal = {
+    id: 'p1',
+    places: [
+      { experienceId: 'e-opti', bullets: [{ text: 'x', sourceFactIds: ['opti'] }] },
+      { experienceId: 'e-ros', bullets: [{ text: 'y', sourceFactIds: ['margin'] }] },
+    ],
+    leftOutFactIds: [],
+    sourceFactIds: ['opti', 'margin'],
+  };
+  const digest = factRewriteDigest(buildFactRewriteRequest(draft, memory));
+  return { ...draft, factRewriteProposal: { digest, proposal } };
+}
 
 describe('B786: просьба поправить резюме даёт правку K6', () => {
   it('узнаёт просьбу о правке резюме и не путает её с вопросом', () => {
@@ -52,43 +71,34 @@ describe('B786: просьба поправить резюме даёт прав
     expect(asksResumeEdit('Поправь письмо')).toBe(false);
   });
 
-  it('находит не стоящий в резюме факт названного места работы', () => {
-    const request = resumeEditRequest({ memory, resume: { draft: draftOf() } }, ASK);
-    expect(request).toEqual({ factId: 'margin', place: 'Россети Цифра' });
-  });
-
-  it('узнаёт место работы в другом падеже', () => {
-    const request = resumeEditRequest(
-      { memory, resume: { draft: draftOf() } },
-      'Перепиши в резюме строку о Россети Цифре',
-    );
-    expect(request?.factId).toBe('margin');
-  });
-
-  it('берёт факт из готового предложения консультанта для этого места', () => {
-    const proposal = {
-      id: 'p1',
-      places: [
-        { experienceId: 'e-opti', bullets: [{ text: 'x', sourceFactIds: ['opti'] }] },
-        { experienceId: 'e-ros', bullets: [{ text: 'y', sourceFactIds: ['placed', 'margin'] }] },
-      ],
-      leftOutFactIds: [],
-      sourceFactIds: ['opti', 'margin'],
-    };
-    const draft = draftOf({
-      factRewriteProposal: { digest: 'd', proposal },
-    } as unknown as Partial<ResumeDraft>);
-    expect(resumeEditRequest({ memory, resume: { draft } }, ASK)?.factId).toBe('margin');
+  it('берёт пункт из действующего предложения консультанта для названного места', () => {
+    const draft = withProposal(draftOf());
+    expect(resumeEditRequest({ memory, resume: { draft } }, ASK)).toEqual({
+      kind: 'fact',
+      factId: 'margin',
+      place: 'Россети Цифра',
+    });
     expect(resumeEditRequest({ memory, resume: { draft } }, 'Улучши резюме')).toEqual({
+      kind: 'fact',
       factId: 'opti',
       place: '',
     });
   });
 
-  it('не предлагает отклонённый кандидатом факт и молчит, когда ставить нечего', () => {
-    const declined = draftOf({ declinedFactIds: ['margin'] });
-    expect(resumeEditRequest({ memory, resume: { draft: declined } }, ASK)).toBeNull();
+  it('без действующего предложения переписывает строку места, в том числе в другом падеже', () => {
+    const reword = { kind: 'reword', experienceId: 'e-ros', place: 'Россети Цифра' };
+    expect(resumeEditRequest({ memory, resume: { draft: draftOf() } }, ASK)).toEqual(reword);
+    const stale = { ...withProposal(draftOf()), declinedFactIds: ['opti'] };
+    expect(
+      resumeEditRequest({ memory, resume: { draft: stale } }, 'Перепиши в резюме строку о Россети Цифре'),
+    ).toEqual(reword);
+  });
+
+  it('молчит, когда место не названо, строк в нём нет или резюме нет', () => {
     expect(resumeEditRequest({ memory, resume: { draft: draftOf() } }, 'Улучши резюме')).toBeNull();
+    expect(
+      resumeEditRequest({ memory, resume: { draft: draftOf() } }, 'Поправь в резюме OptiLab AI'),
+    ).toBeNull();
     expect(resumeEditRequest({ memory, resume: null }, ASK)).toBeNull();
   });
 });

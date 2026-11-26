@@ -23,6 +23,8 @@ export interface ConsultantReplyExtras {
   readonly corrections?: readonly FactCorrectionProposal[];
   /** B786: кандидат попросил поправить резюме — факт беседы для готовой правки K6; только под последней репликой. */
   readonly resumeFactId?: string;
+  /** B786: новых фактов для места нет — правка K6 переписывает первую строку этого места (experienceId). */
+  readonly resumeRewordPlace?: string;
 }
 
 export function isConsultantReplyAction(value: unknown): value is ConsultantReplyAction {

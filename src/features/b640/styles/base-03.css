@@ -703,6 +703,9 @@
   .b640 .ec-diff .was dd { color: var(--career-text-soft); text-decoration: line-through; text-decoration-color: var(--career-text-dim); }
   .b640 .ec-was > summary { display: inline-flex; align-items: center; min-block-size: var(--career-target-min); color: var(--career-text-soft); font-size: var(--career-text-xs); font-weight: 600; cursor: pointer; }
   .b640 .ec-was > p { margin: 0; color: var(--career-text-soft); font-size: var(--career-text-sm); text-decoration: line-through; text-decoration-color: var(--career-text-dim); }
+  /* B786, k06: «Было» блоком на 1440, свёрнутым «Показать, что было» на 390. */
+  .b640 .ec .ec-was { display: none; }
+  @media (max-width: 767px) { .b640 .ec .ec-diff .was { display: none; } .b640 .ec .ec-was { display: block; } }
   .b640 .ec-diff .now { background: var(--career-accent-soft); }
   .b640 .ec-why { display: flex; gap: var(--career-space-2); margin: 0; color: var(--career-text-soft); font-size: var(--career-text-xs); }
   .b640 .ec-why .ico { flex: none; color: var(--career-text-dim); transform: translateY(2px); }

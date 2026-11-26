@@ -11,6 +11,24 @@ export async function requestFactRewrite(): Promise<FactRewriteProposal | null> 
   return (await readDataObject<{ proposal: FactRewriteProposal | null }>(response)).proposal;
 }
 
+/** B786 (k06): the consultant's rewording of a place's first line, and the line as it is now. */
+export interface FactReword {
+  readonly proposal: FactRewriteProposal;
+  readonly before: string;
+}
+
+export async function requestFactReword(experienceId: string): Promise<FactReword | null> {
+  const response = await apiFetch(`${BASE}/reword`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ experienceId }),
+  });
+  const data = await readDataObject<{ proposal: FactRewriteProposal | null; before?: string }>(
+    response,
+  );
+  return data.proposal ? { proposal: data.proposal, before: data.before ?? '' } : null;
+}
+
 /** Applies the proposal with the candidate's edits: bullet key → new text, or null to remove.
  * `only` — apply just these bullets, the rest stay on offer. */
 export async function applyFactRewrite(

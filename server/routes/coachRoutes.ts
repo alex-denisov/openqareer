@@ -1,6 +1,7 @@
 import { withoutWriteClaims } from '../domain/factCorrection';
 import { correctionCards } from '../domain/factCorrectionProposals';
-import { resumeEditRequest } from '../domain/resumeEditRequest';
+import { resumeEditRequest, type ResumeEditRequest } from '../domain/resumeEditRequest';
+import { prepareReword } from './factRewordRoutes';
 import { registerRoleSkillDemandRoutes } from './roleSkillDemandRoutes';
 import { withSalaryFloorProposal } from '../domain/careerConditionClaim';
 import { selectionClaimsHold, withoutBrokenClaims } from '../coach/selectionClaims';
@@ -143,21 +144,35 @@ function withCheckedMessage<T extends { readonly message: string }>(
  * B796: консультант в профиль не пишет — слова «исправил» заменяются карточкой правки или отказом;
  * о карточке под репликой он знает заранее.
  */
-function honestTurn(
+/**
+ * B786: правка K6 под репликой есть, только если она уже готова: пункт из действующего предложения
+ * или новая формулировка строки, которую модель написала до ответа консультанта.
+ */
+async function editReady(
+  deps: RouteDeps,
+  candidateId: string,
+  edit: ResumeEditRequest | null,
+): Promise<boolean> {
+  if (!edit) return false;
+  if (edit.kind === 'fact') return true;
+  return (await prepareReword(deps, candidateId, edit.experienceId)).state === 'ready';
+}
+
+async function honestTurn(
   deps: RouteDeps,
   candidateId: string,
   input: Parameters<CoachProvider['createTurn']>[0],
-): { readonly input: typeof input; readonly honest: (message: string) => string } {
+): Promise<{ readonly input: typeof input; readonly honest: (message: string) => string }> {
   const latest = input.messages.at(-1);
   if (input.internalPurpose || latest?.role !== 'user') return { input, honest: (message) => message };
   const snapshot = deps.candidateStore.getSnapshot(candidateId);
   const cards = correctionCards(snapshot, latest.content);
-  // B786: на просьбу поправить резюме под репликой встанет готовая правка K6.
   const edit = cards.length > 0 ? null : resumeEditRequest(snapshot, latest.content);
+  const ready = await editReady(deps, candidateId, edit);
   const withCards = cards.length > 0 ? { ...input, correctionCards: cards } : input;
   return {
-    input: edit ? { ...withCards, resumeEditCard: { place: edit.place } } : withCards,
-    honest: (message) => withoutWriteClaims(message, cards.length > 0 || edit !== null),
+    input: edit && ready ? { ...withCards, resumeEditCard: { place: edit.place } } : withCards,
+    honest: (message) => withoutWriteClaims(message, cards.length > 0 || ready),
   };
 }
 
@@ -175,7 +190,7 @@ async function completeTurnWithProvider(
     // 29.10: the consultant's words reach the stream reader while they are written.
     const stream = turnStreamHub(deps);
     const streamId = turnStreamId(candidateId, key);
-    const { input: informed, honest } = honestTurn(deps, candidateId, input);
+    const { input: informed, honest } = await honestTurn(deps, candidateId, input);
     const onMessageText = (text: string) => stream.publish(streamId, honest(text));
     // B735: ответ, которому строки подборки противоречат, пишет следующая ступень.
     const selection = input.careerContext?.selection;

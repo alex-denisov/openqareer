@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { SqliteTextVariantRepository } from '../candidate/sqliteTextVariantRepository';
@@ -9,6 +9,7 @@ import {
   arithmeticFails,
   buildFactRewriteRequest,
   checkFactRewrite,
+  factRewriteDigest,
   InvalidBulletEditError,
   withBulletEdits,
   withOnlyBullets,
@@ -21,6 +22,7 @@ import { EMPTY_RESUME_DRAFT, MAX_REWRITE_BULLETS, type ResumePendingFactRewrite 
 import type { ExperienceFactRewriter } from '../providers/experienceFactRewriter';
 import type { RouteDeps } from './deps';
 import { factRewriteSubject, registerFactRewriteVariantRoutes } from './factRewriteVariantRoutes';
+import { keptRewordTarget, registerFactRewordRoutes } from './factRewordRoutes';
 import {
   authenticateCandidate,
   csrfError,
@@ -36,12 +38,7 @@ type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) =
  * profile text that already is, and a proposal kept before 01.11 must still
  * match so it is translated rather than written anew.
  */
-function requestDigest(request: FactRewriteRequest): string {
-  const places = request.places.map(({ language: _language, ...place }) => place);
-  return createHash('sha256')
-    .update(JSON.stringify({ ...request, places }))
-    .digest('hex');
-}
+const requestDigest = factRewriteDigest;
 
 function rewriteRequestOf(snapshot: CandidateSnapshot): FactRewriteRequest {
   return buildFactRewriteRequest(snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT, snapshot.memory);
@@ -256,14 +253,38 @@ function variantTextOf(
   return stored.find((variant) => variant.id === body.variantId)?.text ?? null;
 }
 
+/** The proposal of new facts or, B786, the rewording of a line (k06). */
+function pendingById(snapshot: CandidateSnapshot, id: string): ResumePendingFactRewrite | null {
+  const draft = snapshot.resume?.draft;
+  return (
+    [draft?.factRewriteProposal, draft?.factRewordProposal].find(
+      (pending) => pending?.proposal.id === id,
+    ) ?? null
+  );
+}
+
+/** Variants of a rewording read their facts from memory: they are not the facts on offer. */
+function variantSourceOf(snapshot: CandidateSnapshot, id: string) {
+  const pending = pendingById(snapshot, id);
+  const request = rewriteRequestOf(snapshot);
+  if (pending?.digest !== requestDigest(request)) return null;
+  if (pending !== snapshot.resume?.draft.factRewordProposal) {
+    return { proposal: pending.proposal, request };
+  }
+  // Факты строятся заново, как при подготовке: ставшие чувствительными или неподтверждёнными к модели не идут.
+  const target = keptRewordTarget(snapshot, pending.proposal);
+  if (!target) return null;
+  return { proposal: pending.proposal, request: { ...request, facts: target.facts } };
+}
+
 const handleApply = (variants: SqliteTextVariantRepository): Handler => async (deps, request, reply) => {
   const candidate = signedInCandidate(deps, request, reply);
   if (!candidate) return undefined;
   const { id } = idParams.parse(request.params);
   const body = applyBody.safeParse(request.body ?? undefined);
   if (!body.success) return editError(request, reply);
-  const pending = deps.candidateStore.getSnapshot(candidate.id).resume?.draft.factRewriteProposal;
-  if (pending?.proposal.id !== id) return staleError(request, reply);
+  const pending = pendingById(deps.candidateStore.getSnapshot(candidate.id), id);
+  if (!pending) return staleError(request, reply);
   const variantText = variantTextOf(variants, candidate.id, id, body.data);
   if (variantText === null) return editError(request, reply);
   const proposal = editedProposal(pending.proposal, body.data?.edits ?? {}, body.data?.only, variantText);
@@ -306,11 +327,8 @@ export async function registerExperienceFactRewriteRoutes(
   app.post('/api/v1/candidate/experience-fact-rewrite/:id/revert', withDeps(deps, handleRevert));
   registerFactRewriteVariantRoutes(app, deps, {
     variants,
-    current: (bound, candidateId) => {
-      const snapshot = bound.candidateStore.getSnapshot(candidateId);
-      const pending = snapshot.resume?.draft.factRewriteProposal;
-      const request = rewriteRequestOf(snapshot);
-      return pending?.digest === requestDigest(request) ? { proposal: pending.proposal, request } : null;
-    },
+    current: (bound, candidateId, id) =>
+      variantSourceOf(bound.candidateStore.getSnapshot(candidateId), id),
   });
+  registerFactRewordRoutes(app, deps);
 }

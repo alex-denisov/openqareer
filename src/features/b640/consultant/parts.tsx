@@ -8,9 +8,11 @@ import type { ChatMessage } from './model';
 export function ErrorRow({
   text,
   onRetry,
+  retryLabel = 'Повторить',
 }: {
   readonly text: string;
   readonly onRetry?: () => void;
+  readonly retryLabel?: string;
 }) {
   return (
     <p className="res-row is-err" role="alert">
@@ -18,7 +20,7 @@ export function ErrorRow({
       <span className="res-t">{text}</span>
       {onRetry ? (
         <button className="res-act" type="button" onClick={onRetry}>
-          Повторить
+          {retryLabel}
         </button>
       ) : null}
     </p>

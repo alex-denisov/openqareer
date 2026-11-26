@@ -143,6 +143,7 @@ function saveFactRewriteProposal(
   candidateId: string,
   pending: ResumePendingFactRewrite,
   isCurrent: (snapshot: CandidateSnapshot) => boolean,
+  field: 'factRewriteProposal' | 'factRewordProposal' = 'factRewriteProposal',
 ): boolean {
   deps.requireCandidate(candidateId);
   return deps.transaction(() => {
@@ -151,7 +152,7 @@ function saveFactRewriteProposal(
     if (!draft || !isCurrent(snapshot)) return false;
     deps.saveResumeDraft(
       candidateId,
-      { ...draft, factRewriteProposal: pending },
+      { ...draft, [field]: pending },
       snapshot.resume?.evidenceSnapshot ?? [],
     );
     return true;
@@ -207,7 +208,8 @@ export function createMemoryMethods(deps: MemoryMethodDeps) {
       candidateId: string,
       pending: ResumePendingFactRewrite,
       isCurrent: (snapshot: CandidateSnapshot) => boolean,
-    ): boolean => saveFactRewriteProposal(deps, candidateId, pending, isCurrent),
+      field?: 'factRewriteProposal' | 'factRewordProposal',
+    ): boolean => saveFactRewriteProposal(deps, candidateId, pending, isCurrent, field),
     revertExperienceFactRewrite: (candidateId: string, rewriteId: string): boolean =>
       revertExperienceFactRewrite(deps, candidateId, rewriteId),
     reviewMemories: (
