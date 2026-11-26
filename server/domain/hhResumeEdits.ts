@@ -1,10 +1,6 @@
 import { factEdits } from './hhResumeFactEdits';
 import { isPositionTerms } from '../../shared/hhPositionTerms';
-import {
-  hhSectionsRead,
-  type HhResumeEdit,
-  type HhResumeSections,
-} from '../../shared/hhCandidateSession';
+import { hhSectionsRead, type HhResumeEdit, type HhResumeSections } from '../../shared/hhCandidateSession';
 
 /**
  * B678: правки резюме hh.ru «было → станет». Платформа ничего не придумывает: «станет» — то, что
@@ -23,11 +19,7 @@ export interface HhPlatformPlace {
 }
 
 export interface HhEditsInput {
-  readonly resume: {
-    readonly id: string;
-    readonly title: string;
-    readonly sections: HhResumeSections;
-  };
+  readonly resume: { readonly id: string; readonly title: string; readonly sections: HhResumeSections };
   readonly vacancy: {
     readonly title: string;
     readonly requirements: readonly string[];
@@ -51,8 +43,7 @@ const PLACE_LINES_MAX = 8;
 const EMPLOYER_KEY_MIN = 3;
 /** Навык длиннее — не навык, а фраза из описания вакансии. */
 const SKILL_MAX = 80;
-const LEGAL_FORMS =
-  /(?<![\p{L}\p{N}])(?:ооо|оао|ао|пао|зао|нао|ип|llc|ltd|inc|gmbh|plc|bhd|berhad|sdn)(?![\p{L}\p{N}])/giu;
+const LEGAL_FORMS = /(?<![\p{L}\p{N}])(?:ооо|оао|ао|пао|зао|нао|ип|llc|ltd|inc|gmbh|plc|bhd|berhad|sdn)(?![\p{L}\p{N}])/giu;
 
 function normalized(value: string): string {
   return value
@@ -86,23 +77,15 @@ function samePlace(hhEmployer: string, place: HhPlatformPlace): boolean {
   if (hh.length < EMPLOYER_KEY_MIN) return false;
   return [place.employer, ...place.aliases].some((name) => {
     const key = employerKey(name);
-    return (
-      key.length >= EMPLOYER_KEY_MIN &&
-      (` ${hh} `.includes(` ${key} `) || ` ${key} `.includes(` ${hh} `))
-    );
+    return key.length >= EMPLOYER_KEY_MIN && (` ${hh} `.includes(` ${key} `) || ` ${key} `.includes(` ${hh} `));
   });
 }
 
 /** Каждое место профиля платформы достаётся не больше чем одному месту hh.ru: первому совпавшему. */
 function matchedPlaces(input: HhEditsInput): ReadonlyArray<HhPlatformPlace | undefined> {
-  return input.resume.sections.places.reduce<{
-    readonly used: ReadonlySet<string>;
-    readonly found: Array<HhPlatformPlace | undefined>;
-  }>(
+  return input.resume.sections.places.reduce<{ readonly used: ReadonlySet<string>; readonly found: Array<HhPlatformPlace | undefined> }>(
     (state, place) => {
-      const source = input.platform.places.find(
-        (candidate) => !state.used.has(candidate.id) && samePlace(place.employer, candidate),
-      );
+      const source = input.platform.places.find((candidate) => !state.used.has(candidate.id) && samePlace(place.employer, candidate));
       return {
         used: source ? new Set([...state.used, source.id]) : state.used,
         found: [...state.found, source],
@@ -116,10 +99,7 @@ function experienceEdits(input: HhEditsInput): HhEditDraft[] {
   const sources = matchedPlaces(input);
   return input.resume.sections.places.flatMap((place, index) => {
     const source = sources[index];
-    const lines = (source?.bullets ?? [])
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .slice(0, PLACE_LINES_MAX);
+    const lines = (source?.bullets ?? []).map((line) => line.trim()).filter(Boolean).slice(0, PLACE_LINES_MAX);
     const now = lines.join('\n');
     if (lines.length === 0 || normalized(now) === normalized(place.text)) return [];
     return [
@@ -140,12 +120,7 @@ function experienceEdits(input: HhEditsInput): HhEditDraft[] {
 
 function skillsEdit(input: HhEditsInput): HhEditDraft[] {
   const { sections } = input.resume;
-  const resumeText = [
-    sections.title,
-    sections.about,
-    ...sections.skills,
-    ...sections.places.map((place) => place.text),
-  ].join(' ');
+  const resumeText = [sections.title, sections.about, ...sections.skills, ...sections.places.map((place) => place.text)].join(' ');
   const added = input.vacancy.requirements.filter(
     (requirement) =>
       requirement.trim() &&
@@ -157,24 +132,14 @@ function skillsEdit(input: HhEditsInput): HhEditDraft[] {
   const was = sections.skills.join(', ');
   const now = [...sections.skills, ...added.map((item) => item.trim())].join(', ');
   const trimmed = added.map((item) => item.trim());
-  return [
-    {
-      id: 'skills',
-      section: 'skills',
-      was,
-      now,
-      language: hhResumeLanguage(sections),
-      added: trimmed,
-    },
-  ];
+  return [{ id: 'skills', section: 'skills', was, now, language: hhResumeLanguage(sections), added: trimmed }];
 }
 
 function aboutEdit(input: HhEditsInput): HhEditDraft[] {
   const now = input.platform.about?.trim() ?? '';
   const { about: was, aboutRead } = input.resume.sections;
   // Непрочитанный раздел не правим: «станет» затёрло бы текст, которого мы не видели.
-  if (aboutRead !== true || !now || isPositionTerms(was) || normalized(now) === normalized(was))
-    return [];
+  if (aboutRead !== true || !now || isPositionTerms(was) || normalized(now) === normalized(was)) return [];
   return [{ id: 'about', section: 'about', was, now, language: languageOf(now) }];
 }
 
