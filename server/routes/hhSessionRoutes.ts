@@ -315,7 +315,7 @@ export async function hhResumeEditsOf(
   cluster: VacancyCluster,
   vacancyId: string,
 ): Promise<readonly HhResumeEdit[]> {
-  const key = editsCacheKey(candidateId, resume, vacancyId);
+  const key = editsCacheKey(candidateId, hhEditsInput(deps, candidateId, resume, cluster, vacancyId), vacancyId);
   const cached = cachedEdits(key);
   if (cached) return cached;
   if (editsInFlight.has(key)) return [];
@@ -389,7 +389,7 @@ const getEdits: Handler = async (deps, request, reply) => {
   const found = await hhResumeEditsOf(deps, candidateId, selected, cluster, vacancyId);
   const edits = withVariantSubjects(deps, candidateId, selected, cluster, vacancyId, found);
   // B787: перевод ещё идёт — экран повторит запрос, а не покажет «правок нет».
-  const pending = editsPending(editsCacheKey(candidateId, selected, vacancyId));
+  const pending = editsPending(editsCacheKey(candidateId, hhEditsInput(deps, candidateId, selected, cluster, vacancyId), vacancyId));
   return { data: { resumeId: selected.id, vacancyId, edits, ...(pending ? { pending } : {}) }, meta: { requestId: request.id } };
 };
 
