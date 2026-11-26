@@ -209,6 +209,21 @@ pub fn is_confirmation(target: &AtsTarget, url: &str) -> bool {
         })
 }
 
+/// What confirmed the application, for the diagnostic log: the board's
+/// confirmation path or a thank-you page, and the path with every word that is
+/// not a known one masked (`x_jobs_x_confirmation`). No ids, no query.
+pub fn confirmation_sign(target: &AtsTarget, url: &str) -> Option<String> {
+    let kind = if is_confirmation(target, url) {
+        "path"
+    } else if thanks_in_place(target, url) {
+        "thanks"
+    } else {
+        return None;
+    };
+    let path = Url::parse(url).ok()?.path().to_string();
+    Some(format!("{kind}:{}", crate::ats_model::path_code(&path)))
+}
+
 /// Boards that thank on the form's own address; the page knows each one's sign.
 const THANKS_IN_PLACE: &[&str] = &["ashby", "workable", "teamtailor", "pinpoint", "bamboohr"];
 
@@ -451,6 +466,27 @@ mod tests {
         assert!(!at("?for=other&token=123"));
         assert!(!at("?for=acme&token=123&token=124"));
         assert!(!at("?for=acme"));
+    }
+
+    #[test]
+    fn the_log_names_the_sign_without_ids() {
+        let sign = |path: &str| {
+            confirmation_sign(&acme(), &format!("https://job-boards.greenhouse.io{path}"))
+        };
+        let shown = sign("/acme/jobs/123/confirmation?email=a@b.c").expect("confirmed");
+        assert_eq!(shown, "path:x_jobs_x_confirmation");
+        assert!(!shown.contains("123") && !shown.contains("acme") && !shown.contains('@'));
+        assert_eq!(sign("/acme/jobs/123"), None);
+        let target = resolve("https://acme.teamtailor.com/jobs/8-x", None).unwrap();
+        let thanks = confirmation_sign(
+            &target,
+            "https://acme.teamtailor.com/jobs/8-x/applications/9f3c2a71",
+        )
+        .unwrap();
+        assert!(
+            thanks.starts_with("thanks:") && !thanks.contains("9f3c") && !thanks.contains("8-x"),
+            "{thanks}"
+        );
     }
 
     #[test]

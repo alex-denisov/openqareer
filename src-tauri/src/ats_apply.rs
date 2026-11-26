@@ -15,8 +15,8 @@ use crate::ats_model::{
     MAX_CONSENTS,
 };
 use crate::ats_target::{
-    is_confirmation, navigation_allowed, on_target, resolve, sent_base, thanks_in_place,
-    thanks_paths, top_level_allowed, AtsTarget,
+    confirmation_sign, is_confirmation, navigation_allowed, on_target, resolve, sent_base,
+    thanks_in_place, thanks_paths, top_level_allowed, AtsTarget,
 };
 use crate::connector_session::{
     append_connector_diagnostic, candidate_store, candidate_store_of, eval_json,
@@ -485,6 +485,10 @@ async fn read_outcome(
 /// Where the board left the window when it did not confirm: the path alone.
 fn note_outcome(app: &AppHandle, event: &str, target: &AtsTarget, outcome: &str) {
     note(app, event, &format!("{}_{outcome}", target.adapter));
+    if outcome == "confirmed" {
+        let sign = window_location(app).and_then(|url| confirmation_sign(target, url.as_str()));
+        note(app, "confirmed_by", sign.as_deref().unwrap_or("none"));
+    }
     if outcome == "unconfirmed" {
         let path = window_location(app).map(|url| path_code(url.path()));
         note(app, "unconfirmed_path", path.as_deref().unwrap_or("none"));

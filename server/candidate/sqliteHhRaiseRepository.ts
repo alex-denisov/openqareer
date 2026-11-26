@@ -200,6 +200,18 @@ export class SqliteHhRaiseRepository {
     return { raisedAt, loggedOutFrom: out?.at ?? null };
   }
 
+  /** B704: вход жив — пауза «нужен вход» снята со всех резюме кандидата, поднятие снова по расписанию. */
+  markAlive(candidateId: string, nextRaiseAt: string): number {
+    return Number(
+      this.database
+        .prepare(
+          `UPDATE hh_raise_schedules SET pause_reason = NULL, next_raise_at = COALESCE(next_raise_at, ?)
+           WHERE candidate_id = ? AND pause_reason = 'logged_out'`,
+        )
+        .run(nextRaiseAt, candidateId).changes,
+    );
+  }
+
   hasOpenTask(candidateId: string, resumeId: string): boolean {
     return this.database
       .prepare(`SELECT 1 FROM hh_raise_tasks WHERE candidate_id = ? AND resume_id = ? AND status != 'done'`)

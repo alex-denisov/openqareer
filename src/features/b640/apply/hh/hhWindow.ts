@@ -14,8 +14,11 @@ const HH_PAGE = /^https:\/\/(?:[a-z0-9-]+\.)*hh\.ru\//u;
 
 export type HhWindowState = 'ready' | 'signed_out';
 
-/** Ждёт, пока окно покажет вошедшего; капчу окна вызывающий видит сам. */
-async function settleHhWindow(): Promise<HhWindowState> {
+/**
+ * Ждёт, пока окно покажет вошедшего; капчу окна вызывающий видит сам. `confirmed`: невошедший — только
+ * на странице входа, иначе (403, сбой, пустая страница) окно не загрузилось.
+ */
+async function settleHhWindow(confirmed = false): Promise<HhWindowState> {
   const deadline = Date.now() + HH_WINDOW_READY_MS;
   let signedOutSince: number | null = null;
   while (Date.now() < deadline) {
@@ -23,8 +26,9 @@ async function settleHhWindow(): Promise<HhWindowState> {
     const page = await inspectSessionPage('hh').catch(() => null);
     if (page?.ready && HH_PAGE.test(page.url)) {
       if (!page.login && (page.signedInApplicant || page.captcha)) return 'ready';
-      signedOutSince ??= Date.now();
-      if (Date.now() - signedOutSince >= HH_SIGNED_OUT_SETTLE_MS) return 'signed_out';
+      const signedOut = page.login || !confirmed;
+      signedOutSince = signedOut ? (signedOutSince ?? Date.now()) : null;
+      if (signedOutSince !== null && Date.now() - signedOutSince >= HH_SIGNED_OUT_SETTLE_MS) return 'signed_out';
     } else signedOutSince = null;
     await new Promise((resolve) => setTimeout(resolve, HH_WINDOW_POLL_MS));
   }
@@ -35,7 +39,7 @@ async function openInBackground(): Promise<HhWindowState> {
   if (await isConnectorSessionOpen('hh')) return 'ready';
   const opened = await openConnectorSession('hh', HH_LOGIN_URL, undefined, { background: true });
   if (!opened.opened) throw new Error('hh_window_not_opened');
-  return settleHhWindow();
+  return settleHhWindow(true);
 }
 
 /** Окно hh.ru одно: одновременные действия ждут одного открытия. */

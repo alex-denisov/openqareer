@@ -331,6 +331,9 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     const mock = await open(page, '/app/responses/review', 'o07', options);
     await expectGates(page);
     await page.getByRole('button', { name: 'Поправить резюме' }).click();
+    // Решение владельца 26.11: правка стоит над «Резюме» отклика, как в макете k06.
+    await expect(page).toHaveURL(/\/app\/responses\/a-rejected\/letter\?step=resume$/u);
+    await expect(page.locator('[data-apply-step="resume"]')).toBeAttached();
     const panel = page.getByRole('dialog', { name: 'Консультант · Резюме' });
     const card = panel.locator('.ec');
     await expect(card.locator('.now dd')).toHaveText(RESUME_BULLET);

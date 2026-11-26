@@ -9,7 +9,10 @@ const session = vi.hoisted(() => ({
 }));
 vi.mock('../../../connections/connectorSession', () => session);
 
-const { hideHhWindow, openHhSignIn, showHhCaptcha, showHhResponse } = await import('./hhPersonWindow');
+const alive = vi.hoisted(() => ({ reportHhAlive: vi.fn(async () => undefined) }));
+vi.mock('./hhAlive', () => alive);
+
+const { hideHhWindow, openHhSignIn, signInToHh, showHhCaptcha, showHhResponse } = await import('./hhPersonWindow');
 
 const home = { ready: true, url: 'https://hh.ru/', signedInApplicant: true, login: false, otp: false, captcha: false };
 const login = { ...home, signedInApplicant: false, login: true };
@@ -37,6 +40,19 @@ describe('окно hh.ru на экране — только по нажатию 
     session.inspectSessionPage.mockResolvedValue(home);
     await vi.advanceTimersByTimeAsync(5_000);
     expect(session.parkConnectorSession).toHaveBeenCalledOnce();
+  });
+
+  it('B704: ожидание входа — вход виден на сервере; закрытое окно — входа нет', async () => {
+    session.inspectSessionPage.mockResolvedValue(home);
+    const done = signInToHh();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(done).resolves.toBe(true);
+    expect(alive.reportHhAlive).toHaveBeenCalledOnce();
+    session.isConnectorSessionOpen.mockResolvedValue(false);
+    const closed = signInToHh();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(closed).resolves.toBe(false);
+    expect(alive.reportHhAlive).toHaveBeenCalledOnce();
   });
 
   it('капча: без перехода, скрыто после её прохождения; страница без просьб не скрывается', async () => {

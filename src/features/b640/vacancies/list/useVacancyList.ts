@@ -156,7 +156,10 @@ interface RowsInput {
 type DerivedRows = Pick<
   VacancyList,
   'options' | 'all' | 'visible' | 'count' | 'blockers' | 'more' | 'countKnown' | 'hunting'
->;
+> & {
+  /** Строки режет клиентский фильтр: порция сервера не равна порции списка. */
+  readonly rowsNarrowed: boolean;
+};
 
 type FilterContext = Parameters<typeof blockersOf>[2];
 
@@ -174,9 +177,21 @@ function useBlockers(
 }
 
 /**
- * v06p: «По фильтрам ничего» и «0 вакансий» — только когда прочитана вся подборка. Пока среди
- * прочитанного ничего не подошло, порции читаются дальше сами.
+ * Клиентский фильтр режет прочитанные порции: пока под него не набралась порция строк, читаем
+ * дальше сами. Так «По фильтрам ничего» и «0 вакансий» (v06p) появляются только по всей подборке,
+ * а одна строка из первых двадцати не выдаётся за весь список (Н-А).
  */
+export function wantsMoreRows(input: {
+  readonly serverMode: boolean;
+  readonly narrowed: boolean;
+  readonly loaded: number;
+  readonly found: number;
+  readonly wanted: number;
+}): boolean {
+  const { serverMode, narrowed, loaded, found, wanted } = input;
+  return serverMode && loaded > 0 && (found === 0 || (narrowed && found < wanted));
+}
+
 function useHunt(wanted: boolean, server: ServerSortedList): boolean {
   const hunting = wanted && server.hasMore;
   const { status, loadMore } = server;
@@ -237,6 +252,21 @@ function countOf({
   };
 }
 
+/** Подвал «Показать ещё» и знает ли он итог: в серверном режиме — по порциям, иначе по списку. */
+function footOf(input: {
+  readonly foot: Parameters<typeof serverFoot>[0];
+  readonly serverMode: boolean;
+  readonly pending: boolean;
+  readonly own: { readonly total: number; readonly shown: number };
+}): { readonly more: VacancyList['more']; readonly footKnown: boolean } {
+  const foot = serverFoot(input.foot);
+  const read = input.serverMode ? { total: foot.total, shown: foot.shown } : input.own;
+  return {
+    more: input.pending && input.own.shown > 0 ? { ...read, total: null } : read,
+    footKnown: !input.serverMode || foot.countKnown,
+  };
+}
+
 /** Строки списка: источник (пул или порции сервера), фильтры, сортировка, число и подвал. */
 function useListRows(input: RowsInput): DerivedRows {
   const { pool, hidden, filters, currency, rates, now, sortState, server, shown } = input;
@@ -267,15 +297,14 @@ function useListRows(input: RowsInput): DerivedRows {
   );
   const { count, countKnown, narrowed, pending } = countOf({ input, serverMode, waitingFirst, filtered: all.length });
   const visible = serverMode ? all : visibleSlice(all, shown);
-  const foot = serverFoot({
-    narrowed,
-    hasMore: server.hasMore,
-    serverTotal: server.total,
-    loaded: base.length,
+  const { more, footKnown } = footOf({
+    foot: { narrowed, hasMore: server.hasMore, serverTotal: server.total, loaded: base.length },
+    serverMode,
+    pending,
+    own: { total: count, shown: visible.length },
   });
-  const read = serverMode ? { total: foot.total, shown: foot.shown } : { total: count, shown: visible.length };
-  const more = pending && visible.length > 0 ? { ...read, total: null } : read;
-  const hunting = useHunt(serverMode && all.length === 0 && base.length > 0, server);
+  const rowsRead = { loaded: base.length, found: all.length, wanted: shown };
+  const hunting = useHunt(wantsMoreRows({ serverMode, narrowed, ...rowsRead }), server);
   const context = { currency, rates, now, serverCut: serverMode, titlesRu: pool.campaign?.titlesRu };
   const blockers = useBlockers(all.length === 0 && !pool.loading, base, filters, context);
   return {
@@ -286,7 +315,8 @@ function useListRows(input: RowsInput): DerivedRows {
     blockers,
     more,
     hunting,
-    countKnown: countKnown && (!serverMode || foot.countKnown),
+    rowsNarrowed: serverMode && narrowed,
+    countKnown: countKnown && footKnown,
   };
 }
 
@@ -360,7 +390,7 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
   const [days, money] = [serverDays(filters), serverMoney(filters, currency)];
   const first = useFirstPortion(pool);
   const server = useServerSortedList(serverMode, sortState, filters.roles, hidden, days, money, first);
-  const derived = useListRows({
+  const { rowsNarrowed, ...derived } = useListRows({
     pool,
     hidden,
     filters,
@@ -383,7 +413,10 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
     sheetOpen,
     setSheetOpen,
     ...derived,
-    showMore: serverMode ? server.loadMore : () => setShown((value) => value + PAGE_SIZE),
+    showMore: () => {
+      if (serverMode && !rowsNarrowed) return server.loadMore();
+      setShown((value) => (serverMode ? derived.all.length : value) + PAGE_SIZE);
+    },
     server: { active: serverMode, status: server.status, retry: server.retry },
     rolesReady,
     noRole: pool.campaign?.roles.value.length === 0,

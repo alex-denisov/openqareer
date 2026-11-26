@@ -114,6 +114,10 @@ describe('n01b: блок «Важно»', () => {
     const login = item({ kind: 'platform_login_required', title: 'Отклик не доставлен · Карта' });
     expect(pinnedAction(login)).toMatchObject({ label: 'Подключить', icon: 'refresh' });
     expect(pinnedTitle(login)).toBe('Отклик не доставлен · Карта · Руководитель платформы');
+    const hh = item({ kind: 'delivery_error', sourceType: 'hh_session', sourceId: 'hh' });
+    const connect = { label: 'Подключить', path: '/app/account/connections' };
+    expect(feedAction(hh)).toEqual(connect);
+    expect(pinnedAction(hh)).toEqual({ ...connect, icon: 'refresh' });
     expect(pinnedAction(item({}))).not.toHaveProperty('icon');
   });
 

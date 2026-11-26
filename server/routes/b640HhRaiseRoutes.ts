@@ -24,6 +24,7 @@ const resultSchema = z
   .object({ outcome: z.enum(['ok', 'captcha', 'logged_out', 'foreign_page', 'too_early', 'error']), availableAt: z.string().regex(HH_RAISE_CLOCK).optional() })
   .strict();
 const emptyBody = z.object({ resumeId: resumeId.optional() }).strict().nullish();
+const aliveBody = z.object({}).strict().nullish();
 const taskParams = z.object({ taskId: z.string().uuid() });
 
 interface Stores {
@@ -166,9 +167,24 @@ const postResult: Handler = (stores, candidateId, request, reply) => {
   return answer(request, viewOf(pickResume(stores, candidateId).listed, task.resumeId, row, stores.raise.hasOpenTask(candidateId, task.resumeId), raisedToday(stores, candidateId)));
 };
 
+/** Вход виден: пометка, её копия в расписаниях и уведомление снимаются вместе. */
+function noteLoginAlive(stores: Stores, request: FastifyRequest, candidateId: string) {
+  stores.raise.markAlive(candidateId, firstRaiseAt(new Date()));
+  resolveHhLoginNotice(stores.deps, request, candidateId);
+}
+
+/** B704: клиент прочитал hh.ru вошедшим. */
+const postAlive: Handler = (stores, candidateId, request, reply) => {
+  if (!aliveBody.safeParse(request.body).success) {
+    return sendError(reply, request, 400, 'invalid_hh_session', 'Запрос заполнен неверно.', false);
+  }
+  noteLoginAlive(stores, request, candidateId);
+  return getSession(stores, candidateId, request, reply);
+};
+
 /** B690: первый упор в страницу входа — уведомление; удачное поднятие — вход жив, уведомление снято. */
 function noteLoginChange(stores: Stores, request: FastifyRequest, candidateId: string, outcome: string) {
-  if (outcome === 'ok') return resolveHhLoginNotice(stores.deps, request, candidateId);
+  if (outcome === 'ok' || outcome === 'too_early') return noteLoginAlive(stores, request, candidateId);
   if (outcome !== 'logged_out') return undefined;
   const { since } = hhSessionExpiry(stores.raise, stores.hh, candidateId);
   return since ? noteHhLoginExpired(stores.deps, request, candidateId, since) : undefined;
@@ -206,4 +222,5 @@ export function registerB640HhRaiseRoutes(app: FastifyInstance, deps: RouteDeps)
   app.post(`${base}/:taskId/result`, write, route(deps, stores, postResult));
   // B690: истёк ли вход в hh.ru — для строки hh в «Подключениях».
   app.get('/api/v1/candidate/b640/hh/session', route(deps, stores, getSession));
+  app.post('/api/v1/candidate/b640/hh/session/alive', write, route(deps, stores, postAlive));
 }
