@@ -85,11 +85,12 @@ const EDITS_CACHE_TTL_MS = 10 * 60_000;
 const EDITS_CACHE_LIMIT = 200;
 const editsCache = new Map<string, { readonly at: number; readonly edits: readonly HhResumeEdit[] }>();
 
-export function editsCacheKey(candidateId: string, resume: SelectedWithSections, vacancyId: string): string {
+/** B787 (k06): в ключе и профиль, из которого собраны «станет»: правка консультанта даёт новый разбор. */
+export function editsCacheKey(candidateId: string, input: HhEditsInput, vacancyId: string): string {
   const content = createHash('sha256')
-    .update(JSON.stringify([resume.title, resume.sections]))
+    .update(JSON.stringify([input.resume.title, input.resume.sections, input.platform, input.vacancy]))
     .digest('hex');
-  return [candidateId, resume.id, content, vacancyId].join('\u0000');
+  return [candidateId, input.resume.id, content, vacancyId].join('\u0000');
 }
 
 export function cachedEdits(key: string, now = Date.now()): readonly HhResumeEdit[] | null {
