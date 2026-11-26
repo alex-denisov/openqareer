@@ -199,6 +199,7 @@ export function mergeReimportedDraft(
     ...(existing.factRewrites ? { factRewrites: existing.factRewrites } : {}),
     ...(existing.declinedFactIds ? { declinedFactIds: existing.declinedFactIds } : {}),
     ...(existing.factRewriteProposal ? { factRewriteProposal: existing.factRewriteProposal } : {}),
+    ...(existing.factRewordProposal ? { factRewordProposal: existing.factRewordProposal } : {}),
   };
   const profileUpdates = survivingProposals(
     existing.sourceSuggestions?.profileUpdates ?? [],

@@ -235,7 +235,18 @@ export const RESUME_BULLET = 'Руководил группой бэкенда �
 /** B786: прямая просьба консультанту и его ответ; правка K6 встаёт под ответом. */
 export const RESUME_ASK = 'Поправь в резюме формулировку опыта в Сфере Платежи';
 
-async function mockResumeConversation(page: Page, asked: boolean): Promise<void> {
+/** B786: строка резюме, которую переписывает k06, когда новых фактов для места нет. */
+export const RESUME_BEFORE = 'Вела бэкенд платёжного шлюза для интернет-магазинов.';
+
+type Asked = false | 'fact' | 'reword';
+
+function askedReply(asked: Asked, messageId: string) {
+  if (!asked) return [];
+  const edit = asked === 'fact' ? { resumeFactId: RESUME_FACT_ID } : { resumeRewordPlace: 'e1' };
+  return [{ messageId, actions: [], memoryIds: [], ...edit }];
+}
+
+async function mockResumeConversation(page: Page, asked: Asked): Promise<void> {
   const said = {
     id: 'u1',
     role: 'user',
@@ -284,9 +295,7 @@ async function mockResumeConversation(page: Page, asked: boolean): Promise<void>
     startedAt: said.createdAt,
     closedAt: null,
     messages: asked ? [said, ask, answer] : [said],
-    replies: asked
-      ? [{ messageId: answer.id, actions: [], memoryIds: [], resumeFactId: RESUME_FACT_ID }]
-      : [],
+    replies: askedReply(asked, answer.id),
     analysisPending: false,
   };
   await page.route('**/api/v1/candidate/consultant/current**', (route) =>
@@ -307,9 +316,30 @@ async function mockResumeConversation(page: Page, asked: boolean): Promise<void>
 }
 
 /** Предложение консультанта: запись и отмена попадают в `calls`. */
-async function mockFactRewrite(page: Page, calls: string[]): Promise<void> {
+function rewordReply(calls: string[], fails: { left: number }) {
+  calls.push('reword');
+  if (fails.left > 0) {
+    fails.left -= 1;
+    const error = { code: 'reword_failed', message: 'Не получилось', retryable: true };
+    return { status: 502, json: { error } };
+  }
+  const bullets = [
+    { text: RESUME_BULLET, sourceFactIds: ['line', RESUME_FACT_ID], replacesMemoryId: 'line' },
+  ];
+  const proposal = {
+    id: 'p1',
+    places: [{ experienceId: 'e1', bullets }],
+    leftOutFactIds: [],
+    sourceFactIds: ['line', RESUME_FACT_ID],
+  };
+  return { status: 200, json: { data: { proposal, before: RESUME_BEFORE } } };
+}
+
+async function mockFactRewrite(page: Page, calls: string[], rewordFails = 0): Promise<void> {
+  const fails = { left: rewordFails };
   await page.route('**/api/v1/candidate/experience-fact-rewrite**', async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/reword')) return route.fulfill(rewordReply(calls, fails));
     if (path.endsWith('/apply')) {
       const { only, variantId } = route.request().postDataJSON() as {
         only: string[];
@@ -393,7 +423,9 @@ export interface ResponsesMockOptions {
   /** Факт рекомендации есть в беседе, но не в резюме: «Поправить резюме». */
   readonly resumeFact?: boolean;
   /** B786: в разговоре кандидат попросил поправить резюме, под ответом готовая правка. */
-  readonly askedResumeEdit?: boolean;
+  readonly askedResumeEdit?: boolean | 'reword';
+  /** B786: сколько первых запросов новой формулировки строки падают. */
+  readonly rewordFails?: number;
   /** Тариф: на Free автооткликов нет. По умолчанию Pro. */
   readonly plan?: 'free' | 'pro';
   /** Сводка B680: какие отклики — автоотклики. Без опции сводка не отвечает. */
@@ -466,9 +498,10 @@ export async function mockResponses(
     },
   });
 
-  await mockFactRewrite(page, calls);
+  await mockFactRewrite(page, calls, options.rewordFails ?? 0);
   if (options.resumeFact || options.askedResumeEdit) {
-    await mockResumeConversation(page, options.askedResumeEdit === true);
+    const asked = options.askedResumeEdit;
+    await mockResumeConversation(page, asked === 'reword' ? 'reword' : asked ? 'fact' : false);
   }
   await page.route('**/api/v1/candidate/automation**', async (route) => {
     const path = new URL(route.request().url()).pathname;

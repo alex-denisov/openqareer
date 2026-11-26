@@ -4,6 +4,7 @@ import { expectGates } from './gates';
 import {
   mockResponses,
   RESUME_ASK,
+  RESUME_BEFORE,
   RESUME_BULLET,
   RESUME_VARIANT,
   responseFixtures,
@@ -406,6 +407,62 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     expect(mock.calls).toEqual(['variant', 'apply e1#0 v1']);
     await panel.getByRole('button', { name: 'Отменить' }).click();
     expect(mock.calls).toEqual(['variant', 'apply e1#0 v1', 'revert']);
+  });
+
+  test('B786: новых фактов нет — k06 переписывает строку места: «Было», «Другой вариант», сбой с повтором', async ({
+    page,
+  }, info) => {
+    const mock = await open(page, '/app/responses/review', 'o07', {
+      askedResumeEdit: 'reword',
+      rewordFails: 1,
+    });
+    const mobile = info.project.name === 'mobile-390';
+    const opener = mobile
+      ? page.getByRole('link', { name: /Консультант: открыть/u })
+      : page.locator('.b640 .top-actions .btn-panel');
+    await opener.click({ timeout: 15_000 });
+    const panel = page.locator('.b640 .app.has-panel > aside.panel-col');
+    const failed = panel.getByRole('alert');
+    await expect(failed).toContainText('Не получилось подготовить правку');
+    await expect(failed).not.toContainText('Ответ не пришёл');
+    await failed.getByRole('button', { name: 'Попробовать ещё раз' }).click();
+    const card = panel.locator('.ec');
+    await expect(card.locator('.ec-title')).toContainText('Сфера Платежи · первая строка');
+    await expect(card.locator('.now dd')).toHaveText(RESUME_BULLET);
+    if (mobile) {
+      await expect(card.locator('.ec-diff .was')).toBeHidden();
+      await card.getByText('Показать, что было').click();
+      await expect(card.locator('.ec-was p')).toHaveText(RESUME_BEFORE);
+    } else {
+      await expect(card.locator('.ec-diff .was dd')).toHaveText(RESUME_BEFORE);
+      await expect(card.locator('.ec-was')).toBeHidden();
+    }
+    await card.scrollIntoViewIfNeeded();
+    if (SHOTS) {
+      mkdirSync(SHOTS, { recursive: true });
+      await page.screenshot({ path: `${SHOTS}/k06-reword-${info.project.name}.png` });
+    }
+    await card.getByRole('button', { name: 'Другой вариант' }).click();
+    await page
+      .getByRole('dialog', { name: 'Что поменять' })
+      .getByRole('button', { name: 'Сделать вариант' })
+      .click();
+    await expect(card.locator('.now dd')).toHaveText(RESUME_VARIANT);
+    if (SHOTS)
+      await page.screenshot({ path: `${SHOTS}/k06-reword-variant-${info.project.name}.png` });
+    await card.getByRole('button', { name: 'Применить' }).click();
+    await expect(panel.getByText('Применено', { exact: true })).toBeVisible();
+    await panel.getByRole('button', { name: 'Отменить' }).click();
+    await expect(card).toBeVisible();
+    // После «Отменить» карточка снова читает сохранённую правку.
+    expect(mock.calls).toEqual([
+      'reword',
+      'reword',
+      'variant',
+      'apply e1#0 v1',
+      'revert',
+      'reword',
+    ]);
   });
 
   test('отказ в раскрытом отклике: догадка и отметка «чего не хватило»', async ({ page }) => {

@@ -257,13 +257,23 @@ export interface ResumeDraft {
    * words, and the model is asked again only when the facts or places change.
    */
   readonly factRewriteProposal?: ResumePendingFactRewrite;
+  /**
+   * B786 (k06): the consultant's rewording of one line already in a place, kept
+   * apart from the proposal of new facts; «Применить» puts it in that line's stead.
+   */
+  readonly factRewordProposal?: ResumePendingFactRewrite;
 }
 
 export interface ResumeFactRewriteProposal {
   readonly id: string;
   readonly places: readonly {
     readonly experienceId: string;
-    readonly bullets: readonly { readonly text: string; readonly sourceFactIds: readonly string[] }[];
+    readonly bullets: readonly {
+      readonly text: string;
+      readonly sourceFactIds: readonly string[];
+      /** B786: the line already in the place this bullet takes the place of. */
+      readonly replacesMemoryId?: string;
+    }[];
   }[];
   /** Facts no bullet uses: fragments, doubts, or facts that fit no workplace. */
   readonly leftOutFactIds: readonly string[];
@@ -279,6 +289,8 @@ export interface ResumeFactRewriteBullet {
   readonly memoryId: string;
   readonly experienceId: string;
   readonly sourceFactIds: readonly string[];
+  /** B786: the line this bullet replaced; «Отменить» puts it back. */
+  readonly replacedMemoryId?: string;
 }
 
 export interface ResumeFactRewriteRecord {
@@ -322,6 +334,7 @@ const factRewriteRecordSchema = z
             memoryId: memoryIdSchema,
             experienceId: z.string().trim().min(1).max(120),
             sourceFactIds: z.array(memoryIdSchema).min(1).max(MAX_DECLINED_FACTS),
+            replacedMemoryId: memoryIdSchema.optional(),
           })
           .strict(),
       )
@@ -346,6 +359,7 @@ const pendingFactRewriteSchema = z
                       .object({
                         text: z.string().trim().min(1).max(400),
                         sourceFactIds: z.array(memoryIdSchema).min(1).max(MAX_DECLINED_FACTS),
+                        replacesMemoryId: memoryIdSchema.optional(),
                       })
                       .strict(),
                   )
@@ -662,6 +676,7 @@ export const resumeDraftSchema = z
     declinedFactIds: z.array(memoryIdSchema).max(MAX_DECLINED_FACTS).optional(),
     factRewrites: z.array(factRewriteRecordSchema).max(MAX_FACT_REWRITES).optional(),
     factRewriteProposal: pendingFactRewriteSchema.optional(),
+    factRewordProposal: pendingFactRewriteSchema.optional(),
   })
   .strict()
   .transform((draft) => ({

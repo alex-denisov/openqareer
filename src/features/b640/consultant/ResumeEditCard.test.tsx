@@ -9,6 +9,7 @@ import { editReply, ResumeEditCard } from './ResumeEditCard';
 
 const api = vi.hoisted(() => ({
   requestFactRewrite: vi.fn(),
+  requestFactReword: vi.fn(),
   applyFactRewrite: vi.fn(),
   revertFactRewrite: vi.fn(),
   listFactRewriteVariants: vi.fn(),
@@ -48,7 +49,10 @@ async function settle(): Promise<void> {
   });
 }
 
-async function open(factId = 'm1'): Promise<HTMLElement> {
+async function open(
+  factId = 'm1',
+  source: Parameters<typeof ResumeEditCard>[0]['source'] = { kind: 'fact', factId },
+): Promise<HTMLElement> {
   const value = {
     session,
     path: '/app/responses/review',
@@ -62,7 +66,7 @@ async function open(factId = 'm1'): Promise<HTMLElement> {
   };
   view = mount(
     <ShellProvider value={value}>
-      <ResumeEditCard factId={factId} reason="Причина" memory={[]} messages={[]} />
+      <ResumeEditCard source={source} reason="Причина" memory={[]} messages={[]} />
     </ShellProvider>,
   );
   await settle();
@@ -182,11 +186,38 @@ describe('o07 → k06: правка резюме у консультанта', (
     expect(root.querySelector('a.btn')?.getAttribute('href')).toBe('/app/profile');
   });
 
-  it('консультант не ответил — «Ответ не пришёл», «Повторить» спрашивает снова', async () => {
+  it('B786: новая формулировка строки — «Было» и «Станет», «Отклонить» резюме не трогает', async () => {
+    const before = 'Вела бэкенд платёжного шлюза.';
+    const reword = {
+      id: 'r1',
+      places: [
+        {
+          experienceId: 'e1',
+          bullets: [{ text: NOW, sourceFactIds: ['line', 'm1'], replacesMemoryId: 'line' }],
+        },
+      ],
+      leftOutFactIds: [],
+      sourceFactIds: ['line', 'm1'],
+    };
+    api.requestFactReword.mockResolvedValue({ proposal: reword, before });
+    const root = await open('m1', { kind: 'reword', experienceId: 'e1' });
+    expect(api.requestFactReword).toHaveBeenCalledWith('e1');
+    expect(root.querySelector('.ec-title')?.textContent).toContain('Сфера Платежи · первая строка');
+    expect(root.querySelector('.ec-diff .was dd')?.textContent).toBe(before);
+    expect(root.querySelector('.ec-diff .now dd')?.textContent).toBe(NOW);
+    expect(root.querySelector('.ec-was p')?.textContent).toBe(before);
+    await press(root, 'Отклонить');
+    expect(api.saveResumeStudioDraft).not.toHaveBeenCalled();
+    expect(root.querySelector('.ec')).toBeNull();
+  });
+
+  it('правка не подготовилась — понятная строка, «Попробовать ещё раз» спрашивает снова', async () => {
     api.requestFactRewrite.mockRejectedValueOnce(new Error('503'));
     const root = await open();
-    expect(root.querySelector('[role=alert]')?.textContent).toContain('Ответ не пришёл');
-    await press(root, 'Повторить');
+    const alert = root.querySelector('[role=alert]')?.textContent ?? '';
+    expect(alert).toContain('Не получилось подготовить правку');
+    expect(alert).not.toContain('Ответ не пришёл');
+    await press(root, 'Попробовать ещё раз');
     expect(root.textContent).toContain(NOW);
   });
 

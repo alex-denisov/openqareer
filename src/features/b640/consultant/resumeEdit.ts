@@ -2,7 +2,7 @@ import {
   bulletKey,
   type FactRewriteProposal,
 } from '../../../../server/domain/experienceFactRewrite';
-import { requestFactRewrite } from '../../resume/experienceFactRewriteApi';
+import { requestFactReword, requestFactRewrite } from '../../resume/experienceFactRewriteApi';
 import { getResumeStudio, saveResumeStudioDraft } from '../../resume/resumeApi';
 import { forgetSharedRead } from '../../resume/sharedRead';
 import type { ResumeDraft } from '../../resume/resumeTypes';
@@ -15,6 +15,9 @@ export interface ResumeEdit {
   readonly place: string;
   readonly text: string;
   readonly sourceFactIds: readonly string[];
+  /** B786: правка переписывает эту строку резюме; `before` — её текст сейчас («Было»). */
+  readonly replaces?: string;
+  readonly before?: string;
 }
 
 async function freshDraft(): Promise<ResumeDraft> {
@@ -51,8 +54,28 @@ export async function loadResumeEdit(factId: string): Promise<ResumeEdit | null>
   return proposal ? editOf(proposal, await freshDraft(), factId) : null;
 }
 
+/** Новая формулировка первой строки места; `null` — строк в месте нет. */
+export async function loadResumeReword(experienceId: string): Promise<ResumeEdit | null> {
+  const reword = await requestFactReword(experienceId);
+  const bullet = reword?.proposal.places[0]?.bullets[0];
+  if (!reword || !bullet) return null;
+  const draft = await freshDraft();
+  const entry = draft.experience.find((item) => item.id === experienceId);
+  return {
+    proposalId: reword.proposal.id,
+    key: bulletKey(experienceId, 0),
+    place: entry?.employer || entry?.title || '',
+    text: bullet.text,
+    sourceFactIds: bullet.sourceFactIds,
+    ...(bullet.replacesMemoryId ? { replaces: bullet.replacesMemoryId } : {}),
+    before: reword.before,
+  };
+}
+
 /** «Отклонить»: факты остаются в памяти, пункт из них больше не предлагается. */
 export async function declineResumeEdit(edit: ResumeEdit): Promise<void> {
+  // B786: отклонённая новая формулировка строки ничего не меняет в резюме.
+  if (edit.replaces) return;
   const draft = await freshDraft();
   await saveResumeStudioDraft({
     ...draft,

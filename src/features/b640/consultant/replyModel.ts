@@ -53,10 +53,8 @@ export function readReplies(value: unknown): ConsultantReplyExtras[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item): ConsultantReplyExtras[] => {
     if (!item || typeof item !== 'object') return [];
-    const { messageId, actions, memoryIds, corrections, resumeFactId } = item as Record<
-      string,
-      unknown
-    >;
+    const { messageId, actions, memoryIds, corrections, resumeFactId, resumeRewordPlace } =
+      item as Record<string, unknown>;
     if (typeof messageId !== 'string' || !messageId) return [];
     const known = Array.isArray(actions) ? actions.filter(isConsultantReplyAction) : [];
     return [
@@ -66,6 +64,7 @@ export function readReplies(value: unknown): ConsultantReplyExtras[] {
         memoryIds: strings(memoryIds, CONSULTANT_REPLY_MAX_LINKS),
         corrections: readProposals(corrections),
         ...(typeof resumeFactId === 'string' && resumeFactId ? { resumeFactId } : {}),
+        ...(typeof resumeRewordPlace === 'string' && resumeRewordPlace ? { resumeRewordPlace } : {}),
       },
     ];
   });

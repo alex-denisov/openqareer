@@ -562,6 +562,8 @@ export interface CandidateStore extends ConsultantHistoryMethods {
     candidateId: string,
     pending: ResumePendingFactRewrite,
     isCurrent: (snapshot: CandidateSnapshot) => boolean,
+    /** B786: the rewording of a line already in a place is kept apart. */
+    field?: 'factRewriteProposal' | 'factRewordProposal',
   ): boolean;
   /**
    * One candidate decision over a whole imported batch. An import can state
