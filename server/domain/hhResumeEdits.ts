@@ -1,4 +1,4 @@
-import { factEdits } from './hhResumeFactEdits';
+import { correctedText, factEdits } from './hhResumeFactEdits';
 import { isPositionTerms } from '../../shared/hhPositionTerms';
 import { hhSectionsRead, type HhResumeEdit, type HhResumeSections } from '../../shared/hhCandidateSession';
 
@@ -29,6 +29,8 @@ export interface HhEditsInput {
     readonly places: readonly HhPlatformPlace[];
     /** Тексты подтверждённых фактов профиля: навык добавляется, только если он здесь есть. */
     readonly facts: readonly string[];
+    /** B787: подтверждённые кандидатом факты профиля — по ним правка «исправить факт» сверяет числа. */
+    readonly confirmed?: readonly string[];
   };
 }
 
@@ -161,7 +163,17 @@ function aboutEdit(input: HhEditsInput): HhEditDraft[] {
 
 export function draftHhResumeEdits(input: HhEditsInput): HhEditDraft[] {
   if (!hhSectionsRead(input.resume.sections)) return [];
-  const drafted = [...experienceEdits(input), ...skillsEdit(input), ...aboutEdit(input)];
+  // B787: «станет» из профиля тоже сверяется с подтверждёнными фактами: старое число из резюме не переносим.
+  const facts = input.platform.confirmed ?? [];
+  const drafted = [...experienceEdits(input), ...skillsEdit(input), ...aboutEdit(input)].map((edit) =>
+    edit.section === 'skills'
+      ? edit
+      : {
+          ...edit,
+          now: correctedText(edit.now, facts),
+          ...(edit.lines ? { lines: edit.lines.map((line) => correctedText(line, facts)) } : {}),
+        },
+  );
   const covered = new Set(drafted.map((edit) => edit.id));
-  return [...drafted, ...factEdits(input.resume.sections, input.platform.facts, covered)];
+  return [...drafted, ...factEdits(input.resume.sections, facts, covered)];
 }

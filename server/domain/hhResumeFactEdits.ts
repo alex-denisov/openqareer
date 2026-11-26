@@ -6,10 +6,10 @@ import { languageOf, type HhEditDraft } from './hhResumeEdits';
  * стоит один процент, а подтверждённый факт профиля называет другой, платформа предлагает
  * исправить число в тексте резюме. Остальной текст не трогаем; применяется только к копии.
  */
-const MEASURES: ReadonlyArray<RegExp> = [
-  /рентабельн\p{L}*|profitab\p{L}*/iu,
-  /маржин\p{L}*|марж\p{L}*|margin\p{L}*/iu,
-];
+/** Рентабельность и маржа — один показатель: кандидат и консультант называют его по-разному. */
+const MEASURES: ReadonlyArray<RegExp> = [/рентабельн\p{L}*|profitab\p{L}*|марж\p{L}*|margin\p{L}*/iu];
+/** «с 16% до 40%»: показатель сейчас — второе число, первое было раньше. */
+const RANGE_START = /(?:^|[^\p{L}])(?:с|from)\s*$/iu;
 /** Показатель и число рядом: «рентабельность 80 %», «маржа до 40%», «margin of 40%». */
 const NEAR = 40;
 const PERCENT = /(\d{1,3}(?:[.,]\d{1,2})?)\s?%/gu;
@@ -25,6 +25,7 @@ function mentions(text: string): Mention[] {
   return [...text.matchAll(PERCENT)].flatMap((match) => {
     const start = match.index ?? 0;
     const before = text.slice(Math.max(0, start - NEAR), start);
+    if (RANGE_START.test(text.slice(Math.max(0, start - 6), start))) return [];
     const measure = MEASURES.findIndex((pattern) => pattern.test(before));
     return measure < 0 ? [] : [{ measure, value: match[1]!, start, end: start + match[0].length }];
   });
@@ -32,15 +33,13 @@ function mentions(text: string): Mention[] {
 
 const same = (a: string, b: string) => Number(a.replace(',', '.')) === Number(b.replace(',', '.'));
 
-/** Значение показателя по профилю: только если все подтверждённые факты называют одно число. */
+/** Значение показателя по профилю: факты идут от новых к старым, последнее подтверждённое число и верно. */
 function confirmedValue(facts: readonly string[], measure: number): string | null {
-  const values = facts.flatMap((fact) =>
-    mentions(fact)
-      .filter((item) => item.measure === measure)
-      .map((item) => item.value),
-  );
-  if (values.length === 0) return null;
-  return values.every((value) => same(value, values[0]!)) ? values[0]! : null;
+  for (const fact of facts) {
+    const found = mentions(fact).find((item) => item.measure === measure);
+    if (found) return found.value;
+  }
+  return null;
 }
 
 export function correctedText(text: string, facts: readonly string[]): string {
