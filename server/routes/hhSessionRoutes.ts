@@ -27,6 +27,7 @@ import { localizeHhResumeEditsDetailed, type LocalizedHhEdits } from '../domain/
 import { hasVariants, hhResumeVariantSubject } from '../domain/hhResumeVariant';
 import { reviewHhResumes } from '../domain/hhResumeReview';
 import { chooseHhResume, mergedContents, resumesForVacancy, saveHhCopy, titleRank, withoutOtherCopies } from './hhVacancyResume';
+import { withHhEmployerNames } from '../domain/hhAboutCleanup';
 import { cachedEdits, editsCacheKey, hhEditsInput, rememberEdits, readWithSections, selectedWithSections, type SelectedWithSections } from './hhResumeEditsInput';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { resolvePoolVacancyCluster } from '../vacancies/poolVacancyCluster';
@@ -295,7 +296,11 @@ async function freshEdits(
 ): Promise<LocalizedHhEdits> {
   const drafts = draftHhResumeEdits(hhEditsInput(deps, candidateId, selected, cluster, vacancyId));
   const language = hhResumeLanguage(selected.sections);
-  return localizeHhResumeEditsDetailed(drafts, language, deps.experienceFactRewriter, EDITS_TRANSLATION_BUDGET_MS);
+  const localized = await localizeHhResumeEditsDetailed(drafts, language, deps.experienceFactRewriter, EDITS_TRANSLATION_BUDGET_MS);
+  if (language !== 'ru') return localized;
+  const employers = selected.sections.places.map((place) => place.employer);
+  const named = (edits: readonly HhResumeEdit[]) => withHhEmployerNames(edits, employers);
+  return { ...localized, edits: named(localized.edits), settled: localized.settled.then(named) };
 }
 
 /**
