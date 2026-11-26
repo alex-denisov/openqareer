@@ -135,15 +135,18 @@ function headerLines(card: string): string[] {
   return employer ? [employer, ...rest.filter((line) => !/^\d/u.test(line))] : [];
 }
 
+/** React вставляет `<!-- -->` между частями текста: «Апрель<!-- --> <!-- -->2023» (B787, 1.1.289). */
+const withoutComments = (html: string) => html.replace(/<!--[\s\S]*?-->/gu, '');
+
 export function hhResumeExperienceCards(html: string): ParsedResumeExperience[] {
-  return byQa(html, 'profile-experience-company-card').flatMap((card) => {
+  return byQa(withoutComments(html), 'profile-experience-company-card').flatMap((card) => {
     const [employer, headerTitle = ''] = headerLines(card);
     if (!employer) return [];
-    const steps = byQa(card, 'magritte-stepper-step');
+    // Содержимое ступени бывает и внутри ступени, и рядом с ней: берём содержимое, где оно есть.
+    const contents = byQa(card, 'magritte-stepper-step-content');
+    const steps = contents.length > 0 ? contents : byQa(card, 'magritte-stepper-step');
     const title = steps.length === 1 ? headerTitle : '';
-    return steps.flatMap((step) =>
-      placeOf(byQa(step, 'magritte-stepper-step-content')[0] ?? step, employer, title),
-    );
+    return steps.flatMap((step) => placeOf(step, employer, title));
   });
 }
 
@@ -151,7 +154,7 @@ const ABOUT_HEADING = /^(?:о себе|обо мне|about(?: me| myself)?)$/iu;
 
 /** `undefined` — карточки «О себе» на странице нет: раздел не прочитан. */
 export function hhResumeAboutCard(html: string): string | undefined {
-  const card = byQa(html, 'resume-about-card')[0];
+  const card = byQa(withoutComments(html), 'resume-about-card')[0];
   if (card === undefined) return undefined;
   const body = without(
     card,
