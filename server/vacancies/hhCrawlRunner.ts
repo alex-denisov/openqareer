@@ -142,7 +142,9 @@ async function readPage(
     state.errors += 1;
     state.refusalsInARow += 1;
     if (state.refusalsInARow >= refusalLimit) {
-      throw new Error(`${HH_CRAWL_ABANDONED}: ${response.status}`);
+      throw new Error(
+        `${HH_CRAWL_ABANDONED}: ${response.status}${response.failure ? ` ${response.failure}` : ''}`,
+      );
     }
     return { outcome: 'continue', itemsOnPage: 0 };
   }

@@ -3,6 +3,7 @@ import { rulesParse } from './rulesParse';
 import { LEVEL_RANK } from '../levelMatcher';
 import type { FunctionCode } from '../../../shared/roleTaxonomy';
 import { ontology } from '../../../shared/roleOntology';
+import { timeBudget } from '../../../shared/testing/timeBudget';
 
 const ONTOLOGY_FUNCTION_VARIANTS = ontology.roles
   .slice()
@@ -67,7 +68,7 @@ describe('rulesParse (B267 S1)', () => {
     );
     const startedAt = performance.now();
     titles.forEach((title) => rulesParse(title));
-    expect(performance.now() - startedAt).toBeLessThan(2_000);
+    expect(performance.now() - startedAt).toBeLessThan(timeBudget(2_000));
   });
 
   it('reads the level from an existing marker word', () => {
@@ -460,5 +461,36 @@ describe('CIO и ИТ-директор — одна роль (04.11)', () => {
     expect(rulesParse('Начальник отдела технической поддержки').levelRank).toBe(LEVEL_RANK.head);
     expect(rulesParse('Начальник отдела государственной поддержки промышленности').functions).not.toContain('support');
     expect(rulesParse('Руководитель службы').functions).toContain('public-service');
+  });
+});
+
+describe('B803: найм инженеров — HR', () => {
+  it.each([
+    'Head of Technology Recruitment',
+    'Director of Engineering Recruitment',
+    'Head of Technology Recruiting',
+    'Head of Talent Acquisition, Engineering',
+  ])('%s', (title) => {
+    expect(rulesParse(title)).toMatchObject({ functions: ['hr'], levelRank: 2 });
+  });
+
+  it.each([
+    'Engineering Manager, Recruiting Tools',
+    'Lead Engineer, Recruitment',
+    'Product Manager, Recruiting',
+    'Director of Engineering, Recruiting',
+    'Head of Engineering Recruitment Platform',
+  ])('%s — не найм', (title) => {
+    expect(rulesParse(title).functions[0]).not.toBe('hr');
+  });
+
+  it('технология найма и обычный руководитель технологии остаются собой', () => {
+    expect(rulesParse('Head of Recruitment Technology').functions).not.toContain('hr');
+    expect(rulesParse('Head of Technology').functions).toEqual(['eng-mgmt']);
+  });
+
+  it('Manager IFE Operations и Director of Operations — разные уровни', () => {
+    expect(rulesParse('Manager IFE Operations (UAE Nationals)').levelRank).toBe(0);
+    expect(rulesParse('Director of Operations').levelRank).toBe(2);
   });
 });

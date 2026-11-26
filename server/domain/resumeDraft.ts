@@ -22,6 +22,8 @@ export interface ResumeCandidateInput {
    * writes it yet.
    */
   readonly photoMediaId?: string;
+  /** B666 · p08: фото из последнего импорта LinkedIn — «Взять из LinkedIn» ставит его снова. */
+  readonly linkedinPhotoMediaId?: string;
   readonly about?: string;
   /** B541: the imported fact the about text came from (platform and date live on it). */
   readonly aboutMemoryId?: string;
@@ -62,6 +64,8 @@ export interface ResumeExperienceInput {
   readonly employerGroupKey?: string;
   /** v2: how many people the candidate led in this role; absent means unknown. */
   readonly teamSize?: number;
+  /** B801: кандидат не хочет указывать размер команды; вопрос больше не задаётся. */
+  readonly teamSizeDeclined?: boolean;
   /**
    * B639: настоящее название компании, если `employer` — маска для LinkedIn («Enterprise Energy IT Services»).
    * Его назвал кандидат; оно опирается на подтверждённый факт `employerNameMemoryId` и идёт в письмо.
@@ -403,6 +407,7 @@ export const resumeDraftSchema = z
         photoUrl: urlSchema.optional(),
         headline: labelSchema.optional(),
         photoMediaId: mediaIdSchema.optional(),
+        linkedinPhotoMediaId: mediaIdSchema.optional(),
         about: longTextSchema.optional(),
         aboutMemoryId: z.string().trim().min(1).max(200).optional(),
         aboutOrigin: z
@@ -450,6 +455,7 @@ export const resumeDraftSchema = z
             employerLogoMediaId: mediaIdSchema.optional(),
             employerGroupKey: labelSchema.optional(),
             teamSize: z.number().int().min(1).max(100_000).optional(),
+            teamSizeDeclined: z.boolean().optional(),
             employerRealName: labelSchema.optional(),
             employerNameMemoryId: memoryIdSchema.optional(),
             employerMaskKept: z.boolean().optional(),

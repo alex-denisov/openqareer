@@ -1,5 +1,8 @@
+import type { SentLookup } from '../domain/sentApplication';
 import { randomUUID } from 'node:crypto';
 import { createApplicationContactMethods, type ApplicationContactMethods } from './applicationContacts';
+import { createRecordRemoval } from './applicationRecordRemoval';
+import { queryInterviewSubject } from './interviewSubjectQuery';
 import {
   createApplicationEmployerReadMethods,
   type ApplicationEmployerReadMethods,
@@ -80,6 +83,7 @@ export interface ApplicationTrackerMethods
   recordVacancyApplication(candidateId: string, input: VacancyApplicationInput): VacancyApplication;
   listApplications(candidateId: string, options?: ReadApplicationOptions): ApplicationView[];
   getApplication(candidateId: string, applicationId: string): ApplicationView | null;
+  findSentApplication(candidateId: string, lookup: SentLookup): string | null;
   createApplication(
     candidateId: string,
     input: CreateApplicationInput & { manualVacancy?: VacancyApplicationSnapshot },
@@ -108,6 +112,7 @@ export interface ApplicationTrackerMethods
     role: ApplicationMaterialRole,
     documentId: string,
   ): StoredApplicationMaterial;
+  linkedMaterialId(candidateId: string, applicationId: string, role: ApplicationMaterialRole): string | null;
   createApplicationInterview(
     candidateId: string,
     applicationId: string,
@@ -197,6 +202,7 @@ function createCoreApplicationMethods(
   | 'recordVacancyApplication'
   | 'listApplications'
   | 'getApplication'
+  | 'findSentApplication'
   | 'createApplication'
   | 'recordApplicationEvent'
   | 'applicationFunnel'
@@ -218,6 +224,10 @@ function createCoreApplicationMethods(
       requireCandidate(candidateId);
       return tracker.get(candidateId, applicationId);
     },
+    findSentApplication(candidateId, lookup) {
+      requireCandidate(candidateId);
+      return tracker.findSent(candidateId, lookup);
+    },
     createApplication(candidateId, input) {
       requireCandidate(candidateId);
       return tracker.create(candidateId, input);
@@ -236,8 +246,12 @@ function createCoreApplicationMethods(
 function createApplicationMutationMethods(
   tracker: ApplicationTrackerController,
   requireCandidate: RequireCandidate,
-): Pick<ApplicationTrackerMethods, 'patchApplication' | 'restoreApplication'> {
+): Pick<ApplicationTrackerMethods, 'patchApplication' | 'restoreApplication' | 'linkedMaterialId'> {
   return {
+    linkedMaterialId(candidateId, applicationId, role) {
+      requireCandidate(candidateId);
+      return tracker.linkedMaterialId(candidateId, applicationId, role);
+    },
     patchApplication(candidateId, applicationId, input, archiveStaleDays) {
       requireCandidate(candidateId);
       return tracker.patch(candidateId, applicationId, input, archiveStaleDays);
@@ -246,53 +260,6 @@ function createApplicationMutationMethods(
       requireCandidate(candidateId);
       return tracker.restoreFromArchive(candidateId, applicationId, expectedVersion, archiveStaleDays);
     },
-  };
-}
-
-function parseInterviewSnapshot(raw: string | null) {
-  if (!raw) return {};
-  try {
-    const snap = JSON.parse(raw) as { title?: string; company?: string };
-    return { vacancyTitle: snap.title, vacancyCompany: snap.company };
-  } catch {
-    return {};
-  }
-}
-
-function queryInterviewSubject(
-  database: DatabaseSync,
-  candidateId: string,
-  interviewId: string,
-) {
-  const row = database
-    .prepare(
-      `SELECT i.id, i.application_id, i.round, i.scheduled_at,
-              a.stage, a.vacancy_snapshot, a.cluster_id
-       FROM application_interviews i
-       JOIN applications a ON a.id = i.application_id
-       WHERE i.id = ? AND a.candidate_id = ?`,
-    )
-    .get(interviewId, candidateId) as
-    | {
-        id: string;
-        application_id: string;
-        round: number;
-        scheduled_at: string | null;
-        stage: string;
-        vacancy_snapshot: string | null;
-        cluster_id: string | null;
-      }
-    | undefined;
-  if (!row) return null;
-  const { vacancyTitle, vacancyCompany } = parseInterviewSnapshot(row.vacancy_snapshot);
-  return {
-    id: row.id,
-    applicationId: row.application_id,
-    round: row.round,
-    scheduledAt: row.scheduled_at,
-    stage: row.stage,
-    vacancyTitle,
-    vacancyCompany,
   };
 }
 
@@ -313,7 +280,12 @@ function createInterviewApplicationMethods(
   return {
     getInterviewSubject(candidateId, interviewId) {
       requireCandidate(candidateId);
-      return queryInterviewSubject(database, candidateId, interviewId);
+      return queryInterviewSubject(
+        database,
+        candidateId,
+        interviewId,
+        (owner, applicationId) => tracker.get(owner, applicationId)?.vacancy ?? null,
+      );
     },
     linkApplicationMaterial(candidateId, applicationId, role, documentId) {
       requireCandidate(candidateId);
@@ -407,6 +379,8 @@ export function createApplicationTrackerMethods(
     ...createApplicationOperationsMethods(requireCandidate, database),
     ...createApplicationContactMethods(database, sealedText, requireCandidate),
     ...createApplicationEmployerReadMethods(database, requireCandidate),
+    // Optional on `CandidateStore` (`deleteApplicationOffer?`), so the class declares nothing.
+    ...createRecordRemoval(tracker, requireCandidate),
   };
 }
 

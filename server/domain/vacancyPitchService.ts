@@ -1,6 +1,8 @@
+import { textLanguage } from './profileLanguage';
 import { PERSON_FIRST_NAMES } from '../../shared/personFirstNames';
 import { stripHiddenMarkers } from '../../shared/textHygiene';
 import { isImportedMemoryId } from './resumeImport';
+import { russianProperName } from './letterCyrillicName';
 import {
   hasRoleAwarePitchRanking,
   rankPitchFacts,
@@ -57,6 +59,8 @@ export interface VacancyPitchInputVacancy {
   readonly title: string;
   readonly company?: string;
   readonly description?: string;
+  /** Полный текст из пула: по нему определяется язык вакансии. */
+  readonly fullDescription?: string;
   readonly requiredSkills?: readonly string[];
   readonly responsibilities?: readonly string[];
   readonly location?: string;
@@ -153,8 +157,14 @@ function isNegativeStatement(statement: string): boolean {
  * иначе — английский. Явный параметр запроса всегда важнее (B266).
  */
 export function detectVacancyLanguage(vacancy: VacancyPitchInputVacancy): PitchLanguage {
-  const text = `${vacancy.title} ${vacancy.description ?? ''} ${(vacancy.responsibilities ?? []).join(' ')}`;
-  return /\p{Script=Cyrillic}/u.test(text) ? 'ru' : 'en';
+  const body = [
+    vacancy.fullDescription?.trim() || vacancy.description,
+    ...(vacancy.responsibilities ?? []),
+  ].join(' ');
+  // Язык — по тексту вакансии; заголовок решает, только когда текста нет.
+  const written = textLanguage(body);
+  if (written) return written;
+  return /\p{Script=Cyrillic}/u.test(body.trim() || vacancy.title) ? 'ru' : 'en';
 }
 
 function factBasis(fact: VacancyPitchInputFact): PitchFactBasis {
@@ -704,7 +714,8 @@ function letterSender(
     return { senderName: letterName, ...(first && first !== letterName ? { senderFirstName: first } : {}) };
   }
   if (!ownName) return {};
-  const inLetter = (name: string): string => (language === 'en' ? englishProperName(name) : name);
+  // B714: латиница профиля в русском письме не остаётся.
+  const inLetter = (name: string): string => (language === 'en' ? englishProperName(name) : russianProperName(name));
   const firstName = ownName.split(/\s+/u).find((part) => PERSON_FIRST_NAMES.has(part));
   return {
     senderName: inLetter(ownName),
@@ -719,7 +730,7 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
   const ownName = options.candidateName?.trim();
   const letterName = options.letterName?.trim() || undefined;
   const candidateName =
-    letterName ?? (ownName ? (language === 'en' ? englishProperName(ownName) : ownName) : copy.candidateFallback);
+    letterName ?? (ownName ? (language === 'en' ? englishProperName(ownName) : russianProperName(ownName)) : copy.candidateFallback);
   const facts = withTranslatedStatements(options.facts, language === 'en' ? options.translations : undefined);
   const usableFacts = rankPitchFacts(filterUsableFacts(facts), vacancy, options.rankingContext);
   const useRanking = hasRoleAwarePitchRanking(options.rankingContext);

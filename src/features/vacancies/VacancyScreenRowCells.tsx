@@ -1,3 +1,4 @@
+import { employmentKindLabel } from '../../../shared/vacancyEmploymentKind';
 import { VacancyFitCell } from './VacancyFitMark';
 import { VacancyMoneyCell } from './VacancyMoneyCell';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
@@ -112,9 +113,13 @@ export function vacancyGeoFit(item: Pick<MatchedVacancyItem, 'explanation'>): Va
 
 function VacancyScreenGeoCell({ item }: { readonly item: MatchedVacancyItem }) {
   const fit = vacancyGeoFit(item);
+  const employment = employmentKindLabel(item.cluster.employmentKind);
   return (
     <span className="vacancies-screen-cell vacancies-screen-cell--geo" data-label="Гео">
       <span title={item.cluster.canonicalLocation}>{vacancyGeoLabel(item)}</span>
+      {employment ? (
+        <span className="vacancies-chip vacancies-employment-chip">{employment}</span>
+      ) : null}
       <span className="vacancies-screen-fit-status">
         <span aria-hidden="true">
           <GeoFitDot outsideGeo={fit.state === 'no'} unknown={fit.state === 'unknown'} />

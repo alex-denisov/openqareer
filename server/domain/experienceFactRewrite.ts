@@ -316,6 +316,9 @@ const FIRST_PERSON =
 /** Case-sensitive: «US» and «IT» are not pronouns. */
 const FIRST_PERSON_EN = /(?:^|[^\p{L}])(?:I|[Ww]e|[Mm]y|[Oo]ur|[Mm]e)(?=$|[^\p{L}])/u;
 
+export const speaksInFirstPerson = (text: string) =>
+  FIRST_PERSON.test(text) || FIRST_PERSON_EN.test(text);
+
 function cleanBulletText(text: string): string {
   const flat = text
     .replace(/\s+/gu, ' ')
@@ -342,7 +345,7 @@ export function checkedBullet(
   // The model's text is the only thing that reaches the profile: a bullet
   // that copies a fragment word for word is the raw speech the owner refused.
   if (sources.some((source) => cleanBulletText(source) === text)) return null;
-  if (FIRST_PERSON.test(text) || FIRST_PERSON_EN.test(text) || arithmeticFails(text)) return null;
+  if (speaksInFirstPerson(text) || arithmeticFails(text)) return null;
   if (!numbersAreSourced(text, sources)) return null;
   const written = textLanguage(text);
   if (written && written !== language) return null;
@@ -504,6 +507,28 @@ export function withBulletEdits(
     ...proposal,
     places,
     leftOutFactIds: proposal.sourceFactIds.filter((factId) => !used.has(factId)),
+  };
+}
+
+/** Keeps only the named bullets; the facts of the others stay on offer (o07). */
+export function withOnlyBullets(
+  proposal: FactRewriteProposal,
+  keys: readonly string[],
+): FactRewriteProposal {
+  const wanted = new Set(keys);
+  const places = proposal.places
+    .map((place) => ({
+      ...place,
+      bullets: place.bullets.filter((_, i) => wanted.has(bulletKey(place.experienceId, i))),
+    }))
+    .filter((place) => place.bullets.length > 0);
+  const kept = places.flatMap((place) => place.bullets);
+  if (kept.length !== wanted.size) throw new InvalidBulletEditError('unknown_bullet');
+  return {
+    ...proposal,
+    places,
+    leftOutFactIds: [],
+    sourceFactIds: [...new Set(kept.flatMap((bullet) => bullet.sourceFactIds))],
   };
 }
 

@@ -74,6 +74,7 @@ function isPartnerRoute(path: string): boolean {
     path.startsWith('/api/v1/admin/vacancies') ||
     path.startsWith('/api/v1/admin/runtime-memory') ||
     path.startsWith('/api/v1/admin/hh-crawl-filter') ||
+    path.startsWith('/api/v1/admin/directory') ||
     path === '/api/v1/provider/status';
 }
 
@@ -96,7 +97,8 @@ function adminRoutePermissions(path: string, method: string): AdminPermission[] 
     path.startsWith('/api/v1/admin/vacancy-sources') ||
     path.startsWith('/api/v1/admin/vacancies') ||
     path.startsWith('/api/v1/admin/runtime-memory') ||
-    path.startsWith('/api/v1/admin/hh-crawl-filter')
+    path.startsWith('/api/v1/admin/hh-crawl-filter') ||
+    path.startsWith('/api/v1/admin/directory')
   ) required.push('can_manage_pool');
   return required.length ? required : null;
 }

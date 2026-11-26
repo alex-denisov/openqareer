@@ -10,6 +10,8 @@ import type { RoleSkillAssessmentRun } from '../../../server/domain/roleSkillAss
 export type RoleSkillAssessmentCurrent =
   | { state: 'role_not_selected' }
   | { state: 'source_unavailable' }
+  /** B770: вакансии роли ещё подбираются; повтор через минуту получит проверку. */
+  | { state: 'counting' }
   | { state: 'too_few_vacancies'; roleTitle: string; sampleSize: number; threshold: number }
   | {
       state: 'insufficient_requirements';
@@ -81,6 +83,9 @@ export interface CheckedRole {
   readonly completedAt: string;
   /** B565: навыки, которые проверка подтвердила. */
   readonly confirmedSkills?: readonly string[];
+  /** B764: русское название роли проверки и число её навыков. */
+  readonly roleTitleRu?: string;
+  readonly skillCount?: number;
 }
 
 /** Роли с завершённой проверкой навыков (B445). */
@@ -175,6 +180,18 @@ export async function appealRoleAssessmentCase(input: {
 }): Promise<RoleSkillAssessmentMutationResult> {
   const { runId, caseId, ...body } = input;
   return post(`${base(runId)}/cases/${encodeURIComponent(caseId)}/appeal`, body);
+}
+
+/** B734: «Верно» или «Пропустить» на итоге кейса. */
+export async function decideRoleAssessmentCase(input: {
+  runId: string;
+  caseId: string;
+  expectedRevision: number;
+  requestId: string;
+  accepted: boolean;
+}): Promise<RoleSkillAssessmentMutationResult> {
+  const { runId, caseId, ...body } = input;
+  return post(`${base(runId)}/cases/${encodeURIComponent(caseId)}/decision`, body);
 }
 
 export async function retryRoleSkillAssessment(input: {

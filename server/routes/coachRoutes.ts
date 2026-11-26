@@ -1,5 +1,9 @@
+import { withoutWriteClaims } from '../domain/factCorrection';
+import { correctionCards } from '../domain/factCorrectionProposals';
 import { registerRoleSkillDemandRoutes } from './roleSkillDemandRoutes';
 import { withSalaryFloorProposal } from '../domain/careerConditionClaim';
+import { selectionClaimsHold, withoutBrokenClaims } from '../coach/selectionClaims';
+import { readCoachSelection } from './coachSelectionContext';
 import { buildCoachCareerContext } from './coachCareerContext';
 import { adaptationContextFromInput, decorateAdaptationResult, labelAdaptationMessage, scopeAdaptationKnowledge, registerAdaptationCoachRoutes } from './adaptationCoach';
 import { extractCandidateFacts, type ExtractedFacts } from '../coach/candidateFactExtractor';
@@ -10,7 +14,7 @@ import { STAGE_TO_PHASE, type CoachTurnInput, type MarketObservation } from '../
 import { checkGeneratedTextFacts } from '../domain/generatedTextFactGate';
 import { selectCoachPhase } from '../orchestration/coachPhaseRouter';
 import { CoachProviderError, type CoachProvider } from '../providers/coachProvider';
-import { preferFinishedReply } from '../providers/coachReplyShape';
+import { isFinishedReply, preferFinishedReply } from '../providers/coachReplyShape';
 import { COACH_TURN_BUDGET_MS } from '../providers/stageTimeout';
 import type { CandidateStore } from '../data/candidateStore';
 import type { HhVacancySample } from '../connectors/hhVacancySearch';
@@ -125,6 +129,33 @@ async function fetchMarketObservations(
   }
 }
 
+/** Опровергнутые строками предложения убираются, если без них ответ остаётся законченным (B735). */
+function withCheckedMessage<T extends { readonly message: string }>(
+  result: T,
+  selection: Parameters<typeof withoutBrokenClaims>[1],
+): T {
+  const message = withoutBrokenClaims(result.message, selection);
+  return message !== result.message && isFinishedReply(message) ? { ...result, message } : result;
+}
+
+/**
+ * B796: консультант в профиль не пишет — слова «исправил» заменяются карточкой правки или отказом;
+ * о карточке под репликой он знает заранее.
+ */
+function honestTurn(
+  deps: RouteDeps,
+  candidateId: string,
+  input: Parameters<CoachProvider['createTurn']>[0],
+): { readonly input: typeof input; readonly honest: (message: string) => string } {
+  const latest = input.messages.at(-1);
+  if (input.internalPurpose || latest?.role !== 'user') return { input, honest: (message) => message };
+  const cards = correctionCards(deps.candidateStore.getSnapshot(candidateId), latest.content);
+  return {
+    input: cards.length > 0 ? { ...input, correctionCards: cards } : input,
+    honest: (message) => withoutWriteClaims(message, cards.length > 0),
+  };
+}
+
 async function completeTurnWithProvider(
   deps: RouteDeps,
   candidateId: string,
@@ -139,9 +170,16 @@ async function completeTurnWithProvider(
     // 29.10: the consultant's words reach the stream reader while they are written.
     const stream = turnStreamHub(deps);
     const streamId = turnStreamId(candidateId, key);
-    const onMessageText = (text: string) => stream.publish(streamId, text);
-    const options = { ...(deadlineAt ? { deadlineAt } : {}), ...(split ? { split: 'reply' as const } : {}), onMessageText, prefer: preferFinishedReply };
-    const turn = await deps.coachProvider.createTurn(input, key, options);
+    const { input: informed, honest } = honestTurn(deps, candidateId, input);
+    const onMessageText = (text: string) => stream.publish(streamId, honest(text));
+    // B735: ответ, которому строки подборки противоречат, пишет следующая ступень.
+    const selection = input.careerContext?.selection;
+    const prefer = (result: { readonly message: string }) =>
+      preferFinishedReply(result) && selectionClaimsHold(result.message, selection);
+    const options = { ...(deadlineAt ? { deadlineAt } : {}), ...(split ? { split: 'reply' as const } : {}), onMessageText, prefer };
+    const answered = await deps.coachProvider.createTurn(informed, key, options);
+    const checked = withCheckedMessage(answered.result, selection);
+    const turn = { ...answered, result: { ...checked, message: honest(checked.message) } };
     const pending = { analysis: 'pending' as const, analysisStartedAt: new Date().toISOString() };
     const replied = split ? { ...turn, result: { ...turn.result, ...pending } } : turn;
     const raw = decorateAdaptationResult(replied, input);
@@ -403,7 +441,11 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
     started.input.knowledgeContext = withStarStories(deps, request, candidate.id, body.content, started.input.knowledgeContext);
   }
   if (started.state === 'ready' && candidatePlan(deps, candidate.id) === 'free') started.input.modelTier = 'free';
-  if (started.state === 'ready' && !body.subject) started.input.careerContext = readCareerContext(deps, request, candidate.id);
+  if (started.state === 'ready' && !body.subject) {
+    const career = readCareerContext(deps, request, candidate.id);
+    const selection = career ? await readCoachSelection(deps, request, candidate.id) : undefined;
+    started.input.careerContext = career && selection ? { ...career, selection } : career;
+  }
   // A chosen vacancy is the topic itself: its turn needs no live market sample (block C R5).
   const marketQuery = body.subject?.kind === 'vacancy' ? undefined : body.marketQuery;
   return continueStartedTurn(deps, request, reply, candidate.id, key, started, marketQuery);

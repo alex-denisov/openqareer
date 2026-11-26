@@ -1,3 +1,4 @@
+import { runStorePassSteps, type StorePassOptions } from './storePassSteps';
 import { atsRolloutAdmits } from './freehire/freehireFeeds';
 import { failureMessage } from './requestTimeout';
 import type { HhTextRateController } from './hhTextRate';
@@ -16,19 +17,28 @@ import type {
   VacancyMatchExplanation,
   VacancySourceConfig,
 } from '../domain/unifiedVacancy';
-import { confirmsLiveness } from './poolLiveness';
-import { checkUnseenLinks, type UnseenLinkReport } from './unseenLinkCheck';
+import { confirmsLiveness, sourceKind } from './poolLiveness';
+import { checkUnseenLinks, UnseenLinkWalk, type UnseenLinkReport } from './unseenLinkCheck';
 import {
   calculateSourceAuthenticity,
   clusterVacancies,
   clusterVacanciesAsync,
+  clusterVacancySteps,
   IncrementalClusterBuilder,
+  isDuplicatePrepared,
   memberKeysOf,
+  prepareVacancy,
+  sourceMemberKey,
+  vacancyClusterLookup,
 } from './vacancyDeduplicator';
+import { clusterOfRecord } from './vacancyIdentity';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
 import { mapWithConcurrency } from './boundedConcurrency';
+import { ReadingStopped, STOP_READING_GRACE_MS, untilStopped } from './stopReading';
 import {
   DEFAULT_LINK_SAMPLE,
+  isPublicHttpUrl,
+  judgeLinkOutcome,
   probeVacancyLinks,
   type LinkCheckCensus,
   type LinkProbe,
@@ -54,6 +64,7 @@ import {
   MAX_VACANCY_AGE_DAYS,
   clusterProjectionOf,
 } from './vacancyPoolQuery';
+import { runSelectionLiveness, type SelectionLivenessReport } from './selectionLiveness';
 import type { VacancyLink, VacancyPoolStore } from './vacancyPoolStore';
 import {
   clusterBatchByKeys,
@@ -77,7 +88,9 @@ import {
 } from './hhCatalogText';
 import { expireClusterSources } from './clusterExpiry';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
+import { syncSection } from '../observability/syncSections';
 import { mapYielding } from './mapYielding';
+import { runStepsYielding } from './yieldingSteps';
 import type { CatalogTotals } from './matchedCatalogSummary';
 import {
   COMPANY_LANE_CONCURRENCY,
@@ -92,6 +105,10 @@ import {
   type WorkdayDescriptionReport,
   type WorkdayDetailFetch,
 } from './workdayDescriptions';
+import { hhTextNeedsRead, isHhStubText } from './hhStubText';
+import { isHhSource } from '../../shared/hhVacancySource';
+import { hasDetailText } from './detailTextPriority';
+import { WithoutTextQueue, type WithoutTextReader } from './withoutTextQueue';
 
 /**
  * Улов одного опроса. Простой список означает полное чтение: площадка показала
@@ -132,6 +149,7 @@ export interface VacancyDescriptionLoaded {
 export interface VacancyDescriptionLoader {
   load(url: string): Promise<VacancyDescriptionLoaded | string | undefined>;
   isLoaded?(url: string): boolean;
+  recheck?(url: string): Promise<VacancyDescriptionLoaded | string | undefined>;
   /** 03.11: адаптивный темп загрузчика; без него остаются фиксированные порция и конвейер. */
   rateControl?(): HhTextRateController | undefined;
 }
@@ -172,7 +190,8 @@ export interface SourceSyncOutcome {
     | 'disabled'
     | 'skipped_needs_query'
     /** B628: канал компании не ответил за отведённое полосе время; опрос идёт дальше в фоне. */
-    | 'lane_timeout';
+    | 'lane_timeout'
+    | 'stopped';
   /** How many records the source returned before the freshness filter. */
   readonly fetched: number;
   /** How many of them the pool now holds for this source. */
@@ -468,7 +487,10 @@ export class MultiSourceVacancyEngine {
   private keyedClusterings = 0;
   private fetcher?: SourceFetcher;
   private readonly holdSource: (source: VacancySourceConfig) => boolean;
+  private readonly loadRequestedSource?: (sourceId: string) => VacancySourceConfig | undefined;
   private readonly companyLaneSourceTimeoutMs: number;
+  private readonly signal?: AbortSignal;
+  private readonly stopReadingGraceMs: number;
   /**
    * Где лежит пул. Движок не держит копию в куче: каждое чтение — вопрос к
    * хранилищу, и память следует за размером запроса, а не пула (B221). Без
@@ -508,7 +530,7 @@ export class MultiSourceVacancyEngine {
    * ссылок — измерение, а не догадка, и выдумывать её нельзя (B200 срез 2).
    */
   private readonly linkProbe?: LinkProbe;
-  private readonly unseenAskedAt = new Map<string, number>();
+  private readonly unseenWalk = new UnseenLinkWalk();
   private readonly descriptionLoader?: VacancyDescriptionLoader;
   private readonly descriptionLoads = new Map<string, Promise<VacancyDescriptionLoadResult>>();
   private readonly workdayDetailFetch?: WorkdayDetailFetch;
@@ -530,10 +552,17 @@ export class MultiSourceVacancyEngine {
     workdayDetailFetch?: WorkdayDetailFetch;
     /** Источник сейчас нельзя опрашивать (пауза бюджета LinkedIn): место в волне не занимает. */
     holdSource?: (source: VacancySourceConfig) => boolean;
+    loadRequestedSource?: (sourceId: string) => VacancySourceConfig | undefined;
     /** B628: сколько полоса каналов компаний ждёт один источник, прежде чем освободить место. */
     companyLaneSourceTimeoutMs?: number;
+    /** B759: после отмены площадки не опрашиваются, начатые чтения получают короткий срок. */
+    signal?: AbortSignal;
+    stopReadingGraceMs?: number;
   }) {
+    this.signal = options?.signal;
+    this.stopReadingGraceMs = options?.stopReadingGraceMs ?? STOP_READING_GRACE_MS;
     this.holdSource = options?.holdSource ?? (() => false);
+    this.loadRequestedSource = options?.loadRequestedSource;
     this.companyLaneSourceTimeoutMs =
       options?.companyLaneSourceTimeoutMs ?? COMPANY_LANE_SOURCE_TIMEOUT_MS;
     this.reclusterMode = options?.recluster ?? { mode: 'sync' };
@@ -581,6 +610,13 @@ export class MultiSourceVacancyEngine {
       return;
     }
     const pending = new Map(load().map((row) => [row.sourceId, row]));
+    if (this.loadRequestedSource) {
+      for (const id of pending.keys()) {
+        if (this.sources.has(id)) continue;
+        const source = this.loadRequestedSource(id);
+        if (source?.id === id && source.enabled) this.addOrUpdateSource(source);
+      }
+    }
     for (const source of this.sources.values()) {
       const row = pending.get(source.id);
       source.syncRequestedAt = row?.syncRequestedAt;
@@ -588,8 +624,8 @@ export class MultiSourceVacancyEngine {
     }
   }
 
-  private restoreSourceStates(): void {
-    for (const state of this.pool.loadSourceStates()) {
+  private restoreSourceStates(sourceIds?: readonly string[]): void {
+    for (const state of this.pool.loadSourceStates(sourceIds)) {
       const source = this.sources.get(state.sourceId);
       if (!source) continue;
       source.lastSyncAt = state.lastSyncAt;
@@ -647,16 +683,43 @@ export class MultiSourceVacancyEngine {
     // 250 строк — около 0,6 с на VM прода (0,2 мс на строку локально, прод
     // медленнее в ~12 раз): дольше держать цикл событий на старте нельзя.
     chunkSize = 250,
-    options: { prune?: boolean } = {},
+    options: { prune?: boolean; backfill?: boolean } = {},
   ): Promise<{ restored: number }> {
     // A large SQLite pool may need a write-side maintenance pass. Production
     // readiness must not wait for that pass; callers can keep the historical
     // pruning behavior for small/test stores with the default.
     if (options.prune !== false) this.pruneStore(nowMs);
-    while ((this.pool.backfillStep?.(chunkSize) ?? 0) > 0) {
-      await new Promise((resolve) => setImmediate(resolve));
+    if (options.backfill !== false) {
+      while ((this.pool.backfillStep?.(chunkSize) ?? 0) > 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
     }
     return this.finishRestore(nowMs);
+  }
+
+  /**
+   * Чистка и дочитывание после готовности (B649-2): старт на проде ждал их
+   * 266 с. Здесь каждая транзакция и каждое окно — отдельный шаг, между ними
+   * цикл событий свободен; `shouldStop` прерывает проход при остановке.
+   * Чистка неизвестных источников — та же, с защитой неполного реестра.
+   */
+  public async maintainStoreAsync(
+    nowMs: number = Date.now(),
+    shouldStop: () => boolean = () => false,
+    options: StorePassOptions = {},
+  ): Promise<{ backfillWindows: number }> {
+    const oldestPublishedAt = new Date(
+      nowMs - MAX_VACANCY_AGE_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    // B759: в фоне между транзакциями пауза, остановка прерывает проход, шаги продолжаются.
+    return runStorePassSteps({
+      pool: this.pool,
+      knownSourceIds: Array.from(this.sources.keys()),
+      oldestPublishedAt,
+      shouldStop,
+      pruneClustersSync: () => this.pruneClusters(oldestPublishedAt),
+      options,
+    });
   }
 
   private pruneStore(nowMs: number): void {
@@ -825,9 +888,12 @@ export class MultiSourceVacancyEngine {
     this.pool.forgetHhTextRoleTarget?.(candidateId);
   }
 
-  /** Refreshes only the bounded source-state registry; it never hydrates pool rows. */
-  public refreshPersistedSourceState(): void {
-    this.restoreSourceStates();
+  /**
+   * Refreshes only the bounded source-state registry; it never hydrates pool rows.
+   * With ids only those sources are re-read (B736: the admin page, not 76 000 rows).
+   */
+  public refreshPersistedSourceState(sourceIds?: readonly string[]): void {
+    this.restoreSourceStates(sourceIds);
   }
 
   public addOrUpdateSource(source: VacancySourceConfig): void {
@@ -961,7 +1027,7 @@ export class MultiSourceVacancyEngine {
 
   /**
    * A total without the table scan: listed groups (>= 3) come from the cached
-   * summaries, the whole catalog from a TTL copy. Unlisted groups have < 3
+   * summaries, the whole catalog from the stored row (a TTL copy before it exists). Unlisted groups have < 3
    * entries and are counted exactly through an index. Stale by LISTINGS_CACHE_MS.
    */
   private knownCatalogTotal(query: CatalogEntriesQuery): number | undefined {
@@ -969,6 +1035,9 @@ export class MultiSourceVacancyEngine {
     const now = this.now();
     if (!query.place) {
       if (query.role) return undefined;
+      // B776: maintenance stores the total; the count in the request is the fallback before it.
+      const stored = this.pool.readCatalogEntriesTotal?.();
+      if (stored !== undefined) return stored;
       const root = this.rootTotalCache;
       return root && now - root.at < LISTINGS_CACHE_MS ? root.total : undefined;
     }
@@ -1070,7 +1139,22 @@ export class MultiSourceVacancyEngine {
    */
   public getActiveCluster(clusterId: string): VacancyCluster | undefined {
     const cluster = this.resolveClusterForId(clusterId);
-    return cluster?.status === 'active' ? cluster : undefined;
+    if (cluster?.status !== 'active') return undefined;
+    const prefix = 'cluster-';
+    return clusterId.startsWith(prefix)
+      ? this.clusterOfRecordId(cluster, clusterId.slice(prefix.length))
+      : cluster;
+  }
+
+  /** Кластер по id не подменяет запись чужой вакансией (24.11, склейки до B752). */
+  private clusterOfRecordId(cluster: VacancyCluster, recordId: string): VacancyCluster | undefined {
+    const read = (id: string) => this.pool.getVacancy(id);
+    return clusterOfRecord(
+      cluster,
+      recordId,
+      read,
+      (id) => this.pool.getVacancyIncludingExpired?.(id) ?? read(id),
+    );
   }
 
   /**
@@ -1081,7 +1165,12 @@ export class MultiSourceVacancyEngine {
     if (!key || typeof this.pool.clusterIdForMemberKey !== 'function') return undefined;
     const clusterId = this.pool.clusterIdForMemberKey(key);
     const cluster = clusterId ? this.getPublicCatalogCluster(clusterId) : undefined;
-    return cluster?.status === 'active' ? cluster : undefined;
+    if (cluster?.status !== 'active') return undefined;
+    const source = cluster.sources.find(
+      (item) => item.sourceUrl === key || sourceMemberKey(item) === key,
+    );
+    const recordId = source ? sourceMemberKey(source) : undefined;
+    return recordId ? this.clusterOfRecordId(cluster, recordId) : cluster;
   }
 
   /**
@@ -1286,10 +1375,34 @@ export class MultiSourceVacancyEngine {
     if (typeof pool.loadVacanciesWithoutFullText !== 'function') {
       return Promise.resolve({ requested: 0, loaded: 0, gone: 0, failed: 0, throttled: 0 });
     }
-    this.workdayDescriptions ??= new WorkdayDescriptionBackfill({
+    this.workdayDescriptions ??= this.createTextBackfill(pool);
+    return this.workdayDescriptions.step();
+  }
+
+  private createTextBackfill(pool: VacancyPoolStore): WorkdayDescriptionBackfill {
+    const load: WithoutTextReader['load'] = (sourceId, limit, excludeIds) =>
+      pool.loadVacanciesWithoutFullText!(sourceId, limit, excludeIds);
+    const queue = pool.reloadVacanciesWithoutFullText
+      ? new WithoutTextQueue({
+          load,
+          reload: (sourceId, ids) => pool.reloadVacanciesWithoutFullText!(sourceId, ids),
+        })
+      : undefined;
+    return new WorkdayDescriptionBackfill({
       pool: {
-        loadVacanciesWithoutFullText: (sourceId, limit, excludeIds) =>
-          pool.loadVacanciesWithoutFullText!(sourceId, limit, excludeIds),
+        loadVacanciesWithoutFullText: (sourceId, limit, excludeIds) => {
+          const ids = pool.peekDetailTextPriority?.(sourceId, limit, excludeIds) ?? [];
+          const head = ids.length
+            ? (pool.reloadVacanciesWithoutFullText?.(sourceId, ids) ?? [])
+            : [];
+          if (head.length >= limit) return head;
+          const exclude = [...excludeIds, ...head.map((vacancy) => vacancy.id)];
+          const rest = limit - head.length;
+          return [
+            ...head,
+            ...(queue ? queue.take(sourceId, rest, exclude) : load(sourceId, rest, exclude)),
+          ];
+        },
         mergeSourceSlice: (sourceId, vacancies) => pool.mergeSourceSlice(sourceId, vacancies),
         markExpired: (ids, atIso) => pool.markExpired(ids, atIso),
       },
@@ -1301,7 +1414,6 @@ export class MultiSourceVacancyEngine {
       defaultIntervalMs: 20_000,
       ...(this.workdayDetailFetch ? { fetchDetail: this.workdayDetailFetch } : {}),
     });
-    return this.workdayDescriptions.step();
   }
 
   /**
@@ -1347,6 +1459,14 @@ export class MultiSourceVacancyEngine {
     return this.pool.countVacancies(freshnessWindow());
   }
 
+  /** B649-4: счёт пула в своём потоке; у хранилища без потока — как poolSize. */
+  public poolSizeInWorker(): Promise<number> {
+    const window = freshnessWindow();
+    return this.pool.countVacanciesInWorker
+      ? this.pool.countVacanciesInWorker(window)
+      : Promise.resolve(this.pool.countVacancies(window));
+  }
+
   public getVacancy(id: string): UnifiedVacancy | undefined {
     return this.pool.getVacancy(id);
   }
@@ -1371,7 +1491,8 @@ export class MultiSourceVacancyEngine {
     if (
       this.persistedDescriptionIds.has(id) ||
       // 01.11: дочитанный текст без навыков — тоже готов; иначе он запрашивался каждый раз.
-      existing.fullDescription?.trim()
+      // B794: обрывок («Обязанности:») читается ещё раз, один раз на вакансию.
+      !hhTextNeedsRead(existing)
     ) {
       return Promise.resolve({ vacancy: existing, unavailable: false, status: 'cached' });
     }
@@ -1387,7 +1508,9 @@ export class MultiSourceVacancyEngine {
     if (pending) return pending;
     const load = this.loadAndStoreVacancyDescription(existing);
     this.descriptionLoads.set(id, load);
-    void load.finally(() => this.descriptionLoads.delete(id));
+    // B756 22.11: голый `finally` давал второе обещание без обработчика, и любая
+    // ошибка загрузки роняла процесс обслуживания (exit 1); ошибку видит вызывающий.
+    load.finally(() => this.descriptionLoads.delete(id)).catch(() => undefined);
     return load;
   }
 
@@ -1397,6 +1520,134 @@ export class MultiSourceVacancyEngine {
    */
   public requestHhTextPriority(ids: readonly string[], baseRank = 0): void {
     this.pool.requestHhTextPriority?.(ids, baseRank);
+    // B791: площадки без текста в списке (LinkedIn, Workday…) — своя очередь, тот же вызов.
+    const detail = ids.filter(hasDetailText);
+    if (detail.length > 0) this.pool.requestDetailTextPriority?.(detail, baseRank);
+  }
+
+  /** B797: верх подборки — в очередь сверки живости; сеть здесь не трогается. */
+  public requestSelectionLiveness(ids: readonly string[]): void {
+    this.pool.requestSelectionLiveness?.(ids);
+  }
+
+  /** B797: записи верха подборок, которые сверка застала снятыми. */
+  public closedSelection(): ReadonlySet<string> {
+    return this.pool.closedSelection?.() ?? new Set();
+  }
+
+  /**
+   * B797: снята ли открытая карточка. Запись hh, которую сутки не сверяли, читается с площадки.
+   * Склейка закрыта, только когда сняты все её записи. Список снимает запись индексом; кластер
+   * сведёт воркер, как у `retireArchivedVacancy`.
+   */
+  public async openedVacancyGone(cluster: VacancyCluster): Promise<boolean> {
+    const id = cluster.id.replace(/^cluster-/u, '');
+    const vacancy = id.startsWith(HH_ID_PREFIX) ? this.pool.getVacancy(id) : undefined;
+    if (
+      vacancy &&
+      this.descriptionLoader?.recheck &&
+      this.pool.selectionRecentlyChecked?.(id) === false
+    ) {
+      await this.settleOpenedCheck(vacancy);
+    }
+    const sources = cluster.sources;
+    if (sources.length === 0) return this.recordGone(id);
+    return sources.every((source) => {
+      const key = sourceMemberKey(source);
+      const known = key !== undefined && this.memberRecordExists(`cluster-${key}`);
+      if (known) return this.recordGone(key);
+      // Источник hh без внешнего id — запись самой карточки.
+      return isHhSource(source) && this.recordGone(id);
+    });
+  }
+
+  /**
+   * B797: кластера у снятой записи нет — такт убрал её ключ из склейки с другой площадкой. Строка
+   * закрыта, если по правилам склейки у неё не осталось живой записи на другой площадке.
+   */
+  public detachedRowGone(rowId: string): boolean {
+    const id = rowId.replace(/^cluster-/u, '');
+    const record = this.pool.getVacancyIncludingExpired?.(id);
+    const load = this.pool.loadClusterRepresentatives?.bind(this.pool);
+    if (!record || !load) return true;
+    const prepared = prepareVacancy(record);
+    return !load([vacancyClusterLookup(record)]).some((candidate) => {
+      if (!isDuplicatePrepared(prepared, candidate.prepared)) return false;
+      const cluster = this.getPublicCatalogCluster(candidate.clusterId);
+      return cluster?.status === 'active' && this.hasOtherLiveSource(cluster, id);
+    });
+  }
+
+  private hasOtherLiveSource(cluster: VacancyCluster, ownId: string): boolean {
+    return cluster.sources.some((source) => {
+      const key = sourceMemberKey(source);
+      return key !== undefined && key !== ownId && this.pool.getVacancy(key)?.status === 'active';
+    });
+  }
+
+  /** Запись в пуле была, а живой её больше нет. */
+  private recordGone(id: string): boolean {
+    return this.pool.getVacancy(id) === undefined && this.memberRecordExists(`cluster-${id}`);
+  }
+
+  private async settleOpenedCheck(vacancy: UnifiedVacancy): Promise<void> {
+    const verdict = await this.checkHhLiveness(vacancy);
+    // Нет ответа о вакансии — карточка не сверена: следующее открытие спросит снова.
+    if (verdict === 'blocked' || verdict === 'unknown') return;
+    if (verdict === 'gone') this.pool.markExpired([vacancy.id], new Date().toISOString());
+    this.pool.markSelectionLivenessChecked?.(vacancy.id);
+  }
+
+  /** B797: один такт сверки живости верха подборок. Зовёт только воркер обслуживания. */
+  public runSelectionLivenessStep(stopped: () => boolean): Promise<SelectionLivenessReport> {
+    const pool = this.pool;
+    return runSelectionLiveness({
+      due: (limit) => pool.dueSelectionLiveness?.(limit) ?? [],
+      check: (id) => this.checkLiveness(id),
+      retire: (id) => this.retireGone(id),
+      markChecked: (id) => pool.markSelectionLivenessChecked?.(id),
+      markTried: (id) => pool.markSelectionLivenessTried?.(id),
+      stopped,
+    });
+  }
+
+  private async checkLiveness(id: string): Promise<'open' | 'gone' | 'unknown' | 'blocked'> {
+    const vacancy = this.pool.getVacancy(id);
+    if (!vacancy) return 'unknown';
+    const sourceId = vacancy.provenance.sourceId;
+    const source = this.sources.get(sourceId);
+    const { kind } = sourceKind(sourceId);
+    if (!source?.enabled || kind === 'linkedin') return 'unknown';
+    if (kind === 'hh') return this.checkHhLiveness(vacancy);
+    if (!this.linkProbe || !isPublicHttpUrl(vacancy.url)) return 'unknown';
+    const outcome = await this.linkProbe(vacancy.url);
+    return judgeLinkOutcome(outcome, vacancy.url).verdict;
+  }
+
+  private async checkHhLiveness(
+    vacancy: UnifiedVacancy,
+  ): Promise<'open' | 'gone' | 'unknown' | 'blocked'> {
+    const loader = this.descriptionLoader;
+    if (!loader?.recheck || this.rights.get(vacancy.provenance.sourceId) !== 'live') {
+      return 'unknown';
+    }
+    const details = await loader.recheck(vacancy.url);
+    if (!details || typeof details === 'string') return details ? 'open' : 'unknown';
+    if (details.blocked) return 'blocked';
+    if (details.restricted) return 'unknown';
+    return details.archived ? 'gone' : 'open';
+  }
+
+  private retireGone(id: string): void {
+    const vacancy = this.pool.getVacancy(id);
+    if (!vacancy) return;
+    this.pool.markExpired([id], new Date().toISOString());
+    if (this.reclusterMode.mode === 'keyed') {
+      detachVacanciesByKeys(this.keyedStore(), [{ id, url: vacancy.url }]);
+    } else {
+      this.handleExpiredVacancies([id]);
+      this.poolChangedSinceRecluster = true;
+    }
   }
 
   /** Первые карточки подбора греются последовательно, не создавая веер запросов. */
@@ -1430,7 +1681,12 @@ export class MultiSourceVacancyEngine {
   private retireArchivedVacancy(vacancy: UnifiedVacancy): VacancyDescriptionLoadResult {
     // Только индекс: handleExpiredVacancies грузит все кластеры и в HTTP-процессе
     // выбивал память (heap OOM на проде 29.09). Кластер сведёт воркер обслуживания.
-    this.pool.markExpired([vacancy.id], new Date().toISOString());
+    try {
+      this.pool.markExpired([vacancy.id], new Date().toISOString());
+    } catch {
+      // B756: база занята дольше busy_timeout — снять запись на следующем такте, как запись текста.
+      return { vacancy, unavailable: true, status: 'failed' };
+    }
     return { vacancy, unavailable: true, status: 'skipped' };
   }
 
@@ -1490,6 +1746,7 @@ export class MultiSourceVacancyEngine {
       ...vacancy,
       ...(fullDescription ? { fullDescription } : {}),
       requiredSkills: skillsToSave,
+      ...(fullDescription && isHhStubText(fullDescription) ? { descriptionShort: true } : {}),
     };
     try {
       this.pool.mergeSourceSlice(vacancy.provenance.sourceId, [updated]);
@@ -1610,9 +1867,16 @@ export class MultiSourceVacancyEngine {
     query: string | undefined,
     nowMs: number,
   ): Promise<SourceSyncOutcome> {
-    const reading = await this.fetcher!(source, query ? { query } : undefined);
+    const reading = await untilStopped(
+      this.fetcher!(source, query ? { query } : undefined),
+      this.signal,
+      this.stopReadingGraceMs,
+    );
     const fetched: UnifiedVacancy[] = Array.isArray(reading) ? reading : reading.vacancies;
     const partial = Array.isArray(reading) ? false : reading.partial;
+    // B759: полное чтение площадки повторит следующий старт, а его запись и сведение держали
+    // остановку десятки секунд. Частичное (обход hh) уже сдвинуло курсор — его записываем.
+    if (this.signal?.aborted && !partial) throw new ReadingStopped();
     const dropObservedBefore = Array.isArray(reading) ? undefined : reading.dropObservedBefore;
 
     // Перепись улова считается по тому, что площадка отдала, — до фильтра
@@ -1639,6 +1903,7 @@ export class MultiSourceVacancyEngine {
       partial,
       dropObservedBefore,
     );
+    if (kept > 0) this.workdayDescriptions?.wake(source.id);
     return {
       sourceId: source.id,
       status: 'healthy',
@@ -1656,6 +1921,7 @@ export class MultiSourceVacancyEngine {
     const source = this.sources.get(sourceId);
     if (!source) return { sourceId, status: 'unknown_source', fetched: 0, kept: 0 };
     if (!source.enabled) return { sourceId, status: 'disabled', fetched: 0, kept: 0 };
+    if (this.signal?.aborted) return { sourceId, status: 'stopped', fetched: 0, kept: 0 };
     // An endpoint that answers nothing usable without a search term must be
     // skipped rather than recorded as an empty success (B164).
     if (source.requiresQuery && !query?.trim()) {
@@ -1668,7 +1934,8 @@ export class MultiSourceVacancyEngine {
       if (!this.fetcher) {
         throw new Error('vacancy_source_transport_unavailable');
       }
-      const permission = await this.robotsPermission(source, nowMs);
+      const permission = await untilStopped(this.robotsPermission(source, nowMs), this.signal, 0);
+      if (this.signal?.aborted) return { sourceId, status: 'stopped', fetched: 0, kept: 0 };
       if (permission.disallowed) {
         // Запрет словами — не поломка: площадка сказала «не ходи», и продукт
         // не ходит. Красным отказом это выглядеть не должно (B204).
@@ -1676,6 +1943,8 @@ export class MultiSourceVacancyEngine {
       }
       return await this.readSource(source, query, nowMs);
     } catch (err) {
+      if (err instanceof ReadingStopped)
+        return { sourceId, status: 'stopped', fetched: 0, kept: 0 };
       const message = failureMessage(err);
       if (message.startsWith('source_not_configured')) {
         // The tool this source needs is not installed here: say so once, do not
@@ -1831,29 +2100,76 @@ export class MultiSourceVacancyEngine {
     dropObservedBefore?: string,
   ): Promise<void> {
     const store = this.keyedStore();
+    // B763: каждая записанная порция сводится сразу. Раньше сведение шло после
+    // записи всего среза, и остановка посреди записи (выкат) оставляла уже
+    // записанные строки без кластера навсегда.
+    const clustered = new Set<string>();
+    const clusterChunk = async (chunk: readonly UnifiedVacancy[]) => {
+      await this.clusterInBatches(store, chunk);
+      for (const vacancy of chunk) clustered.add(vacancy.id);
+      // Записанная порция сведена; остальное полное чтение повторит следующий старт (B759).
+      if (this.signal?.aborted && !partial) throw new ReadingStopped();
+    };
     let gone: readonly VacancyLink[];
     if (partial) {
       const result = this.pool.mergeSourceSliceAsync
-        ? await this.pool.mergeSourceSliceAsync(source.id, freshFetched, dropObservedBefore)
+        ? await this.pool.mergeSourceSliceAsync(source.id, freshFetched, dropObservedBefore, {
+            onChunkWritten: clusterChunk,
+          })
         : this.pool.mergeSourceSlice(source.id, freshFetched, dropObservedBefore);
       gone = result.dropped;
     } else {
       const fetchedIds = new Set(freshFetched.map((vacancy) => vacancy.id));
       gone = this.pool.loadSourceLinks(source.id).filter((link) => !fetchedIds.has(link.id));
       if (this.pool.replaceSourceSliceAsync) {
-        await this.pool.replaceSourceSliceAsync(source.id, freshFetched);
+        await this.pool.replaceSourceSliceAsync(source.id, freshFetched, {
+          onChunkWritten: clusterChunk,
+        });
       } else {
         this.pool.replaceSourceSlice(source.id, freshFetched);
       }
     }
     if (gone.length > 0) detachVacanciesByKeys(store, gone);
+    // Хранилище без порций (синхронная запись) — сведение после записи, как раньше.
+    await this.clusterInBatches(
+      store,
+      freshFetched.filter((vacancy) => !clustered.has(vacancy.id)),
+    );
+    this.keyedClusterings += 1;
+  }
+
+  /** Партиями `batchSize`, с уступкой циклу событий между партиями (B230). */
+  private async clusterInBatches(
+    store: KeyedClusterStore,
+    vacancies: readonly UnifiedVacancy[],
+  ): Promise<number> {
     const batchSize =
       this.reclusterMode.mode === 'keyed' ? this.reclusterMode.batchSize : DEFAULT_KEYED_BATCH_SIZE;
-    for (let offset = 0; offset < freshFetched.length; offset += batchSize) {
+    for (let offset = 0; offset < vacancies.length; offset += batchSize) {
       if (offset > 0) await new Promise<void>((resolve) => setImmediate(resolve));
-      clusterBatchByKeys(store, freshFetched.slice(offset, offset + batchSize));
+      clusterBatchByKeys(store, vacancies.slice(offset, offset + batchSize));
     }
-    this.keyedClusterings += 1;
+    return vacancies.length;
+  }
+
+  /**
+   * B763: один шаг догона — окно пула, записи без кластера сводятся по ключам.
+   * Только в режиме `keyed`; в остальных пересборка и так видит весь пул.
+   */
+  public async runUnclusteredCatchUpStep(
+    chunk?: number,
+    maxClustered?: number,
+  ): Promise<{
+    inspected: number;
+    clustered: number;
+    passFinished: boolean;
+  }> {
+    if (this.reclusterMode.mode !== 'keyed' || !this.pool.readUnclusteredPoolPage) {
+      return { inspected: 0, clustered: 0, passFinished: true };
+    }
+    const page = this.pool.readUnclusteredPoolPage(chunk, maxClustered);
+    const clustered = await this.clusterInBatches(this.keyedStore(), page.unclustered);
+    return { inspected: page.inspected, clustered, passFinished: page.passFinished };
   }
 
   private keyedStore(): KeyedClusterStore {
@@ -1885,6 +2201,16 @@ export class MultiSourceVacancyEngine {
     }
   }
 
+  /**
+   * B752: шаг разбиения переписал строки кластеров в базе. Копия в памяти
+   * (старые пути `loadClusters`) устарела и больше не пишется назад;
+   * следующее чтение берёт кластеры из базы.
+   */
+  dropClusterSnapshot(): void {
+    this.clusters = [];
+    this.clusterBuilder = new IncrementalClusterBuilder([]);
+  }
+
   private getOrCreateClusterBuilder(): IncrementalClusterBuilder {
     if (!this.clusterBuilder) {
       this.clusterBuilder = new IncrementalClusterBuilder(this.clusters);
@@ -1902,6 +2228,16 @@ export class MultiSourceVacancyEngine {
     const affected = [...updatedClusters, ...newClusters];
     if (affected.length > 0 && typeof this.pool.saveClusters === 'function') {
       this.pool.saveClusters(affected);
+    }
+  }
+
+  /** Проверку ссылок остановка не ждёт: записи ей не нужны, следующий такт проверит снова (B759). */
+  private async unlessStopped<T>(work: Promise<T>): Promise<T | undefined> {
+    try {
+      return await untilStopped(work, this.signal, 0);
+    } catch (error: unknown) {
+      if (error instanceof ReadingStopped) return undefined;
+      throw error;
     }
   }
 
@@ -1928,10 +2264,11 @@ export class MultiSourceVacancyEngine {
     const links = this.pool.loadSourceLinks(sourceId);
     if (links.length === 0) return undefined;
 
-    const { census, goneVacancyIds } = await probeVacancyLinks(links, this.linkProbe, {
-      sample,
-      nowMs,
-    });
+    const probed = await this.unlessStopped(
+      probeVacancyLinks(links, this.linkProbe, { sample, nowMs }),
+    );
+    if (!probed) return undefined;
+    const { census, goneVacancyIds } = probed;
 
     this.observations.set(
       sourceId,
@@ -1962,17 +2299,15 @@ export class MultiSourceVacancyEngine {
   /** B642: проверка ссылок записей работодателей, невиденных в последнем чтении. */
   public async probeUnseenEmployerLinks(nowMs: number = Date.now()): Promise<UnseenLinkReport> {
     const empty = { checked: 0, gone: 0, open: 0, unknown: 0 };
-    if (!this.linkProbe) return empty;
+    if (!this.linkProbe || this.signal?.aborted) return empty;
     const sourceIds = [...this.sources.values()]
       .filter((source) => source.enabled && confirmsLiveness(source.id))
       .map((source) => source.id);
-    const { goneLinks, ...report } = await checkUnseenLinks(
-      this.pool,
-      this.linkProbe,
-      sourceIds,
-      this.unseenAskedAt,
-      nowMs,
+    const checked = await this.unlessStopped(
+      checkUnseenLinks(this.pool, this.linkProbe, sourceIds, this.unseenWalk, nowMs),
     );
+    if (!checked) return empty;
+    const { goneLinks, ...report } = checked;
     if (goneLinks.length > 0) {
       if (this.reclusterMode.mode === 'keyed') detachVacanciesByKeys(this.keyedStore(), goneLinks);
       else {
@@ -2134,7 +2469,7 @@ export class MultiSourceVacancyEngine {
     const linksWereDead =
       this.healthOf(sourceId, nowMs).liveness.pausedBecause === 'links_not_opening';
     const outcome = await this.syncOne(sourceId, undefined, nowMs);
-    if (linksWereDead) await this.probeSourceLinks(sourceId, nowMs, DEAD_SOURCE_LINK_SAMPLE);
+    if (linksWereDead && !this.signal?.aborted) await this.probeSourceLinks(sourceId, nowMs, DEAD_SOURCE_LINK_SAMPLE);
     return outcome;
   }
 
@@ -2376,14 +2711,17 @@ export class MultiSourceVacancyEngine {
   ): Promise<MatchedVacancyItem[]> {
     if (!this.pool.queryMatchCandidatesAsync) return this.getMatchedVacancies(candidate);
     const effective = this.withResolvedSemanticFunctions(candidate);
-    const clusters = clusterVacancies(await this.pool.queryMatchCandidatesAsync(effective)).filter(
-      (cluster) => cluster.status === 'active',
-    );
-    const matched = await mapYielding(clusters, (cluster) => ({
+    const candidates = await this.pool.queryMatchCandidatesAsync(effective);
+    // B770: clustering runs in slices; the stall log names 'engine:cluster' only if one vacancy is slow.
+    const clusters = await runStepsYielding(clusterVacancySteps(candidates), {
+      section: 'engine:cluster',
+    });
+    const active = clusters.filter((cluster) => cluster.status === 'active');
+    const matched = await mapYielding(active, (cluster) => ({
       cluster,
       explanation: matchCandidateWithVacancy(effective, cluster),
     }));
-    return matched.sort(compareMatchedVacancies);
+    return syncSection('engine:sort', () => matched.sort(compareMatchedVacancies));
   }
 
   public async testSource(
@@ -2445,6 +2783,7 @@ const HIDDEN_TEXT_ANSWERS = 2;
 
 /** Кластеров снятых hh-записей за такт: точечные записи, не обход всех кластеров. */
 const EXPIRED_CLUSTER_BATCH = 50;
+const HH_ID_PREFIX = 'src-hh-search:';
 const LIVENESS_COUNT_CHUNK = 50;
 
 function yieldTurn(): Promise<void> {

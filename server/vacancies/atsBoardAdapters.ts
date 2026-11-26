@@ -1,4 +1,4 @@
-import { leverSalaryPeriod } from '../../shared/vacancySalaryPeriod';
+import { leverSalaryPeriod, recruiteeSalaryPeriod } from '../../shared/vacancySalaryPeriod';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import { htmlToFeedText } from '../connectors/feedText';
 import {
@@ -17,6 +17,14 @@ import {
   type JsonAdapterContext,
   type JsonRecord,
 } from './jsonVacancyRecord';
+import {
+  JOIN_PAGE_SIZE,
+  PAYCOM_PORTAL_BASE,
+  PAYLOCITY_BASE,
+  readJoin,
+  readPaycom,
+  readPaylocity,
+} from './atsListingReaders';
 
 /**
  * Текст Lever лежит в трёх местах: вступление, списки («Requirements»,
@@ -62,7 +70,10 @@ export type AtsProvider =
   | 'pinpoint'
   | 'personio'
   | 'bamboohr'
-  | 'teamtailor';
+  | 'teamtailor'
+  | 'paylocity'
+  | 'join'
+  | 'paycom';
 
 /**
  * Что площадка разрешила словами в своём `robots.txt` на 2026-09-05. Запрет —
@@ -194,6 +205,41 @@ export const ATS_PROVIDERS: readonly AtsProviderContract[] = [
     robotsNote:
       'Disallow только /app/, /messages/ и т.п. — /jobs.rss разрешён (замер 2026-11-09, B628)',
     measuredAt: '2026-11-09',
+  },
+  // B646-5: три провайдера перенесены из freehire (MIT, NOTICE); разбор — atsListingReaders.
+  {
+    provider: 'paylocity',
+    name: 'Paylocity',
+    // Доска — GUID компании; весь список одним HTML с window.pageData.Jobs.
+    endpoint: (board) => `${PAYLOCITY_BASE}/Recruiting/Jobs/All/${board}`,
+    boardUrl: (board) => `${PAYLOCITY_BASE}/Recruiting/Jobs/All/${board}`,
+    crawlPermission: 'allowed',
+    robotsNote:
+      'robots.txt отсутствует (404), запрета словами нет; Cabot Properties — 8 вакансий одной страницей, текст только обрезком (замер 2026-11-11, B646-5)',
+    measuredAt: '2026-11-11',
+  },
+  {
+    provider: 'join',
+    name: 'JOIN',
+    // Доска — числовой id компании; pageSize больше 5 Join отвергает 422.
+    endpoint: (board) =>
+      `https://join.com/api/public/companies/${board}/jobs?page=1&pageSize=${JOIN_PAGE_SIZE}`,
+    boardUrl: (board) => `https://join.com/companies/${board}`,
+    crawlPermission: 'allowed',
+    robotsNote:
+      'Disallow только /*/lp/ — /api/public/ разрешён; Just Hiring (167291) — 2 вакансии, текста в списке нет; лимит частоты ~2 запроса/с (freehire) (замер 2026-11-11, B646-5)',
+    measuredAt: '2026-11-11',
+  },
+  {
+    provider: 'paycom',
+    name: 'Paycom',
+    // Доска — 32-значный ключ клиента; страница портала несёт JWT для API.
+    endpoint: (board) => `${PAYCOM_PORTAL_BASE}/${board}/jobs/1`,
+    boardUrl: (board) => `${PAYCOM_PORTAL_BASE}/${board}/career-page`,
+    crawlPermission: 'robots_forbidden',
+    robotsNote:
+      'robots.txt хоста API разрешает только /api/ats/job-postings/ и /api/ats/company-name; список /api/ats/job-posting-previews/search под Disallow: / (CHOC — 11 вакансий, замер 2026-11-11, B646-5)',
+    measuredAt: '2026-11-11',
   },
 ];
 
@@ -376,7 +422,7 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
         isRemote: offer.remote === true,
         description: text(offer.description) || text(offer.title),
         skills: [],
-        salary: rangeSalary(offer.salary),
+        salary: recruiteeSalary(offer.salary),
         url: text(offer.careers_url) || text(offer.careers_apply_url),
         publishedAt: fromLooseDate(offer.published_at ?? offer.created_at),
       });
@@ -483,6 +529,9 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
     }),
 
   bamboohr: readBamboohr,
+  paylocity: readPaylocity,
+  join: readJoin,
+  paycom: readPaycom,
   teamtailor: readTeamtailor,
   personio: (payload, context, sourceId, board) => {
     const xml = typeof payload === 'string' ? payload : '';
@@ -645,6 +694,18 @@ function leverSalary(value: unknown): UnifiedVacancy['salary'] | undefined {
         periodEvidence: { field: 'lever.salaryRange.interval', value: rawPeriod },
       }
     : salary;
+}
+
+/** B803: период назван площадкой. Вилка с периодом без нашей подписи (неделя, день) не берётся. */
+function recruiteeSalary(value: unknown): UnifiedVacancy['salary'] | undefined {
+  const salary = rangeSalary(value);
+  if (!salary) return undefined;
+  const rawPeriod = text(record(value).period).trim();
+  if (!rawPeriod) return salary;
+  const period = recruiteeSalaryPeriod(rawPeriod);
+  return period
+    ? { ...salary, period, periodEvidence: { field: 'recruitee.salary.period', value: rawPeriod } }
+    : undefined;
 }
 
 /**

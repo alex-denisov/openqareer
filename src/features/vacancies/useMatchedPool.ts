@@ -3,9 +3,10 @@ import type { VacancySort } from '../../../shared/vacancySort';
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import type { VacanciesScreenState } from './VacanciesScreenFilters';
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { getMatchedVacancyPage, getVacancySources } from '../coach/coachApi';
+import { getMatchedVacancyFacets, getMatchedVacancyPage, getVacancySources } from '../coach/coachApi';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
-import type { CampaignMetaView } from '../coach/matchedVacancyApi';
+import type { CampaignMetaView, MatchedVacancyPage } from '../coach/matchedVacancyApi';
+import { readEarlyOr } from '../shell/earlyRead';
 import { collectMatchedPool, withDeadline } from './vacancyRead';
 import { readCachedMatchedPool, writeCachedMatchedPool, type CachedMatchedPool } from './matchedPoolCache';
 
@@ -14,14 +15,19 @@ export interface MatchedPool {
   readonly initialFilters?: VacanciesScreenState;
   /** The sort the server applied to this selection (saved per account, 29.10). */
   readonly sort?: VacancySort;
-  readonly setFilters?: (filters: VacanciesScreenState) => void;
+  /** `keepRows` (B792): показанные строки остаются до ответа — список не пустеет между чтениями. */
+  readonly setFilters?: (filters: VacanciesScreenState, keepRows?: boolean) => void;
   readonly matched: MatchedVacancyItem[];
   readonly total: number;
   readonly poolTotal: number;
   readonly loading: boolean;
   readonly failed: boolean;
+  /** Чтение ещё идёт, в том числе после первой страницы: отсутствие строки ещё не ответ. */
+  readonly reading?: boolean;
   /** Прочитан ли пул целиком: выборка по половине пула — не выборка по пулу. */
   readonly complete: boolean;
+  /** Роли, с которыми прочитаны `matched`; нет — ещё не прочитаны. */
+  readonly readRoles?: readonly string[];
   /** Кампания и гипотезы роли — только с первой страницы (B248). */
   readonly campaign?: CampaignMetaView;
   /** Целевой уровень кандидата, выведенный сервером — только с первой страницы. */
@@ -38,36 +44,89 @@ interface PoolReaderSetters {
   readonly setTotal: Dispatch<SetStateAction<number>>;
   readonly setPoolTotal: Dispatch<SetStateAction<number>>;
   readonly setLoading: Dispatch<SetStateAction<boolean>>;
+  readonly setReading: Dispatch<SetStateAction<boolean>>;
   readonly setFailed: Dispatch<SetStateAction<boolean>>;
   readonly setComplete: Dispatch<SetStateAction<boolean>>;
+  readonly setReadRoles: Dispatch<SetStateAction<readonly string[] | undefined>>;
   readonly setCampaign: Dispatch<SetStateAction<CampaignMetaView | undefined>>;
   readonly setCandidateLevel: Dispatch<SetStateAction<string | null | undefined>>;
   readonly setFailureSourceLabel: Dispatch<SetStateAction<string | undefined>>;
 }
 
-/** One cabin-wide read; the owner screen can retry the bounded page sequence. */
-export function useMatchedPool(provided?: MatchedPool): MatchedPool {
-  // B589: the last unfiltered selection renders at once on a repeat visit.
-  const [cached] = useState(() => (provided ? undefined : readCachedMatchedPool()));
-  const [facets, setFacets] = useState<MatchedVacancyFacets | undefined>(cached?.facets);
-  const [initialFilters, setInitialFilters] = useState<VacanciesScreenState | undefined>(
-    cached?.initialFilters,
-  );
-  const [sort, setSort] = useState<VacancySort | undefined>(cached?.sort);
-  const [filters, setFilterState] = useState<VacanciesScreenState>();
-  const setFilters = useCallback((value: VacanciesScreenState) => {
+export interface MatchedPoolOptions {
+  /**
+   * B645 s07: сколько страниц читать. Новый кабинет берёт одну страницу и число из ответа
+   * сервера, остальное — по запросу порциями сервера; без него читается вся подборка.
+   */
+  readonly pageLimit?: number;
+  /**
+   * B768: фильтры первого чтения. «Вакансии по роли» читали сначала всю подборку,
+   * а потом с ролью — два запроса строк по ~5 с на проде; теперь первый уже с ролью.
+   * Кэш — подборка без фильтров, с начальными фильтрами он не показывается.
+   */
+  readonly initialFilters?: VacanciesScreenState;
+  /** Свой источник первой страницы: строки, фасеты и кампания одним запросом (список s07). */
+  readonly firstPage?: FirstPageReader;
+}
+
+/** Без `filters` роли подставляет сервер и называет их в `initialFilters`. */
+export type FirstPageReader = (
+  signal: AbortSignal,
+  filters?: VacanciesScreenState,
+) => Promise<MatchedVacancyPage>;
+
+/** Чтение всей подборки начинает только с полной записи, чтение страницы — с последней (B770). */
+function cachedStart(provided: MatchedPool | undefined, options: MatchedPoolOptions) {
+  if (provided || options.initialFilters) return undefined;
+  return readCachedMatchedPool(options.pageLimit === undefined ? 'whole' : 'latest');
+}
+
+function readRows(
+  offset: number,
+  signal: AbortSignal,
+  filters: VacanciesScreenState | undefined,
+  firstPage: FirstPageReader | undefined,
+) {
+  if (offset !== 0 || !firstPage) return getMatchedVacancyPage(offset, signal, filters, 'rows');
+  // Первую страницу без фильтров начинают рядом с вопросом о сессии (B792).
+  return filters ? firstPage(signal, filters) : readEarlyOr(firstPage, signal);
+}
+
+/** Фильтры чтения; `keepRows` взводится на одно следующее чтение. */
+function usePoolFilters(initial: VacanciesScreenState | undefined, serverRoles: boolean) {
+  const [filters, setFilterState] = useState(initial);
+  const keepRows = useRef(false);
+  const setFilters = useCallback((value: VacanciesScreenState, keep = false) => {
+    keepRows.current = keep;
     const hasServerFilters = hasMatchedPoolFilters(value);
     setFilterState((previous) =>
-      hasServerFilters || hasMatchedPoolFilters(previous) ? value : undefined,
+      // Снятые роли — тоже выбор: без них сервер подставил бы роли поиска.
+      serverRoles || hasServerFilters || hasMatchedPoolFilters(previous) ? value : undefined,
     );
-  }, []);
+  }, [serverRoles]);
+  return { filters, setFilters, keepRows };
+}
+
+/** One cabin-wide read; the owner screen can retry the bounded page sequence. */
+export function useMatchedPool(provided?: MatchedPool, options: MatchedPoolOptions = {}): MatchedPool {
+  // B589: the last unfiltered selection renders at once on a repeat visit.
+  const [cached] = useState(() => cachedStart(provided, options));
+  const [facets, setFacets] = useState<MatchedVacancyFacets | undefined>(cached?.facets);
+  const [initialFilters, setInitialFilters] = useState<VacanciesScreenState | undefined>(
+    // Сохранённый выбор ролей мог смениться на самой странице: страница ждёт ответа сервера.
+    options.pageLimit === undefined ? cached?.initialFilters : undefined,
+  );
+  const [sort, setSort] = useState<VacancySort | undefined>(cached?.sort);
+  const { filters, setFilters, keepRows } = usePoolFilters(options.initialFilters, options.firstPage !== undefined);
   const initialPool = filters ? undefined : provided;
   const [matched, setMatched] = useState<MatchedVacancyItem[]>(cached?.matched ?? []);
   const [total, setTotal] = useState(cached?.total ?? 0);
   const [poolTotal, setPoolTotal] = useState(cached?.poolTotal ?? 0);
   const [loading, setLoading] = useState(!cached);
+  const [reading, setReading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [complete, setComplete] = useState(cached?.complete ?? false);
+  const [readRoles, setReadRoles] = useState<readonly string[]>();
   const [campaign, setCampaign] = useState<CampaignMetaView | undefined>(cached?.campaign);
   const [candidateLevel, setCandidateLevel] = useState<string | null | undefined>(
     cached?.candidateLevel,
@@ -79,24 +138,25 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
   // Only the first read over a cached selection refreshes silently; a retry or
   // a filter change shows its own loading as before.
   const silentRead = useRef(Boolean(cached));
-  useMatchedPoolReader(initialPool, readAttempt, filters, silentRead, {
-    setFacets, setInitialFilters, setSort, setMatched, setTotal, setPoolTotal, setLoading, setFailed, setComplete,
-    setCampaign, setCandidateLevel, setFailureSourceLabel,
+  useMatchedPoolReader(initialPool, readAttempt, filters, silentRead, keepRows, options, {
+    setFacets, setInitialFilters, setSort, setMatched, setTotal, setPoolTotal, setLoading, setReading, setFailed, setComplete,
+    setReadRoles, setCampaign, setCandidateLevel, setFailureSourceLabel,
   });
   useEffect(() => {
     if (provided || filters || loading || failed || matched.length === 0) return;
     const snapshot: CachedMatchedPool = {
       facets, initialFilters, sort, matched, total, poolTotal, complete, campaign, candidateLevel,
     };
-    writeCachedMatchedPool(snapshot);
+    // Подборка с ролями поиска — не вся подборка кабинета.
+    writeCachedMatchedPool(snapshot, options.firstPage ? 'latest' : 'whole');
   }, [
-    provided, filters, loading, failed, facets, initialFilters, sort, matched, total, poolTotal,
+    options.firstPage, provided, filters, loading, failed, facets, initialFilters, sort, matched, total, poolTotal,
     complete, campaign, candidateLevel,
   ]);
   if (initialPool) return { ...initialPool, setFilters };
   return withCabinetHeader({
-    facets, initialFilters, sort, setFilters, matched, total, poolTotal, loading, failed, complete,
-    campaign, candidateLevel, failureSourceLabel, refresh,
+    facets, initialFilters, sort, setFilters, matched, total, poolTotal, loading, reading, failed, complete,
+    readRoles, campaign, candidateLevel, failureSourceLabel, refresh,
   }, provided);
 }
 
@@ -136,6 +196,8 @@ function useMatchedPoolReader(
   readAttempt: number,
   filters: VacanciesScreenState | undefined,
   silentRead: { current: boolean },
+  keepRows: { current: boolean },
+  { pageLimit, firstPage }: MatchedPoolOptions,
   setters: PoolReaderSetters,
 ): void {
   const {
@@ -145,6 +207,7 @@ function useMatchedPoolReader(
     setTotal,
     setPoolTotal,
     setLoading,
+    setReading,
     setFailed,
     setComplete,
     setCampaign,
@@ -153,23 +216,26 @@ function useMatchedPoolReader(
   } = setters;
   useEffect(() => {
     if (provided) return;
-    return startPoolRead(setters, filters, readAttempt, silentRead);
+    return startPoolRead(setters, filters, readAttempt, silentRead, keepRows, { pageLimit, firstPage });
   }, [
     provided,
     readAttempt,
     filters,
+    pageLimit,
+    firstPage,
     setMatched,
     setInitialFilters,
     setSort,
     setTotal,
     setPoolTotal,
     setLoading,
+    setReading,
     setFailed,
     setComplete,
     setCampaign,
     setCandidateLevel,
     setFailureSourceLabel,
-    silentRead,
+    silentRead, keepRows,
   ]);
 }
 
@@ -179,15 +245,23 @@ function startPoolRead(
   filters: VacanciesScreenState | undefined,
   readAttempt: number,
   silentRead: { current: boolean },
+  keepRows: { current: boolean },
+  options: MatchedPoolOptions,
 ): () => void {
   let active = true;
   const silent = silentRead.current && !filters && readAttempt === 0;
   silentRead.current = false;
+  const keeping = keepRows.current;
+  keepRows.current = false;
+  const inPlace = silent || keeping;
   let finished = false;
-  if (!silent) resetPoolRead(setters);
-  void loadMatchedPool(setters, () => active, filters, silent).finally(() => {
+  setters.setReading(true);
+  if (!inPlace) resetPoolRead(setters);
+  void loadMatchedPool(setters, () => active, filters, { inPlace, silent }, options).finally(() => {
     finished = true;
-    if (active) setters.setLoading(false);
+    if (!active) return;
+    setters.setLoading(false);
+    setters.setReading(false);
   });
   return () => {
     active = false;
@@ -210,7 +284,8 @@ async function loadMatchedPool(
   setters: PoolReaderSetters,
   isActive: () => boolean,
   filters?: VacanciesScreenState,
-  silent = false,
+  { inPlace, silent }: { readonly inPlace: boolean; readonly silent: boolean } = { inPlace: false, silent: false },
+  { pageLimit, firstPage }: MatchedPoolOptions = {},
 ): Promise<void> {
   // A silent refresh replaces the cached list in one step when the read is
   // done, so the table never shrinks to the first page and grows back (B589).
@@ -218,9 +293,13 @@ async function loadMatchedPool(
   try {
     const pool = await collectMatchedPool<MatchedVacancyItem>(
       (offset) =>
-        withDeadline((signal) => getMatchedVacancyPage(offset, signal, filters)).then((page) => {
+        withDeadline((signal) => readRows(offset, signal, filters, firstPage)).then((page) => {
           if (offset === 0 && isActive()) {
+            // B760: фасеты — после первой страницы, иначе на холодном сервере они делят
+            // с ней цикл событий, и строки приходят на 1,5–3 с позже.
             if (page.facets) setters.setFacets(page.facets);
+            else readMatchedFacets(setters, isActive, filters);
+            setters.setReadRoles(filters?.roles ?? page.initialFilters?.roles ?? []);
             if (page.initialFilters) setters.setInitialFilters(page.initialFilters);
             if (page.sort) setters.setSort(page.sort);
             if (page.campaign) setters.setCampaign(page.campaign);
@@ -228,11 +307,11 @@ async function loadMatchedPool(
           }
           return page;
         }),
-      undefined,
+      pageLimit,
       (items, poolSize) => {
         if (!isActive()) return;
         lastPoolSize = poolSize;
-        if (silent) return;
+        if (inPlace) return;
         setters.setMatched((read) => [...read, ...items]);
         setters.setPoolTotal(poolSize);
         // B446-r: число выдачи — ответ сервера, а не число дочитанных строк.
@@ -241,7 +320,7 @@ async function loadMatchedPool(
       },
     );
     if (!isActive()) return;
-    if (silent) {
+    if (inPlace) {
       setters.setMatched(pool.items);
       setters.setPoolTotal(lastPoolSize);
     }
@@ -256,6 +335,22 @@ async function loadMatchedPool(
       if (isActive()) setters.setFailureSourceLabel(label);
     });
   }
+}
+
+/**
+ * B725: фасеты идут своим запросом, с B760 — после страницы 0. Их неудача не роняет список:
+ * фильтры остаются с прежними числами, а строки и счёт выдачи приходят своим чтением.
+ */
+function readMatchedFacets(
+  setters: PoolReaderSetters,
+  isActive: () => boolean,
+  filters?: VacanciesScreenState,
+): void {
+  withDeadline((signal) => getMatchedVacancyFacets(signal, filters))
+    .then((facets) => {
+      if (facets && isActive()) setters.setFacets(facets);
+    })
+    .catch(() => undefined);
 }
 
 async function failureSourceLabel(): Promise<string | undefined> {

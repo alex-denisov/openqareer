@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -257,5 +258,61 @@ describe('B440 numeric font discipline', () => {
 
   it('sets the shell rail to the approved fixed width', () => {
     expect(shellCss).toMatch(/--career-rail-width:\s*76px/u);
+  });
+});
+
+/**
+ * B649 — новый кабинет B640 изолирован от прежних стилей: всё его оформление
+ * лежит в слое каскада `b640` и под корневым классом `.b640`. Правило вне слоя
+ * или без области снова свяжет два кабинета, поэтому оно здесь запрещено.
+ */
+const B640_DIR = path.join(SRC_DIR, 'features/b640');
+/** Первый кадр до загрузки стилей кабинета: свой класс, вне слоя по замыслу. */
+const B640_UNLAYERED_FILES = new Set(['bootstrap.css']);
+const B640_BARRIER_FILE = path.join('styles', 'layers.css');
+
+function b640Violations(cssPath: string): string[] {
+  const relative = path.relative(B640_DIR, cssPath);
+  const violations: string[] = [];
+  const scoped = (selector: string) => /^(div)?\.b640(?![\w-])/u.test(selector.trim());
+  const root = postcss.parse(fs.readFileSync(cssPath, 'utf8'));
+  for (const node of root.nodes) {
+    if (node.type === 'comment') continue;
+    if (node.type === 'atrule' && node.name === 'layer' && /^b640(\.|,|\s|$)/u.test(node.params)) {
+      node.walkRules((rule) => {
+        const parent = rule.parent;
+        if (parent?.type === 'atrule' && /keyframes$/u.test(parent.name)) return;
+        for (const selector of rule.selectors) {
+          if (!scoped(selector)) violations.push(`${relative}: селектор без .b640 — ${selector}`);
+        }
+      });
+      continue;
+    }
+    const barrier =
+      relative === B640_BARRIER_FILE &&
+      node.type === 'rule' &&
+      node.selectors.every((selector) => selector.trim().startsWith('.b640:not(#\\#)'));
+    if (!barrier) violations.push(`${relative}: правило вне слоя b640 — ${node.toString().slice(0, 60)}`);
+  }
+  return violations;
+}
+
+describe('B640 styles stay inside their layer and root class', () => {
+  it('keeps every rule of the new cabinet in @layer b640 and under .b640', () => {
+    const cssFiles = findFiles(B640_DIR, (file) => file.endsWith('.css')).filter(
+      (file) => !B640_UNLAYERED_FILES.has(path.relative(B640_DIR, file)),
+    );
+    expect(cssFiles.length).toBeGreaterThan(5);
+    expect(cssFiles.flatMap(b640Violations)).toEqual([]);
+  });
+
+  it('does not import the old cabinet stylesheets from the new cabinet', () => {
+    const sources = findFiles(B640_DIR, (file) => /\.(ts|tsx|css)$/u.test(file));
+    const offenders = sources.filter((file) =>
+      /(?:import\s+|from\s+|@import\s+(?:url\()?)['"][^'"]*(?:career-shell|mobile-shell|App)\.css/u.test(
+        fs.readFileSync(file, 'utf8'),
+      ),
+    );
+    expect(offenders.map((file) => path.relative(B640_DIR, file))).toEqual([]);
   });
 });

@@ -9,11 +9,8 @@ import { composeVacancyEngine } from '../vacancies/composeVacancyEngine';
 import { MultiSourceVacancyEngine } from '../vacancies/multiSourceVacancyEngine';
 import { SqliteVacancyPoolStore } from '../vacancies/sqliteVacancyPoolStore';
 import { clusterVacancies } from '../vacancies/vacancyDeduplicator';
-import {
-  DESCRIPTION_SKILLS_STEP_CHUNK,
-  MaintenanceWorker,
-  type MaintenanceLog,
-} from './maintenanceWorker';
+import { DESCRIPTION_SKILLS_STEP_CHUNK, MaintenanceWorker, type MaintenanceLog } from './maintenanceWorker';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 /**
  * B230, срез 1: одна волна обслуживателя пишет срез площадки в файловую базу,
@@ -123,7 +120,11 @@ describe('MaintenanceWorker (B230)', () => {
   it('runs the careers prune pass without the placement backfill and logs its report (B643)', () => {
     const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const report = { done: true, processed: 4, dropped: 1, droppedTotal: 1, ms: 2 };
-    const worker = new MaintenanceWorker({ engine: {} as never, log, careersPrune: { tick: () => report } as never });
+    const worker = new MaintenanceWorker({
+      engine: {} as never,
+      log,
+      careersPrune: { tick: () => report } as never,
+    });
     worker.runPlacementStep();
     expect(log.info).toHaveBeenCalledWith(report, 'careers-prune-pass');
   });
@@ -178,13 +179,13 @@ describe('MaintenanceWorker (B230)', () => {
     // × источник соседний писатель ждал 1 036 мс (run 35537971412), поэтому
     // порог с запасом на медленную машину. Настоящий замер — на проде, по
     // журналу HTTP: `request-waited-out-db-lock` (PRB-043).
-    expect(stats.maxWaitMs).toBeLessThan(2000);
+    expect(stats.maxWaitMs).toBeLessThan(timeBudget(2000));
     expect(log.entries.some((e) => e.msg === 'multi-source-sync-completed')).toBe(true);
     // Волна свела улов по ключам, а не отложила его.
     expect(composed.pool.countClusters()).toBeGreaterThan(0);
     expect(composed.engine.reclusterStats.rebuilds).toBe(0);
     composed.close();
-  }, 60_000);
+  }, timeBudget(60_000));
 
   it('consumes a durable admin request in the maintenance process, not HTTP', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'maintenance-manual-sync-'));
@@ -228,7 +229,7 @@ describe('MaintenanceWorker (B230)', () => {
     expect(workerPool.countClusters()).toBe(1);
     httpPool.close();
     workerPool.close();
-  }, 60_000);
+  }, timeBudget(60_000));
 
   it('stop waits for the running wave and then rejects new ones', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'maintenance-worker-'));
@@ -254,7 +255,7 @@ describe('MaintenanceWorker (B230)', () => {
       skipped: 'stopped',
     });
     composed.close();
-  }, 60_000);
+  }, timeBudget(60_000));
 
   it('restore backfills cluster keys of pre-B230 clusters before any wave', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'maintenance-worker-'));
@@ -380,7 +381,7 @@ describe('MaintenanceWorker (B230)', () => {
       firstWaveFinished = true;
       return report;
     });
-    await vi.waitFor(() => expect(healthy()).toBeGreaterThan(0), { timeout: 10_000 });
+    await vi.waitFor(() => expect(healthy()).toBeGreaterThan(0), { timeout: timeBudget(10_000) });
     const afterFirst = healthy();
 
     // Следующая волна не ждёт предыдущую: новые площадки читаются.
@@ -395,13 +396,13 @@ describe('MaintenanceWorker (B230)', () => {
     expect(firstWaveFinished).toBe(false);
     // B628: следующая волна не выбирает площадку, которая ещё опрашивается, и
     // завершается без неё — зависший опрос больше не держит обе волны.
-    await vi.waitFor(() => expect(nextWaveFinished).toBe(true), { timeout: 10_000 });
+    await vi.waitFor(() => expect(nextWaveFinished).toBe(true), { timeout: timeBudget(10_000) });
 
     releaseStuckSource?.();
     await expect(firstWave).resolves.toMatchObject({ synced: expect.any(Number) });
     await expect(nextWave).resolves.toMatchObject({ synced: expect.any(Number) });
     composed.close();
-  }, 30_000);
+  }, timeBudget(30_000));
 
   it('stop abandons a wave that outlives the grace period', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'maintenance-worker-'));
@@ -413,7 +414,8 @@ describe('MaintenanceWorker (B230)', () => {
       recluster: { mode: 'keyed', batchSize: 100 },
     });
     const log = silentLog();
-    const worker = new MaintenanceWorker({ engine: composed.engine, log });
+    const warn = vi.fn();
+    const worker = new MaintenanceWorker({ engine: composed.engine, log: { ...log, warn } });
     await worker.restore();
     void worker.runSyncWave();
 
@@ -421,8 +423,9 @@ describe('MaintenanceWorker (B230)', () => {
     const result = await worker.stop(200);
 
     expect(result).toEqual({ waveFinished: false });
-    expect(Date.now() - started).toBeLessThan(2_000);
-    expect(log.entries.some((e) => e.msg === 'maintenance-stop-wave-abandoned')).toBe(true);
+    expect(Date.now() - started).toBeLessThan(timeBudget(2_000));
+    const details = expect.objectContaining({ pending: ['multi-source-sync'] });
+    expect(warn).toHaveBeenCalledWith(details, 'maintenance-stop-wave-abandoned');
     composed.close();
   });
 
@@ -431,6 +434,7 @@ describe('MaintenanceWorker (B230)', () => {
       engine: {
         getSources: () => [],
         restoreAsync: async () => ({ restored: 0 }),
+        maintainStoreAsync: async () => ({ backfillWindows: 0 }),
         syncSource: async () => ({
           sourceId: 'none',
           status: 'unknown_source',

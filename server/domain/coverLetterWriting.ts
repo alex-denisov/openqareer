@@ -70,6 +70,8 @@ export interface CoverLetterPromptInput {
   readonly companyLink?: string;
   /** B640: причина отказа проверки — отдельным абзацем после утверждённого запроса. */
   readonly correction?: string;
+  /** B682: пожелание кандидата к другому варианту письма, уже собранное в добавку к запросу. */
+  readonly wish?: string;
 }
 
 /**
@@ -108,6 +110,30 @@ function withCompanyLink(template: string): string {
   );
 }
 
+/**
+ * 25.11: письмо обещало «готов рассмотреть роль в …» по городам вакансии. Решение владельца: место — только
+ * из профиля. Утверждённый запрос не меняется: фраза добавляется после правила о фактах.
+ */
+const FACTS_RULE_END = 'не называй одновременным.';
+
+function withOwnPlaces(template: string): string {
+  return template.replace(
+    FACTS_RULE_END,
+    `${FACTS_RULE_END} Города и регионы из вакансии не упоминай и готовность к переезду или работе в них не обещай: назвать можно только место, которое есть в профиле кандидата.`,
+  );
+}
+
+/**
+ * 25.11: письмо подавало желаемую отрасль и учебную программу как опыт работы. Утверждённый запрос не
+ * меняется: фраза добавляется после правила о фактах.
+ */
+function withWorkOnly(template: string): string {
+  return template.replace(
+    FACTS_RULE_END,
+    `${FACTS_RULE_END} Опыт работы — только то, что записано под местами работы и проектами. Желаемые отрасли и роли, курсы, сертификаты и учебные программы опытом не называй и не пиши, что кандидат опирается на них в работе.`,
+  );
+}
+
 function withoutResume(template: string): string {
   return NO_RESUME_EDITS.reduce((text, [from, to]) => text.replace(from, to), template);
 }
@@ -137,12 +163,14 @@ export function coverLetterPrompt(input: CoverLetterPromptInput): string {
     LINK: input.companyLink?.trim() ?? '',
   };
   const approved = input.resumeAttached === false ? withoutResume(COVER_LETTER_PROMPT) : COVER_LETTER_PROMPT;
-  const signed = name ? withSignatureName(approved) : approved;
+  const placed = withWorkOnly(withOwnPlaces(approved));
+  const signed = name ? withSignatureName(placed) : placed;
   const linked = input.companyLink?.trim() ? withCompanyLink(signed) : signed;
   const template = input.chosenLanguage
     ? linked.replace('на языке вакансии', LANGUAGE_TEXT[input.chosenLanguage])
     : linked;
   const prompt = template.replace(/\{(RECIPIENT|GENDER|VACANCY|PROFILE|NAME|LINK)\}/gu, (_match, key: string) => values[key] ?? '').trim();
+  const wish = input.wish?.trim();
   const correction = input.correction?.trim();
-  return correction ? `${prompt}\n\n${correction}` : prompt;
+  return [prompt, wish, correction].filter(Boolean).join('\n\n');
 }

@@ -7,6 +7,7 @@
  */
 import { isCardInRollout } from '../seo/catalogCardRolloutReader';
 import { readCatalogRuSummary } from '../seo/catalogRuSummaryReader';
+import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { searchIndexFor } from '../vacancies/vacancyCatalogSearch';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
@@ -45,12 +46,18 @@ import {
   type CatalogEntriesPage,
 } from '../vacancies/vacancyCatalogProjection';
 import {
+  renderArchivedVacancyDocument,
   renderCatalogDocument,
   renderGoneDocument,
   renderVacancyDocument,
 } from '../vacancies/vacancyCatalogDocument';
+import { readCatalogRedirect } from '../seo/catalogRedirectReader';
+import { archivePageDecision, readCatalogArchiveCard } from '../seo/catalogArchive';
+import type { CatalogArchiveCard } from '../seo/catalogArchive';
+import type { CatalogEntry } from '../vacancies/vacancyCatalogPage';
 import { getCatalogSitemaps, getListingHistory } from '../seo/catalogSitemapSchedule';
 import { isValidIndexNowKey } from '../seo/indexNow';
+import { LiveJobsCache } from '../seo/liveJobsCache';
 import { renderSitemapIndex, type SitemapFile } from '../seo/sitemapXml';
 import {
   RELOCATION_LIST_KEY,
@@ -137,10 +144,9 @@ function withCursor(
 
 /**
  * A page behind a cursor is a crawl path to the cards, not a page for the index:
- * the cursor moves with every new vacancy and any old one still renders, so each
- * address would be a separate unstable URL (05.11, reverses the self-canonical of
- * #423). `noindex, follow` keeps the links; a redirect would lose them and break a
- * reader's next page. The first page is canonical because the bare /page/N is a 301.
+ * the cursor moves with every new vacancy, so it points its canonical at the
+ * first page (the bare /page/N is a 301) and never enters the sitemap. 11.11:
+ * no noindex on a live page (owner decision).
  */
 function cursorPageView(
   page: CatalogPage,
@@ -414,56 +420,155 @@ function ruSummaryReader(deps: RouteDeps): RuSummaryReader {
   return (card) => readCatalogRuSummary(deps.config.databasePath, card);
 }
 
+/**
+ * B752: адрес, опубликованный до разбиения кластера, ведёт на ту же вакансию —
+ * 301 на страницу куска, а без страницы отвечает как снятая карточка. Ключ мог
+ * остаться у основателя с другой вакансией, поэтому у живой страницы
+ * сравнивается весь адрес, а не только ключ.
+ */
+function sendMovedVacancy(
+  deps: RouteDeps,
+  reply: FastifyReply,
+  request: { readonly key: string; readonly url: string; readonly held: boolean },
+): FastifyReply | undefined {
+  const moved = readCatalogRedirect(deps.config.databasePath, request.key);
+  const path = request.url.split('?')[0]!.replace(/\/$/u, '');
+  if (!moved || moved.path === path) return undefined;
+  if (request.held && moved.oldPath !== path) return undefined;
+  if (moved.path) return reply.redirect(moved.path, 301);
+  const gone = () => renderGoneDocument(buildCatalogPageFromEntries([], 1, 0));
+  // Копия в архиве под этим ключом может быть уже другой вакансией основателя.
+  return sendClosedVacancy(deps, reply, request.key, gone, moved.oldPath);
+}
+
+/**
+ * Кластер несёт только первые 300 знаков описания. Полный текст лежит у
+ * исходной вакансии — её идентификатор и есть хвост идентификатора кластера
+ * (`cluster-<vacancyId>`), поэтому разметка и страница показывают то же
+ * самое, что отдала площадка, а не обрывок на полуслове.
+ */
+function detailOf(deps: RouteDeps, found: VacancyCluster) {
+  const sourceId = found.id.startsWith('cluster-') ? found.id.slice('cluster-'.length) : undefined;
+  const full = sourceId ? deps.multiSourceEngine.getVacancy(sourceId) : undefined;
+  return buildVacancyDetail(
+    found,
+    full?.fullDescription ?? full?.description,
+    full,
+    new Date(),
+    ruSummaryReader(deps),
+    (clusterId) => isCardInRollout(deps.config.databasePath, clusterId),
+  );
+}
+
 async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const key = parseVacancyPath(request.url);
   const projected = key ? deps.multiSourceEngine.getPublicCatalogEntry(key) : undefined;
+  const moved = key
+    ? sendMovedVacancy(deps, reply, { key, url: request.url, held: projected !== undefined })
+    : undefined;
+  if (moved) return moved;
   if (projected) {
     const found = deps.multiSourceEngine.getPublicCatalogCluster(projected.clusterId);
-    const sourceId = found?.id.startsWith('cluster-')
-      ? found.id.slice('cluster-'.length)
-      : undefined;
-    const full = sourceId ? deps.multiSourceEngine.getVacancy(sourceId) : undefined;
-    const detail = found
-      ? buildVacancyDetail(
-          found,
-          full?.fullDescription ?? full?.description,
-          full,
-          new Date(),
-          ruSummaryReader(deps),
-          (clusterId) => isCardInRollout(deps.config.databasePath, clusterId),
-        )
-      : null;
-    if (detail) return sendDocument(reply, renderVacancyDocument(detail));
-    return sendDocument(
-      reply,
+    const detail = found ? detailOf(deps, found) : null;
+    // 11.11: the stored path is the one the sitemap and the lists link to; a slug
+    // rebuilt from a since-cleaned title must not point the canonical elsewhere.
+    if (detail) {
+      const entry = { ...detail.entry, path: projected.path };
+      return sendDocument(reply, renderVacancyDocument({ ...detail, entry }));
+    }
+    return sendClosedVacancy(deps, reply, projected.key, () =>
       renderGoneDocument(buildCatalogPageFromEntries([projected], 1, 1)),
-      410,
     );
   }
   const clusters = deps.multiSourceEngine.getPublicCatalogClusters();
   const found = key ? clusters.find((cluster) => vacancyKey(cluster.id) === key) : undefined;
-  // Кластер несёт только первые 300 знаков описания. Полный текст лежит у
-  // исходной вакансии — её идентификатор и есть хвост идентификатора кластера
-  // (`cluster-<vacancyId>`), поэтому разметка и страница показывают то же
-  // самое, что отдала площадка, а не обрывок на полуслове.
-  const sourceId = found?.id.startsWith('cluster-') ? found.id.slice('cluster-'.length) : undefined;
-  const full = sourceId ? deps.multiSourceEngine.getVacancy(sourceId) : undefined;
-  const detail = found
-    ? buildVacancyDetail(
-        found,
-        full?.fullDescription ?? full?.description,
-        full,
-        new Date(),
-        ruSummaryReader(deps),
-        (clusterId) => isCardInRollout(deps.config.databasePath, clusterId),
-      )
-    : null;
+  const detail = found ? detailOf(deps, found) : null;
 
   if (!detail) {
-    const page = buildCatalogPage(clusters, 1);
-    return sendDocument(reply, renderGoneDocument(page), 410);
+    if (!key) return sendDocument(reply, renderGoneDocument(buildCatalogPage(clusters, 1)), 410);
+    return sendClosedVacancy(deps, reply, key, () =>
+      renderGoneDocument(buildCatalogPage(clusters, 1)),
+    );
   }
   return sendDocument(reply, renderVacancyDocument(detail));
+}
+
+const SIMILAR_LIMIT = 6;
+
+function archiveEntry(card: CatalogArchiveCard): CatalogEntry {
+  return {
+    key: card.entryKey,
+    path: card.path,
+    title: card.title,
+    company: card.company,
+    isRemote: card.isRemote,
+    summary: card.summary,
+    skills: [],
+    sourceUrl: '',
+    publishedAt: card.publishedAt,
+    lastSeenAt: card.lastSeenAt,
+    sourceCount: 1,
+    ...(card.location ? { location: card.location } : {}),
+    ...(card.salaryLabel ? { salaryLabel: card.salaryLabel } : {}),
+  };
+}
+
+/** Open cards of the same role and place; the place alone when the role has none. */
+function similarOpen(
+  deps: RouteDeps,
+  card: CatalogArchiveCard,
+): { readonly items: readonly CatalogEntry[]; readonly sameRole: boolean } {
+  if (!card.placeSlug) return { items: [], sameRole: true };
+  const page = (role?: string) =>
+    deps.multiSourceEngine.getPublicCatalogEntriesPage({
+      limit: SIMILAR_LIMIT + 1,
+      place: card.placeSlug!,
+      ...(role ? { role } : {}),
+    })?.items ?? [];
+  const others = (items: readonly CatalogEntry[]) =>
+    items.filter((item) => item.key !== card.entryKey).slice(0, SIMILAR_LIMIT);
+  const sameRole = card.roleSlug ? others(page(card.roleSlug)) : [];
+  return sameRole.length > 0
+    ? { items: sameRole, sameRole: true }
+    : { items: others(page()), sameRole: false };
+}
+
+function publishedListingPath(deps: RouteDeps, card: CatalogArchiveCard): string | undefined {
+  if (!card.placeSlug) return undefined;
+  const found = (deps.multiSourceEngine.getPublicCatalogListings() ?? []).find(
+    (listing) => listing.place === card.placeSlug && (listing.role ?? undefined) === card.roleSlug,
+  );
+  return found?.path;
+}
+
+/**
+ * 11.11 (hybrid of the hh.ru model): a closed card that was in the sitemap or
+ * had impressions keeps a 200 archive page; any other closed card answers 410.
+ */
+function sendClosedVacancy(
+  deps: RouteDeps,
+  reply: FastifyReply,
+  key: string,
+  gone: () => string,
+  onlyPath?: string,
+): FastifyReply {
+  const card = readCatalogArchiveCard(deps.config.databasePath, key);
+  const other = onlyPath !== undefined && card?.path !== onlyPath;
+  if (!card || other || archivePageDecision(card, new Date()) === 'gone') {
+    return sendDocument(reply, gone(), 410);
+  }
+  const listingPath = publishedListingPath(deps, card);
+  const similar = similarOpen(deps, card);
+  return sendDocument(
+    reply,
+    renderArchivedVacancyDocument({
+      entry: archiveEntry(card),
+      closedAt: card.lastSeenAt,
+      similar: similar.items,
+      similarSameRole: similar.sameRole,
+      ...(listingPath ? { listingPath } : {}),
+    }),
+  );
 }
 
 function sitemapFiles(): readonly SitemapFile[] {
@@ -486,8 +591,27 @@ function sitemapFileHandler(name: (request: FastifyRequest) => string) {
     const wanted = name(request);
     const found = sitemapFiles().find((file) => file.name === wanted);
     if (!found) return reply.status(404).send({ error: 'not_found' });
-    return sendXml(reply, found.xml);
+    if (!found.name.startsWith('jobs-')) return sendXml(reply, found.xml);
+    return sendXml(reply, await liveJobsFile(deps, request, found));
   };
+}
+
+/** B776: the job file follows closed and moved cards within the HTTP cache interval (900 s). */
+const LIVE_JOBS_TTL_MS = 15 * 60_000;
+const liveJobsByEngine = new WeakMap<object, LiveJobsCache>();
+
+/** 11.11: the job file minus cards closed since the build, with moved slugs followed. */
+function liveJobsFile(deps: RouteDeps, request: FastifyRequest, file: SitemapFile): Promise<string> {
+  const engine = deps.multiSourceEngine;
+  const liveJobs = liveJobsByEngine.get(engine)
+    ?? new LiveJobsCache(LIVE_JOBS_TTL_MS, Date.now, (error) => request.log.warn({ err: error }, 'live-jobs-sitemap-failed'));
+  liveJobsByEngine.set(engine, liveJobs);
+  return liveJobs.read(file.name, file.xml, (key) => {
+    const entry = deps.multiSourceEngine.getPublicCatalogEntry(key);
+    return entry && deps.multiSourceEngine.getPublicCatalogCluster(entry.clusterId)
+      ? entry.path
+      : undefined;
+  });
 }
 
 /** Cities and roles that have a public list, with counts, for the search box. */

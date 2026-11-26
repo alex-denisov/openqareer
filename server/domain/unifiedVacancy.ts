@@ -55,6 +55,10 @@ export interface UnifiedVacancy {
   company: string;
   /** Площадка назвала работодателя частным лицом: имя в публичный каталог не идёт (INC-023). */
   employerIsPerson?: boolean;
+  /** B643: id работодателя на hh (`company.id`); ведёт к `company_placement` `hh:<id>`. */
+  employerId?: string;
+  /** B647: сайт работодателя, названный агрегатором (Работа России); ведёт к `company_placement` `site:<host>`. */
+  employerSite?: string;
   location?: string;
   isRemote?: boolean;
   salary?: VacancySalary;
@@ -76,6 +80,8 @@ export interface UnifiedVacancy {
   descriptionHidden?: boolean;
   /** Сколько раз hh ответил «доступ ограничен»: на втором ответе текст считается скрытым. */
   descriptionHiddenSeen?: number;
+  /** B794: страница прочитана целиком, текст и правда короткий: повторно не читается. */
+  descriptionShort?: boolean;
   /** Отпечаток «название + полный текст» (01.11): проекция сведения несёт его вместо текста. */
   textKey?: string;
   /** Область удалёнки (`shared/remoteScope`): считается при записи проекции из полного текста. */
@@ -105,6 +111,11 @@ export interface VacancyCluster {
   id: string;
   canonicalTitle: string;
   canonicalCompany: string;
+  /**
+   * B756 23.11: площадка не назвала работодателя. `canonicalCompany` тогда пустая строка —
+   * поле обязательно в договоре с кабинетом; признак говорит «компания не указана» явно.
+   */
+  companyUnspecified?: true;
   /** `canonicalCompany` — имя частного лица по признаку площадки (INC-023). */
   employerIsPerson?: boolean;
   canonicalLocation?: string;
@@ -114,6 +125,8 @@ export interface VacancyCluster {
   salary?: VacancySalary;
   /** Формат работы, посчитанный до обрезки выжимки страницей подборки (B446-g4). */
   workFormat?: import('../../shared/vacancyWorkFormat').VacancyWorkFormat;
+  /** Тип занятости из названия и выжимки до обрезки (B646-7); нет — чипа нет. */
+  employmentKind?: import('../../shared/vacancyEmploymentKind').VacancyEmploymentKind;
   descriptionSummary: string;
   /** Отпечаток «название + полный текст» основателя: тот же текст сводится при другом работодателе. */
   textKey?: string;

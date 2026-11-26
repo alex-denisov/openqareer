@@ -456,6 +456,20 @@ export class SqliteCandidateAutomationRepository {
     return rows.map((row) => this.queueFromRow(row));
   }
 
+  /** B738 · 8: вся очередь кандидата для выгрузки, без предела страницы `listQueue`. */
+  exportQueue(candidateId: string): CandidateAutomationQueueItem[] {
+    const rows = this.database.prepare('SELECT * FROM candidate_auto_apply_queue WHERE candidate_id = ? ORDER BY created_at, id')
+      .all(candidateId) as unknown as QueueRow[];
+    // Повреждённая строка пропускается: выгрузка отдаёт остальное, а не падает целиком.
+    return rows.flatMap((row) => {
+      try {
+        return [this.queueFromRow(row)];
+      } catch {
+        return [];
+      }
+    });
+  }
+
   transitionQueueItem(
     candidateId: string,
     id: string,

@@ -29,6 +29,8 @@ import {
 import { AppErrorBoundary } from './features/shell/AppErrorBoundary';
 import { loadCareerWorkspaceShell } from './features/shell/careerWorkspaceLoader';
 import { CareerShellBootstrap } from './features/shell/CareerShellBootstrap';
+import { loadCabinetB640 } from './features/b640/loadCabinetB640';
+import { CabinetB640Bootstrap } from './features/b640/CabinetB640Bootstrap';
 import { legalSlugFromPath } from '../shared/legalRegistry';
 import { getLoadedAuthPages, loadAuthPages } from './features/site/authPagesLoader';
 import {
@@ -48,7 +50,8 @@ import {
 import type { ResumeImportSource } from './features/resume/resumeApi';
 import { clearCareerCabinetCache } from './features/cabinet/careerCabinetCache';
 import { SESSION_EXPIRED_TEXT } from './features/onboarding/firstRunSpecialState';
-import { rememberSignedIn } from './features/site/signedInFlag';
+import { readRememberedCabinetB640, rememberSignedIn } from './features/site/signedInFlag';
+import { APP_SIGN_IN_PATH } from './features/site/appSignIn';
 
 const EXPIRED_SESSION_NOTICE = SESSION_EXPIRED_TEXT;
 
@@ -58,6 +61,14 @@ const CareerWorkspaceShell = lazy(async () => {
   markAppReady();
   return { default: module.CareerWorkspaceShell };
 });
+const CabinetB640 = lazy(async () => {
+  const module = await loadCabinetB640();
+  markAppReady();
+  return { default: module.CabinetB640 };
+});
+// B760: устройство, где новый кабинет уже открывался, грузит его код рядом с /auth/me,
+// а не после ответа сессии. Сбой загрузки здесь молчит: lazy выше повторит и покажет ошибку.
+if (readRememberedCabinetB640()) void loadCabinetB640().catch(() => undefined);
 const landingPage = preloadablePage(loadLandingPage);
 const LandingPage = landingPage.Page;
 const AuthSiteFrame = lazy(() =>
@@ -130,6 +141,9 @@ const EmailVerificationPage = lazy(() =>
 const ResetPasswordPage = lazy(() =>
   loadAuthPages().then((module) => ({ default: module.ResetPasswordPage })),
 );
+const AppSignInPage = lazy(() =>
+  import('./features/site/AppSignInPage').then((module) => ({ default: module.AppSignInPage })),
+);
 
 /** B589: `/` in the .app is the cabinet, the landing is not in its bundle. */
 function navigateDesktopHome(setPath: (path: string) => void) {
@@ -149,6 +163,7 @@ async function loadAdminConsole() {
   if (typeof document !== 'undefined') {
     await import('./features/admin/admin-console.css');
     await import('./features/admin/admin-linkedin-remote-login.css');
+    await import('./features/admin/admin-coverage.css');
   }
   const module = await import('./features/admin/AdminConsole');
   markAppReady();
@@ -279,7 +294,7 @@ export default function App() {
       session = await getSession();
       if (!isCurrent()) return;
       // B574: the public header learns the answer now, not after the workspace read.
-      rememberSignedIn(Boolean(session), session?.role);
+      rememberSignedIn(Boolean(session), session?.role, session?.features?.cabinetB640);
       if (session?.emailVerified === false) {
         setState({
           session,
@@ -290,6 +305,12 @@ export default function App() {
         });
         if (window.location.pathname !== '/verify-email') navigate('/verify-email');
         return;
+      }
+      // B760: новому кабинету нужна только сессия — он открывается сразу, а чтение
+      // рабочего пространства (нужно прежней оболочке) идёт следом, не задерживая строки s07.
+      if (session?.features?.cabinetB640 === true) {
+        const known = session;
+        setState((current) => ({ ...current, session: known }));
       }
       const result = loadWorkspace(window.localStorage, session?.candidateId ?? null);
       // The server is authoritative for the onboarding gate. A local copy may
@@ -362,7 +383,13 @@ export default function App() {
   }, [isDesktop, connectorAccount]);
 
   useEffect(() => {
-    if (state.session !== undefined) rememberSignedIn(Boolean(state.session), state.session?.role);
+    if (state.session !== undefined) {
+      rememberSignedIn(
+        Boolean(state.session),
+        state.session?.role,
+        state.session?.features?.cabinetB640,
+      );
+    }
   }, [state.session]);
 
   useEffect(() => {
@@ -633,6 +660,9 @@ export default function App() {
     if (currentPath === '/reset-password') {
       return <ResetPasswordPage onNavigate={navigate} onSessionChange={handleSessionChange} />;
     }
+    if (currentPath === APP_SIGN_IN_PATH) {
+      return <AppSignInPage session={state.session} onNavigate={navigate} />;
+    }
     return null;
   };
 
@@ -645,7 +675,19 @@ export default function App() {
         !state.onboardingStatusKnown ||
         (state.onboardingComplete && !state.workspace)),
     );
-  const renderWorkspace = (pending = sessionPending) => (
+  // B649: аккаунт с флагом получает новый кабинет B640; остальным — прежний.
+  // Ошибку сессии и неподтверждённый email по-прежнему ведёт прежний экран.
+  const b640Session =
+    state.session?.features?.cabinetB640 === true &&
+    !sessionError &&
+    state.session.emailVerified !== false
+      ? state.session
+      : null;
+  // Пока сессия неизвестна, устройство, где новый кабинет уже открывался, видит
+  // нейтральный кадр, а не прежнюю оболочку; ошибку сессии показывает прежний экран.
+  const b640Expected =
+    state.session === undefined && !sessionError && readRememberedCabinetB640();
+  const renderLegacyWorkspace = (pending: boolean) => (
     <Suspense fallback={<WorkspaceLoadingFallback />}>
       <CareerWorkspaceShell
         workspace={state.workspace}
@@ -664,6 +706,21 @@ export default function App() {
       />
     </Suspense>
   );
+  const renderWorkspace = (pending = sessionPending) =>
+    b640Session ? (
+      <Suspense fallback={<CabinetB640Bootstrap />}>
+        <CabinetB640
+          session={b640Session}
+          path={currentPath}
+          onNavigate={navigate}
+          onSessionChange={handleSessionChange}
+        />
+      </Suspense>
+    ) : b640Expected ? (
+      <CabinetB640Bootstrap />
+    ) : (
+      renderLegacyWorkspace(pending)
+    );
 
   // Routing checks
   if (isAdminPath(currentPath)) {
@@ -867,7 +924,8 @@ export function isAuthPath(path: string): boolean {
     path === '/login' ||
     path === '/signup' ||
     path === '/reset-password' ||
-    path === '/verify-email'
+    path === '/verify-email' ||
+    path === APP_SIGN_IN_PATH
   );
 }
 

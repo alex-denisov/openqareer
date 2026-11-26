@@ -6,6 +6,7 @@ import {
   ArrowRight,
   Briefcase,
   Broadcast,
+  Buildings,
   LinkedinLogo,
   GearSix,
   SignIn,
@@ -25,6 +26,8 @@ import {
   type AdminUserPage,
 } from './adminApi';
 import { AdminVacancySourcesView } from './AdminVacancySourcesView';
+import { AdminCoverageView } from './AdminCoverageView';
+import { useAdminCoverage } from './useAdminCoverage';
 import { HhCrawlFilterView } from './HhCrawlFilterView';
 import { getHhCrawlFilter, type HhCrawlFilter } from './adminApi';
 import {
@@ -95,8 +98,8 @@ function AdminNav({
   activeTab,
   onSelectTab,
 }: {
-  activeTab: 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin' | 'seo';
-  onSelectTab: (tab: 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin' | 'seo') => void;
+  activeTab: 'users' | 'vacancies' | 'sources' | 'coverage' | 'audit' | 'linkedin' | 'seo';
+  onSelectTab: (tab: 'users' | 'vacancies' | 'sources' | 'coverage' | 'audit' | 'linkedin' | 'seo') => void;
 }) {
   return (
     <nav className="admin-nav" aria-label="Разделы администратора">
@@ -118,6 +121,8 @@ function AdminNav({
       >
         <Broadcast size={16} aria-hidden="true" /> Источники вакансий
       </button>
+      <button type="button" className={`admin-nav-item ${activeTab === 'coverage' ? 'is-active' : ''}`} onClick={() => onSelectTab('coverage')}>
+        <Buildings size={16} aria-hidden="true" /> Покрытие компаний</button>
       <button
         type="button"
         className={`admin-nav-item ${activeTab === 'audit' ? 'is-active' : ''}`}
@@ -181,11 +186,15 @@ function AdminVacancySourcesTab() {
   );
 }
 
-function getInitialAdminTab(): 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin' | 'seo' {
+function AdminCoverageTab() {
+  return <AdminCoverageView {...useAdminCoverage()} />;
+}
+
+function getInitialAdminTab(): 'users' | 'vacancies' | 'sources' | 'coverage' | 'audit' | 'linkedin' | 'seo' {
   if (typeof window === 'undefined') return 'users';
   const params = new URLSearchParams(window.location.search);
   const tab = params.get('tab');
-  if (tab === 'vacancies' || tab === 'sources' || tab === 'audit' || tab === 'linkedin' || tab === 'seo') return tab;
+  if (tab === 'vacancies' || tab === 'sources' || tab === 'coverage' || tab === 'audit' || tab === 'linkedin' || tab === 'seo') return tab;
   if (params.get('vacancyId')) return 'vacancies';
   return 'users';
 }
@@ -200,7 +209,7 @@ export function AdminConsole({
   const isCareerPartner = session?.role === 'CareerPartner';
   const isAuthorized = isAdmin || isCareerPartner;
   const [activeTab, setActiveTab] = useState<
-    'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin' | 'seo'
+    'users' | 'vacancies' | 'sources' | 'coverage' | 'audit' | 'linkedin' | 'seo'
   >(getInitialAdminTab);
 
   useEffect(() => {
@@ -211,7 +220,7 @@ export function AdminConsole({
     if (!sessionPending && !isAuthorized) onUnauthorized?.();
   }, [isAuthorized, onUnauthorized, sessionPending]);
 
-  const handleSelectTab = (tab: 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin' | 'seo') => {
+  const handleSelectTab = (tab: 'users' | 'vacancies' | 'sources' | 'coverage' | 'audit' | 'linkedin' | 'seo') => {
     setActiveTab(tab);
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -259,6 +268,7 @@ export function AdminConsole({
           {activeTab === 'users' && <AdminDirectory />}
           {activeTab === 'vacancies' && <AdminVacanciesView />}
           {activeTab === 'sources' && <AdminVacancySourcesTab />}
+          {activeTab === 'coverage' && <AdminCoverageTab />}
           {activeTab === 'audit' && (
             <>
               <AdminBulkLlmSpend />

@@ -1,0 +1,361 @@
+import { useEffect, useState } from 'react';
+import type {
+  CandidateStatusPreview,
+  CandidateStatusState,
+  StatusChangeOption,
+} from '../../../../shared/candidateStatus';
+import { TARGET_PROFESSION_MAX_LENGTH } from '../../../../shared/candidateStatus';
+import { pluralRu } from '../../../../shared/pluralRu';
+import { CoachApiError } from '../../coach/apiClient';
+import { ActionDock, Button, Icon, InfoTip, Link } from '../kit';
+import { B640_HOME_PATH, buildNodePath, type B640Node } from '../routes';
+import { useScreenChrome, useShell } from '../shell/ShellContext';
+import { BlockError, BlockSkeleton } from '../today/parts';
+import { useLoad } from '../today/useLoad';
+import {
+  changeStatus,
+  getStatus,
+  initialChoice,
+  previewStatus,
+  sameChoice,
+  type StatusChoice,
+  type StatusOptions,
+} from './statusChoice';
+
+const PREVIEW_DELAY_MS = 400;
+
+type PreviewLoad =
+  | { readonly state: 'loading' }
+  | { readonly state: 'ready'; readonly preview: CandidateStatusPreview }
+  | { readonly state: 'error' };
+
+interface KeyedPreview {
+  /** Для какого выбора получен ответ. */
+  readonly key: string;
+  readonly load: PreviewLoad;
+}
+
+const LOADING: PreviewLoad = { state: 'loading' };
+
+/**
+ * «Что изменится» для выбранного статуса; набор профессии не шлёт запрос на каждую букву.
+ * Ответ привязан к выбору: предпросмотр прежнего статуса для нового не показываем.
+ */
+function usePreview(choice: StatusChoice): PreviewLoad & { readonly retry: () => void } {
+  const { status, targetProfession } = choice;
+  const key = `${status}|${targetProfession}`;
+  const [keyed, setKeyed] = useState<KeyedPreview>({ key, load: LOADING });
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    const settle = (load: PreviewLoad) => {
+      if (!controller.signal.aborted) setKeyed({ key, load });
+    };
+    setKeyed({ key, load: LOADING });
+    const timer = setTimeout(() => {
+      previewStatus({ status, targetProfession }, controller.signal).then(
+        (preview) => settle({ state: 'ready', preview }),
+        () => settle({ state: 'error' }),
+      );
+    }, PREVIEW_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [key, status, targetProfession, attempt]);
+  const load = keyed.key === key ? keyed.load : LOADING;
+  return { ...load, retry: () => setAttempt((value) => value + 1) };
+}
+
+interface PickProps {
+  readonly state: CandidateStatusState;
+  readonly choice: StatusChoice;
+  readonly onPick: (choice: StatusChoice) => void;
+}
+
+function StatusPick({ state, choice, onPick }: PickProps) {
+  return (
+    <fieldset className="pick">
+      <legend>
+        Статус поиска
+        <InfoTip label="Кто видит статус" text="Ваш статус видите только вы" />
+      </legend>
+      {state.statuses.map((option) => (
+        <label key={option.id}>
+          <input
+            type="radio"
+            name="status"
+            value={option.id}
+            checked={choice.status === option.id}
+            onChange={() => onPick({ ...choice, status: option.id })}
+          />
+          <b>{option.label}</b>
+          {option.id === state.current.status ? <span className="tag">сейчас</span> : null}
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+interface ChangesProps {
+  readonly preview: CandidateStatusPreview;
+  readonly options: StatusOptions;
+  readonly onToggle: (option: StatusChangeOption, checked: boolean) => void;
+}
+
+function PreviewChanges({ preview, options, onToggle }: ChangesProps) {
+  if (preview.unchanged) return null;
+  // Макет s15 («Работаю») называет список иначе, чем s02.
+  const optionsTitle = preview.to === 'working' ? 'Что можно поменять' : 'Можно сразу';
+  return (
+    <div className="preview">
+      {preview.appears.length > 0 ? (
+        <div className="change add">
+          <h3>Появится</h3>
+          <ul>
+            {preview.appears.map((line) => (
+              <li key={line}>
+                <Icon name="plus" />
+                {line}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {preview.options.length > 0 ? (
+        <fieldset className="optin">
+          <legend className="vh">{optionsTitle}</legend>
+          <h3 aria-hidden="true">
+            <Icon name="sliders" />
+            {optionsTitle}
+          </h3>
+          {preview.options.map((option) => (
+            <label key={option.key} htmlFor={`st-opt-${option.key}`} aria-label={option.label}>
+              <input
+                id={`st-opt-${option.key}`}
+                type="checkbox"
+                name={option.key}
+                checked={options[option.key] ?? option.checked}
+                onChange={(event) => onToggle(option, event.target.checked)}
+              />
+              <span>
+                <b>{option.label}</b>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
+    </div>
+  );
+}
+
+function ProfessionField({ choice, onPick }: Pick<PickProps, 'choice' | 'onPick'>) {
+  if (choice.status !== 'changing_profession') return null;
+  return (
+    <div className="pf-f">
+      <label htmlFor="st-profession">Новая профессия</label>
+      <input
+        id="st-profession"
+        type="text"
+        value={choice.targetProfession}
+        maxLength={TARGET_PROFESSION_MAX_LENGTH}
+        placeholder="Например: продакт-менеджер"
+        onChange={(event) => onPick({ ...choice, targetProfession: event.target.value })}
+      />
+    </div>
+  );
+}
+
+/** s15: у «Работаю» на кнопке — сколько отмеченного сделаем вместе со сменой статуса. */
+function saveLabel(preview: CandidateStatusPreview, options: StatusOptions): string {
+  const count = Object.values(resolvedOptions(preview, options)).filter(Boolean).length;
+  if (preview.to !== 'working' || count === 0) return 'Сменить статус';
+  return `Сменить статус · ${pluralRu(count, ['действие', 'действия', 'действий'])}`;
+}
+
+interface PreviewLeadProps extends Pick<PickProps, 'choice' | 'onPick'> {
+  readonly preview: ReturnType<typeof usePreview>;
+  readonly options: StatusOptions;
+  readonly saving: boolean;
+  readonly canSave: boolean;
+  readonly onSave: (shown: CandidateStatusPreview) => void;
+  readonly onToggle: ChangesProps['onToggle'];
+}
+
+function PreviewLead(props: PreviewLeadProps) {
+  const { choice, preview, options, saving, canSave, onPick, onSave, onToggle } = props;
+  const shown = preview.state === 'ready' ? preview.preview : null;
+  return (
+    <section className="lead" aria-labelledby="pv-title">
+      <div className="eyebrow">
+        <Icon name="swap" />
+        Что изменится
+      </div>
+      <h2 className="mod-title" id="pv-title">
+        {shown ? shown.title : 'Статус поиска'}
+      </h2>
+      <ProfessionField choice={choice} onPick={onPick} />
+      {preview.state === 'loading' ? <BlockSkeleton label="Считаем, что изменится" /> : null}
+      {preview.state === 'error' ? (
+        <BlockError text="Не удалось показать, что изменится." onRetry={preview.retry} />
+      ) : null}
+      {shown && canSave ? (
+        <ActionDock
+          kind="commit"
+          primary={
+            <Button variant="primary" icon="swap" busy={saving} onClick={() => onSave(shown)}>
+              {saveLabel(shown, options)}
+            </Button>
+          }
+          secondary={
+            shown.to === 'working' ? (
+              <Link className="btn is-quiet" to={buildNodePath('d01a')}>
+                <Icon name="diary" />
+                До выхода: план в дневнике
+              </Link>
+            ) : undefined
+          }
+        />
+      ) : null}
+      {shown ? <PreviewChanges preview={shown} options={options} onToggle={onToggle} /> : null}
+    </section>
+  );
+}
+
+function resolvedOptions(preview: CandidateStatusPreview, picked: StatusOptions): StatusOptions {
+  return Object.fromEntries(
+    preview.options.map((option) => [option.key, picked[option.key] ?? option.checked]),
+  );
+}
+
+function StatusHistoryLink() {
+  return (
+    <section className="mod" aria-labelledby="hist-title">
+      <h3 className="mod-title" id="hist-title">
+        История статуса
+      </h3>
+      <Link className="row-act" to={buildNodePath('p10')}>
+        <Icon name="clock" />
+        История изменений
+      </Link>
+    </section>
+  );
+}
+
+/** Выбор на экране и его сохранение: после смены — на «Сегодня», там «Вернуть прежний». */
+function useStatusChange(state: CandidateStatusState, search: string) {
+  const { navigate } = useShell();
+  const [choice, setChoice] = useState<StatusChoice>(() => initialChoice(search, state));
+  const [options, setOptions] = useState<StatusOptions>({});
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  function pick(next: StatusChoice) {
+    if (next.status !== choice.status) setOptions({});
+    setFailed(false);
+    setChoice(next);
+  }
+
+  async function save(shown: CandidateStatusPreview) {
+    if (saving || shown.to !== choice.status) return;
+    setSaving(true);
+    setFailed(false);
+    try {
+      await changeStatus(choice, resolvedOptions(shown, options));
+      navigate(B640_HOME_PATH);
+    } catch (reason) {
+      // Статус уже такой (сменили в другой вкладке): менять нечего, идём на «Сегодня».
+      if (reason instanceof CoachApiError && reason.code === 'status_unchanged') {
+        navigate(B640_HOME_PATH);
+        return;
+      }
+      setFailed(true);
+      setSaving(false);
+    }
+  }
+
+  return { choice, options, saving, failed, pick, save, setOptions };
+}
+
+function StatusChoice({
+  state,
+  search,
+  onWorking,
+}: {
+  readonly onWorking: (working: boolean) => void;
+  readonly state: CandidateStatusState;
+  readonly search: string;
+}) {
+  const { choice, options, saving, failed, pick, save, setOptions } = useStatusChange(
+    state,
+    search,
+  );
+  const preview = usePreview(choice);
+  const unchanged = sameChoice(choice, state);
+  const working = choice.status === 'working';
+  useEffect(() => onWorking(working), [working, onWorking]);
+
+  // Макет s02: список справа во всю высоту, «Что изменится» и история слева (классы, а не
+  // порядок детей: строка ошибки появляется только при сбое и не сдвигает колонки).
+  return (
+    <>
+      <div className="col st-pick-col">
+        <StatusPick state={state} choice={choice} onPick={pick} />
+      </div>
+      <div className="col st-lead-col">
+        {failed ? (
+          <p className="li-err" role="alert">
+            <Icon name="warn" />
+            Статус не сохранился
+          </p>
+        ) : null}
+        <PreviewLead
+          choice={choice}
+          preview={preview}
+          options={options}
+          saving={saving}
+          canSave={!unchanged}
+          onPick={pick}
+          onSave={(shown) => void save(shown)}
+          onToggle={(option, checked) => setOptions({ ...options, [option.key]: checked })}
+        />
+      </div>
+      {working ? null : (
+        <div className="col st-hist-col">
+          <StatusHistoryLink />
+        </div>
+      )}
+    </>
+  );
+}
+
+/** s02 «Статус»: выбор из пяти статусов, «Что изменится» и смена (B665). */
+export function StatusChoiceScreen({ node }: { readonly node: B640Node }) {
+  const { search } = useShell();
+  const status = useLoad(getStatus);
+  // Макет s15: у «Работаю» одна колонка, список над «Что изменится», истории нет.
+  const [working, setWorking] = useState(false);
+  // Макет s02: `data-main-right` и `data-mtight` — страница во всю ширину рабочей области.
+  useScreenChrome({ rootData: working ? { mtight: '1' } : { 'main-right': '1', mtight: '1' } });
+  return (
+    <div
+      className={working ? 'page two' : 'page two is-pick'}
+      data-b640-node={node.code}
+      data-b640-section={node.section}
+    >
+      {status.state === 'loading' ? (
+        <div className="col">
+          <BlockSkeleton label="Загружаем статус" rows={5} />
+        </div>
+      ) : null}
+      {status.state === 'error' ? (
+        <div className="col">
+          <BlockError text="Не удалось загрузить статус." onRetry={status.retry} />
+        </div>
+      ) : null}
+      {status.state === 'ready' ? (
+        <StatusChoice state={status.data} search={search} onWorking={setWorking} />
+      ) : null}
+    </div>
+  );
+}

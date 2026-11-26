@@ -3,6 +3,7 @@ import { ATS_BOARD_MEASUREMENTS, ATS_BOARD_SOURCES } from './atsBoardSources';
 import { WORKDAY_BOARD_MEASUREMENTS, WORKDAY_BOARD_SOURCES } from './workdayBoardSources';
 import { MEASUREMENTS } from './vacancySourceMeasurementData';
 import { DEFAULT_TELEGRAM_RELOCATION_SOURCES } from './defaultTelegramRelocationSources';
+import { FREEHIRE_TELEGRAM_MEASUREMENTS, FREEHIRE_TELEGRAM_SOURCES } from './freehireTelegramSources';
 import { DEFAULT_CORPORATE_SOURCES } from './defaultCorporateSources';
 import { FREEHIRE_FEED_MEASUREMENTS, FREEHIRE_FEED_SOURCES } from './freehire/freehireFeeds';
 
@@ -99,6 +100,7 @@ export function vacancySourceMeasurements(sourceId: string): readonly VacancySou
     ATS_BOARD_MEASUREMENTS[sourceId] ??
     WORKDAY_BOARD_MEASUREMENTS[sourceId] ??
     FREEHIRE_FEED_MEASUREMENTS[sourceId] ??
+    FREEHIRE_TELEGRAM_MEASUREMENTS[sourceId] ??
     []
   );
 }
@@ -124,12 +126,19 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     type: 'json_api',
     accessClass: 'api',
     market: 'Россия',
-    addressStatus: 'robots_forbidden',
-    enabled: false,
-    disabledReason:
-      'Два независимых препятствия. Первое: robots.txt площадки содержит Disallow: / — она отказала словами (замер 2026-09-05). Второе: маршрут продукта её всё равно не обслуживает — с прод-VM в EU тело обрывается на 31 291 байте за 45 с, тогда как из российского ЦОДа приходит 322 121 байт за 5,4 с.',
+    // B647: официальный API открытых данных (trudvsem.ru/opendata/api). robots.txt
+    // opendata-хоста запрещает обход; подключено решением владельца 11.11 / 16.11 —
+    // читаем только документированный API, контакты не храним.
+    addressStatus: 'live',
+    enabled: true,
     targetUrl: 'https://opendata.trudvsem.ru/api/v1/vacancies?limit=100',
-    refreshIntervalMinutes: 180,
+    robotsOverride: {
+      grantedBy: 'owner',
+      grantedOn: '2026-11-16',
+      basis:
+        'Официальный API открытых данных (trudvsem.ru/opendata/api) — документированный API для интеграций; robots.txt хоста запрещает веб-краулинг страниц',
+    },
+    refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
   },
@@ -745,6 +754,7 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
 export const DEFAULT_VACANCY_SOURCES: readonly RegisteredVacancySource[] = [
   ...PLATFORM_SOURCES,
   ...DEFAULT_TELEGRAM_RELOCATION_SOURCES,
+  ...FREEHIRE_TELEGRAM_SOURCES,
   ...DEFAULT_CORPORATE_SOURCES,
   ...ATS_BOARD_SOURCES,
   ...WORKDAY_BOARD_SOURCES,

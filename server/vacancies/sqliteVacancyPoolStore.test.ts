@@ -114,7 +114,7 @@ describe('SqliteVacancyPoolStore', () => {
     expect(store.loadSourceStates()[0]?.lastStatus).toBeUndefined();
   });
 
-  it('empties the pool when the registry knows no sources at all', () => {
+  it('keeps the pool when the registry knows no sources (empty list = not loaded)', () => {
     const { store } = openStore();
     store.replaceSourceSlice('src', [
       {
@@ -139,8 +139,8 @@ describe('SqliteVacancyPoolStore', () => {
 
     store.prune([], '2026-08-01T00:00:00.000Z');
 
-    expect(store.loadVacancies()).toHaveLength(0);
-    expect(store.loadSourceStates()).toHaveLength(0);
+    expect(store.loadVacancies()).toHaveLength(1);
+    expect(store.loadSourceStates()).toHaveLength(1);
   });
 
   it('ignores stored payloads that are not a vacancy', () => {
@@ -788,8 +788,16 @@ describe('SqliteVacancyPoolStore · queryMatchCandidatesAsync (B229)', () => {
 
   it('reads through the isolated worker and matches the synchronous result', async () => {
     const { store } = openStore();
-    store.replaceSourceSlice('src', [card('v1', 'Lead Frontend Engineer'), card('v2', 'DevOps Specialist')]);
-    const profile = { candidateId: 'c1', targetRoles: ['Frontend Engineer'], confirmedSkills: [], confirmedFacts: [] };
+    store.replaceSourceSlice('src', [
+      card('v1', 'Lead Frontend Engineer'),
+      card('v2', 'DevOps Specialist'),
+    ]);
+    const profile = {
+      candidateId: 'c1',
+      targetRoles: ['Frontend Engineer'],
+      confirmedSkills: [],
+      confirmedFacts: [],
+    };
     const sync = store.queryMatchCandidates(profile, { nowMs, limit: 10 });
     const async = await store.queryMatchCandidatesAsync(profile, { nowMs, limit: 10 });
     expect(async.map((v) => v.id)).toEqual(sync.map((v) => v.id));
@@ -818,7 +826,12 @@ describe('SqliteVacancyPoolStore · queryMatchCandidatesAsync (B229)', () => {
     });
     stores.push(store);
     const result = await store.queryMatchCandidatesAsync(
-      { candidateId: 'c1', targetRoles: ['Nonexistent Role'], confirmedSkills: [], confirmedFacts: [] },
+      {
+        candidateId: 'c1',
+        targetRoles: ['Nonexistent Role'],
+        confirmedSkills: [],
+        confirmedFacts: [],
+      },
       { nowMs, limit: 10 },
     );
     expect(calls).toBe(2);
@@ -830,11 +843,17 @@ describe('SqliteVacancyPoolStore · queryMatchCandidatesAsync (B229)', () => {
     seedStore.replaceSourceSlice('src', [card('v1', 'Lead Frontend Engineer')]);
     const store = new SqliteVacancyPoolStore({
       databasePath: path,
-      matchReader: { read: () => Promise.reject(new Error('vacancy_match_reader_busy')), close: () => {} },
+      matchReader: {
+        read: () => Promise.reject(new Error('vacancy_match_reader_busy')),
+        close: () => {},
+      },
     });
     stores.push(store);
     await expect(
-      store.queryMatchCandidatesAsync({ candidateId: 'c1', targetRoles: [], confirmedSkills: [], confirmedFacts: [] }, { nowMs }),
+      store.queryMatchCandidatesAsync(
+        { candidateId: 'c1', targetRoles: [], confirmedSkills: [], confirmedFacts: [] },
+        { nowMs },
+      ),
     ).rejects.toThrow('vacancy_match_reader_busy');
   });
 });

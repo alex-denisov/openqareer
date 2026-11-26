@@ -28,6 +28,9 @@ export function logPoolWrites(log: MaintenanceLog): (event: PoolWriteEvent) => v
       return;
     }
     if (event.kind === 'prune') {
+      if (event.unknownSkipped) {
+        log.warn({ ...event.unknownSkipped }, 'pool-prune-unknown-skipped');
+      }
       log.info(
         {
           scope: event.scope,

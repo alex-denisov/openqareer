@@ -4,16 +4,18 @@
  * - Web server: read those rows and `catalog_listing_history` every 5 minutes
  *   into memory; the HTTP path only ever reads memory.
  */
+import { googleIndexingKey } from './googleIndexingSwitch';
 import { DatabaseSync } from 'node:sqlite';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import type { OwnerTelegramConfig } from '../notifications/ownerTelegram';
 import { admitCardRollout, cardRolloutDailyCap } from './catalogCardRollout';
 import { checkIndexCoverage } from './catalogIndexCoverage';
-import {
-  computeCatalogSitemaps,
-  readCatalogSitemaps,
-  writeCatalogSitemaps,
-} from './catalogSitemapJob';
+import { heavyRead } from '../maintenance/heavyReads/runHeavyRead';
+import { decodeSitemapUrls, type SitemapBuildSummary } from './catalogSitemapWrite';
+import { safeMessage } from './safeMessage';
+import { CatalogSitemapReader } from './catalogSitemapChanged';
+import { labelledTimer } from '../observability/backgroundSteps';
+import { nextTurn } from '../data/chunkedRows';
 import type { ListingIndexHistory } from './catalogIndexing';
 import { listingHistoryKey, readListingHistory } from './catalogListingHistory';
 import { createGoogleIndexingNotifier } from './googleIndexing';
@@ -58,19 +60,29 @@ export function resetCatalogSitemaps(): void {
   listingHistory = new Map();
 }
 
-function errorName(error: unknown): string {
-  return error instanceof Error ? error.name : 'UnknownError';
+/** Journal fields: the name alone («Error») hid a 12-day outage (24.11). */
+export function sitemapFailure(error: unknown): Record<string, unknown> {
+  if (!(error instanceof Error)) return { errorName: 'UnknownError' };
+  const code = (error as { code?: unknown }).code;
+  return {
+    errorName: error.name,
+    ...(typeof code === 'string' ? { errorCode: code } : {}),
+    reason: safeMessage(error.message),
+  };
 }
 
 /** A failed step leaves the set as it is and never stops the sitemap files. */
-function runCardRollout(database: DatabaseSync, log: SitemapLog, now: Date): void {
+async function runCardRollout(database: DatabaseSync, log: SitemapLog, now: Date): Promise<void> {
   try {
     const cap = cardRolloutDailyCap(process.env.OPENQAREER_CARD_ROLLOUT_DAILY_CAP);
     const started = Date.now();
-    const report = admitCardRollout(database, now, cap);
+    const report = await admitCardRollout(database, now, cap, {
+      choose: (quota) =>
+        heavyRead(database, 'cardRolloutCandidates', { nowMs: now.getTime(), quota }, log),
+    });
     log.info({ ...report, cap, ms: Date.now() - started }, 'catalog-card-rollout');
   } catch (error: unknown) {
-    log.error({ errorName: errorName(error) }, 'catalog-card-rollout-failed');
+    log.error(sitemapFailure(error), 'catalog-card-rollout-failed');
   }
 }
 
@@ -81,8 +93,14 @@ function runMarketReport(database: DatabaseSync, log: SitemapLog, now: Date): vo
     if (ensureMarketReport(database, now))
       log.info({ month: previousMonth(now), ms: Date.now() - started }, 'market-report-written');
   } catch (error: unknown) {
-    log.error({ errorName: errorName(error) }, 'market-report-failed');
+    log.error(sitemapFailure(error), 'market-report-failed');
   }
+}
+
+function logArchive(archive: SitemapBuildSummary['archive'], log: SitemapLog): void {
+  if (!archive) return;
+  if ('reason' in archive) log.error({ ...archive }, 'catalog-archive-snapshot-failed');
+  else log.info({ ...archive }, 'catalog-archive-snapshot');
 }
 
 /** Maintenance process only: the listings query groups the whole catalog. */
@@ -92,10 +110,7 @@ export function scheduleCatalogSitemapJob(
   telegram: OwnerTelegramConfig = {},
 ): () => void {
   const notifyIndexNow = createIndexNowNotifier(process.env.INDEXNOW_KEY, log);
-  const notifyGoogle = createGoogleIndexingNotifier(
-    process.env.OPENQAREER_GSC_SERVICE_ACCOUNT_B64,
-    log,
-  );
+  const notifyGoogle = createGoogleIndexingNotifier(googleIndexingKey(process.env), log);
   let running = false;
   const run = async () => {
     if (running) return;
@@ -103,12 +118,14 @@ export function scheduleCatalogSitemapJob(
     const started = Date.now();
     try {
       const now = new Date();
-      runCardRollout(database, log, now);
+      await runCardRollout(database, log, now);
       runMarketReport(database, log, now);
-      const files = computeCatalogSitemaps(database, now);
-      writeCatalogSitemaps(database, files, now);
+      // B649-3: grouping the catalog held the loop ~40 s; read and written in its own thread.
+      const build = await heavyRead(database, 'sitemapsWrite', { nowMs: now.getTime() }, log);
+      const { files } = build;
       await checkIndexCoverage({ database, files, telegram, log, now });
-      const urls = files.flatMap((file) => file.urls ?? []);
+      logArchive(build.archive, log);
+      const urls = await decodeSitemapUrls(build.urlsJson);
       await notifyIndexNow(database, urls);
       await notifyGoogle(database, urls);
       log.info(
@@ -119,10 +136,7 @@ export function scheduleCatalogSitemapJob(
         'catalog-sitemaps-written',
       );
     } catch (error: unknown) {
-      log.error(
-        { errorName: errorName(error), ms: Date.now() - started },
-        'catalog-sitemaps-failed',
-      );
+      log.error({ ...sitemapFailure(error), ms: Date.now() - started }, 'catalog-sitemaps-failed');
     } finally {
       running = false;
     }
@@ -137,22 +151,37 @@ export function scheduleCatalogSitemapJob(
   };
 }
 
-/** Web server: a read of a handful of rows, then the in-memory set is replaced. */
+/**
+ * Web server: the in-memory set is replaced from a read-only connection. B776: every read is its
+ * own turn of the loop (the history is 11 thousand rows, read in portions), and a slow run is
+ * never overlapped by the next timer.
+ */
 export function scheduleCatalogSitemapRefresh(databasePath: string, log: SitemapLog): () => void {
-  const refresh = () => {
+  const sitemaps = new CatalogSitemapReader();
+  let running = false;
+  const read = async () => {
+    if (running) return;
+    running = true;
     let database: DatabaseSync | undefined;
     try {
+      await nextTurn();
       database = new DatabaseSync(databasePath, { readOnly: true });
       applySqliteBusyTimeout(database);
-      setCatalogSitemaps(readCatalogSitemaps(database));
-      setListingHistory(readListingHistory(database));
+      setCatalogSitemaps(await sitemaps.readIfChanged(database));
+      await nextTurn();
+      setListingHistory(await readListingHistory(database));
+      await nextTurn();
       setMarketReports(readMarketReports(database));
     } catch (error: unknown) {
-      log.error({ errorName: errorName(error) }, 'catalog-sitemaps-refresh-failed');
+      log.error(sitemapFailure(error), 'catalog-sitemaps-refresh-failed');
     } finally {
       database?.close();
+      running = false;
     }
   };
+  const refresh = labelledTimer('web:sitemap-refresh', read, (error) =>
+    log.error(sitemapFailure(error), 'catalog-sitemaps-refresh-failed'),
+  );
   refresh();
   const every = setInterval(refresh, REFRESH_INTERVAL_MS);
   every.unref();

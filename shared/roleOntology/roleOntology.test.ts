@@ -20,6 +20,22 @@ describe('role ontology', () => {
     }
   });
 
+  it('B669: формы профессии заполнены целиком', () => {
+    expect(ontology.rolesById.get('product.pm.ic')?.forms).toEqual({
+      toBecome: 'продакт-менеджеры',
+      genitive: 'продакта',
+      instrumental: 'продактом',
+    });
+    for (const role of ontology.roles) {
+      if (!role.forms) continue;
+      expect(Object.keys(role.forms).sort()).toEqual(['genitive', 'instrumental', 'toBecome']);
+      for (const form of Object.values(role.forms)) {
+        expect(form.trim()).toBe(form);
+        expect(form.length).toBeGreaterThan(2);
+      }
+    }
+  });
+
   it('uses only the runtime level scale and complete unique title variants', () => {
     const scale = new Set(['ic', 'lead', 'head', 'vp', 'c-level']);
 

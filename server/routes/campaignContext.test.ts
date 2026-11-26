@@ -104,6 +104,26 @@ describe('readCampaign profile geography (C22 / C63)', () => {
     expect(res3.suggestedRegions).toEqual(['us']);
   });
 
+  it("B748: titlesRu carries this candidate's checked translations, ontology first", () => {
+    const saved = workspace([], {
+      roles: ['Head of Quantum Ops'],
+      regions: [],
+      revision: 1,
+      updatedAt: '2026-09-26T00:00:00.000Z',
+      careerRoles: [
+        {
+          id: 'head-of-quantum-ops',
+          title: 'Head of Quantum Ops',
+          titleRu: 'Руководитель квантовых операций',
+        },
+        { id: 'coo', title: 'Chief Operating Officer', titleRu: 'Директор по операциям' },
+      ],
+    });
+    const meta = campaignMeta(readCampaign(storeFor(saved), 'candidate'));
+    expect(meta.titlesRu['Head of Quantum Ops']).toBe('Руководитель квантовых операций');
+    expect(meta.titlesRu['Chief Operating Officer']).toBe('Операционный директор (COO)');
+  });
+
   it('returns model role level, reason and statements cited by evidenceRefs', () => {
     const saved = workspace([], {
       roles: [],
@@ -165,5 +185,22 @@ describe('campaignMeta salary currency', () => {
     } as unknown as RouteDeps['candidateStore'];
     const meta = campaignMeta(readCampaign(store, 'c1'));
     expect(meta.salaryCurrency).toBe('RUB');
+  });
+});
+
+/** B737: роль поиска — ключ на английском; кандидату её показывают по-русски. */
+describe('campaignMeta titlesRu', () => {
+  it('gives the Russian name of each search role that has one', () => {
+    const store = storeFor(
+      workspace([], {
+        roles: ['Chief Operating Officer', 'Директор по чудесам'],
+        regions: [],
+        revision: 1,
+        updatedAt: '2026-11-22T00:00:00.000Z',
+      } as CandidateWorkspaceState['campaign']),
+    );
+    const meta = campaignMeta(readCampaign(store, 'c1'));
+    expect(meta.roles.value).toEqual(['Chief Operating Officer', 'Директор по чудесам']);
+    expect(meta.titlesRu).toEqual({ 'Chief Operating Officer': 'Операционный директор (COO)' });
   });
 });

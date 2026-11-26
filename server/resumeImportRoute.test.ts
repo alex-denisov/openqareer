@@ -8,6 +8,7 @@ import type { CoachProvider } from './providers/coachProvider';
 import type { ResumeStructurer } from './providers/resumeStructurer';
 import type { ResumeStudioProjection } from './domain/resumeStudio';
 import { parseResumeContent } from '../src/features/workspace/resumeParser';
+import { timeBudget } from '../shared/testing/timeBudget';
 
 const config: ServerConfig = {
   host: '127.0.0.1',
@@ -848,6 +849,6 @@ describe('INC-037 · импорт не ждёт модель дольше сво
     expect(response.statusCode).toBe(200);
     expect(response.json().data.structuredBy).toBe('rules');
     // Бюджет в тестах короткий; важно, что ответ не ждёт зависшую модель.
-    expect(elapsed).toBeLessThan(5_000);
+    expect(elapsed).toBeLessThan(timeBudget(5_000));
   });
 });

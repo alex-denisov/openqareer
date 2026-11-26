@@ -27,6 +27,11 @@
       "family": "qa.engineering",
       "titleEn": "QA Engineer",
       "titleRu": "Инженер по тестированию",
+      "forms": {
+        "toBecome": "тестировщики",
+        "genitive": "тестировщика",
+        "instrumental": "тестировщиком"
+      },
       "levels": [
         "ic"
       ],

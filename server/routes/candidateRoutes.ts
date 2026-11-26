@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { forgetMemberNetwork } from './networkIndexFeed';
 import { connectNativeOnly, resolveNativeImportMode, type NativeImportMode } from './nativeImportMode';
 import { materializeManualResumeEvidence } from './manualResumeEvidence';
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   buildMemoryPage,
@@ -35,6 +35,8 @@ import { registerExperienceFactRewriteRoutes } from './experienceFactRewriteRout
 import { registerProfileHistoryRoutes } from './profileHistoryRoutes';
 import { withStoredFactRewrites } from '../domain/experienceFactRewrite';
 import { registerCandidateConsultantHistoryRoutes } from './candidateConsultantHistoryRoutes';
+import { registerFactCorrectionRoutes } from './factCorrectionRoutes';
+import { registerConsultantB640Routes } from './consultantB640Routes';
 import { registerCandidateMediaRoutes } from './candidateMediaRoutes';
 import { registerCandidateDocumentRoutes } from './candidateDocumentRoutes';
 import { registerCandidateResumeVersionRoutes } from './candidateResumeVersionRoutes';
@@ -60,6 +62,7 @@ import {
   recordImportCompletedNotification,
 } from './notificationRepositoryAccess';
 import { registerNotificationRoutes } from './notificationRoutes';
+import { forgetOwnVacancies } from '../vacancies/ownVacancy/ownVacancyStore';
 import {
   assessmentIdSchema,
   candidateCreateSchema,
@@ -68,6 +71,8 @@ import {
   memoryReviewSchema,
   resumeImportSchema,
 } from './schemas';
+import { toPublicFootprint } from './footprintPublicView';
+import { withoutForbiddenKeys } from '../data/exportForbiddenKeys';
 
 export type Handler = (
   deps: RouteDeps,
@@ -304,23 +309,33 @@ function messageThread(company?: string, vacancy?: string) {
   return company ? { kind: 'company' as const, id: company } : undefined;
 }
 
+/**
+ * Стирает данные кандидата. Зовут немедленное удаление и (B689) обход
+ * отсроченных удалений, у которого нет запроса, — поэтому журнал передаётся.
+ */
+export function purgeCandidateAccount(deps: RouteDeps, candidateId: string, log: FastifyBaseLogger): void {
+  const { candidateStore, candidateReputationRepo, recruiterContactsRepo } = deps;
+  cancelFootprintRunForCandidate(candidateId);
+  deps.capabilityConsentStore?.deleteForCandidate(candidateId);
+  forgetMemberNetwork(deps, candidateId, log);
+  notificationRepositoryFor(deps).deleteByCandidate(candidateId);
+  candidateReputationRepo?.deleteFootprintAuditsByCandidateId(candidateId);
+  candidateReputationRepo?.deleteAuditsByCandidateId(candidateId);
+  forgetOwnVacancies(deps, candidateId);
+  deps.vacancyMechanics?.deleteCandidate(candidateId);
+  deps.multiSourceEngine.forgetHhTextRoleTarget(candidateId);
+  candidateStore.deleteCandidate(candidateId);
+  recruiterContactsRepo?.deleteContactsByCandidateId(candidateId);
+  recruiterContactsRepo?.deleteJobsByCandidateId(candidateId);
+  deps.accountDeletionStore?.remove(candidateId);
+}
+
 const handleDeleteCandidate: Handler = async (deps, request, reply) => {
-  const { authService, candidateStore, candidateReputationRepo, recruiterContactsRepo, config } =
-    deps;
+  const { authService, candidateStore, config } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  cancelFootprintRunForCandidate(candidate.id);
-  deps.capabilityConsentStore?.deleteForCandidate(candidate.id);
-  forgetMemberNetwork(deps, candidate.id, request.log);
-  notificationRepositoryFor(deps).deleteByCandidate(candidate.id);
-  candidateReputationRepo?.deleteFootprintAuditsByCandidateId(candidate.id);
-  candidateReputationRepo?.deleteAuditsByCandidateId(candidate.id);
-  deps.vacancyMechanics?.deleteCandidate(candidate.id);
-  deps.multiSourceEngine.forgetHhTextRoleTarget(candidate.id);
-  candidateStore.deleteCandidate(candidate.id);
-  recruiterContactsRepo?.deleteContactsByCandidateId(candidate.id);
-  recruiterContactsRepo?.deleteJobsByCandidateId(candidate.id);
+  purgeCandidateAccount(deps, candidate.id, request.log);
   return reply.code(204).send();
 };
 
@@ -333,15 +348,19 @@ const handleExportCandidate: Handler = async (
   if (!candidate) return undefined;
   reply.header('Content-Disposition', 'attachment; filename="openqareer-candidate-export.json"');
   return {
-    data: {
+    // B738: отчёты репутации и следа добавляются здесь, поэтому запретные поля убираются со всего ответа.
+    data: withoutForbiddenKeys({
       ...candidateStore.exportCandidate(candidate.id),
       reputationAudits:
         candidateReputationRepo?.listAudits(candidate.id, { trustedOnly: true }) ?? [],
       // Keep the singular key for clients that have not migrated yet.
       reputationAudit:
         candidateReputationRepo?.getLatestAudit(candidate.id, { trustedOnly: true }) ?? null,
-      footprintAudits: candidateReputationRepo?.listFootprintAudits(candidate.id) ?? [],
-    },
+      // B740: инструменты поиска остаются на сервере — в выгрузке коды шагов.
+      footprintAudits: toPublicFootprint(
+        candidateReputationRepo?.listFootprintAudits(candidate.id) ?? [],
+      ),
+    }),
     meta: { requestId: request.id, exportedAt: new Date().toISOString() },
   };
 };
@@ -786,6 +805,8 @@ export async function registerCandidateRoutes(
   registerCandidateMediaRoutes(app, deps);
   await registerCandidateLifecycle(app, deps);
   await registerCandidateConsultantHistoryRoutes(app, deps);
+  registerConsultantB640Routes(app, deps);
+  registerFactCorrectionRoutes(app, deps);
   await registerCandidateExperienceFactRoutes(app, deps);
   await registerExperienceFactRewriteRoutes(app, deps);
   await registerProfileHistoryRoutes(app, deps);

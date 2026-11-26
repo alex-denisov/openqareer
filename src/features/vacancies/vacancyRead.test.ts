@@ -191,3 +191,9 @@ describe('collectMatchedPool со списком смещений (B211)', () =>
     expect(result.complete).toBe(false);
   });
 });
+
+describe('B725: ширина чтения', () => {
+  it('восемь страниц в полёте: 45 страниц прод 20.11 — шесть волн вместо девяти', () => {
+    expect(MATCHED_POOL_READ_WIDTH).toBe(8);
+  });
+});

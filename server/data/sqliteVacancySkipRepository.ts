@@ -67,11 +67,25 @@ export class SqliteVacancySkipRepository {
     return { clusterId: input.clusterId, reasonId: input.reasonId, origin: input.origin, createdAt: now };
   }
 
-  delete(candidateId: string, clusterId: string): boolean {
-    const result = this.database
-      .prepare('DELETE FROM vacancy_skips WHERE candidate_id = ? AND cluster_id = ?')
-      .run(candidateId, clusterId);
-    return result.changes === 1;
+  /** Отмена скрытия: в той же транзакции возвращается карточка, которую скрытие убрало в архив (B654). */
+  delete(
+    candidateId: string,
+    clusterId: string,
+    restoreSavedCard: (candidateId: string, clusterId: string) => void,
+  ): boolean {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const result = this.database
+        .prepare('DELETE FROM vacancy_skips WHERE candidate_id = ? AND cluster_id = ?')
+        .run(candidateId, clusterId);
+      const deleted = result.changes === 1;
+      if (deleted) restoreSavedCard(candidateId, clusterId);
+      this.database.exec('COMMIT');
+      return deleted;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
   }
 }
 

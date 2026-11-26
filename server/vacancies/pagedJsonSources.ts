@@ -18,6 +18,7 @@ import {
 } from './jobspyAdapters';
 import { type FanCombo, currentFanDemand, fanCombosForSync } from './jobspyFan';
 import { WORKDAY_SOURCE_PREFIX } from './workdayBoardSources';
+import { JOIN_PAGE_SIZE } from './atsListingReaders';
 
 /**
  * Постраничные JSON-площадки (B216).
@@ -687,7 +688,95 @@ const glassdoor: PagingPlan = {
   },
 };
 
+/**
+ * B646-3: SmartRecruiters отдаёт не больше 100 записей за запрос. Без
+ * перелистывания 48 из 66 досок на проде (11.11) стояли ровно на 100, а чтение
+ * считалось полным и снимало хвост. Правило freehire (MIT, NOTICE): полной
+ * выдачей считается только дочитанная до `totalFound`; обрыв — частичное чтение.
+ */
+const SMARTRECRUITERS_PAGE = 100;
+const SMARTRECRUITERS_SOURCE_PREFIX = 'ats-smartrecruiters-';
+
+function smartrecruitersRequest(base: string, offset: number): PagedRequest {
+  return { url: `${base}&offset=${offset}`, state: { base, offset } };
+}
+
+const smartrecruiters: PagingPlan = {
+  // Bosch 4811 вакансий (B202): 50 страниц дочитывают самую большую доску.
+  pagesPerSync: 50,
+  delayMs: 500,
+  first: (targetUrl) => smartrecruitersRequest(targetUrl, 0),
+  next: (previous, payload) => {
+    const state = record(previous.state);
+    const offset = numeric(state.offset) ?? 0;
+    const total = numeric(record(payload).totalFound) ?? 0;
+    const content = asArray(record(payload).content) ?? [];
+    const nextOffset = offset + SMARTRECRUITERS_PAGE;
+    if (content.length < SMARTRECRUITERS_PAGE || nextOffset >= total) return null;
+    return smartrecruitersRequest(String(state.base), nextOffset);
+  },
+};
+
+/**
+ * B646-5: Join отдаёт по 5 записей (больше — 422) и считает частоту: freehire
+ * (MIT, NOTICE; sources/pacer.go) мерил колено между 2 и 3 запросами в секунду
+ * и держит 1,5. Пауза 1 с даже с джиттером −25 % остаётся под этим темпом.
+ * Конец — `pagination.pageCount`; без него последней считается неполная
+ * страница. Потолок страниц оставляет запрос, и чтение остаётся частичным.
+ */
+const JOIN_SOURCE_PREFIX = 'ats-join-';
+
+const join: PagingPlan = {
+  pagesPerSync: 40,
+  delayMs: 1_000,
+  first: (targetUrl) => ({ url: targetUrl, state: { page: pageOf(targetUrl, 'page') || 1 } }),
+  next: (previous, payload) => {
+    const page = numeric(record(previous.state).page) ?? 1;
+    const pageCount = numeric(record(record(payload).pagination).pageCount);
+    const items = asArray(record(payload).items) ?? [];
+    const more = pageCount === undefined ? items.length >= JOIN_PAGE_SIZE : page < pageCount;
+    if (!more) return null;
+    return { url: withParam(previous.url, 'page', String(page + 1)), state: { page: page + 1 } };
+  },
+};
+
+/**
+ * Работа России (B647): `offset` — номер страницы 0..99, не больше 100 записей,
+ * один запрос отдаёт не больше 10 000. Опрос раз в час читает записи,
+ * изменённые за два часа до начала часа: окна перекрываются, поэтому новое
+ * не теряется, а каждый час — не больше 60 страниц. Окно — не вся площадка,
+ * поэтому срез только дополняется (`fanWindow`).
+ */
+const TRUDVSEM_PAGE = 100;
+const TRUDVSEM_WINDOW_MS = 2 * 60 * 60_000;
+const HOUR_MS = 60 * 60_000;
+
+function trudvsemUrl(targetUrl: string, page: number, modifiedFrom?: string): string {
+  const next = new URL(targetUrl);
+  next.searchParams.set('limit', String(TRUDVSEM_PAGE));
+  next.searchParams.set('offset', String(page));
+  if (modifiedFrom) next.searchParams.set('modifiedFrom', modifiedFrom);
+  return next.toString();
+}
+
+const trudvsem: PagingPlan = {
+  pagesPerSync: 60,
+  delayMs: 1000,
+  fanWindow: true,
+  first: (targetUrl, nowMs) => {
+    const from = new Date(Math.floor(nowMs / HOUR_MS) * HOUR_MS - TRUDVSEM_WINDOW_MS);
+    return { url: trudvsemUrl(targetUrl, 0, from.toISOString().replace(/\.\d{3}Z$/, 'Z')) };
+  },
+  next: (previous, payload) => {
+    const rows = asArray(record(record(payload).results).vacancies) ?? [];
+    const page = pageOf(previous.url, 'offset');
+    if (rows.length < TRUDVSEM_PAGE || page >= 99) return null;
+    return { url: trudvsemUrl(previous.url, page + 1) };
+  },
+};
+
 const PLANS: Readonly<Record<string, PagingPlan>> = {
+  'src-trudvsem': trudvsem,
   'src-themuse': themuse,
   'src-himalayas-api': himalayas,
   'src-amazon-jobs': amazon,
@@ -706,6 +795,8 @@ const PLANS: Readonly<Record<string, PagingPlan>> = {
 
 export function pagingPlanFor(sourceId: string): PagingPlan | null {
   if (sourceId.startsWith(WORKDAY_SOURCE_PREFIX)) return workday;
+  if (sourceId.startsWith(SMARTRECRUITERS_SOURCE_PREFIX)) return smartrecruiters;
+  if (sourceId.startsWith(JOIN_SOURCE_PREFIX)) return join;
   return PLANS[sourceId] ?? null;
 }
 

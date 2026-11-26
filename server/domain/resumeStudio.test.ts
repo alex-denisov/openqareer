@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resumeDraftSchema, EMPTY_RESUME_DRAFT } from './resumeDraft';
+import { assertTargetedResumeQuantities, buildTargetedResumeSlice } from './resumeStudioTargeted';
 import {
   buildResumeStudioProjection,
   validateResumeEvidenceFreshness,
@@ -233,6 +234,24 @@ describe('Resume Studio canonical projection', () => {
     expect(serialized).not.toContain('Forbidden Birth Place');
     expect(serialized).not.toContain('Forbidden Marital Status');
     expect(serialized).not.toContain('Forbidden Religion');
+  });
+
+  it('сертификат без своего факта в резюме не попадает', () => {
+    const input = completeInput();
+    const projection = buildResumeStudioProjection({
+      ...input,
+      evidence: [
+        ...input.evidence,
+        evidence('cert-itil', 'ITIL 4 — PeopleCert'),
+        evidence('cert-pmi', 'PMI', { status: 'proposed' }),
+      ],
+      certifications: [
+        { id: 'itil', evidenceMemoryId: 'cert-itil', name: 'ITIL 4' },
+        { id: 'pmi', evidenceMemoryId: 'cert-pmi', name: 'PMI' },
+        { id: 'bare', name: 'CISA' },
+      ],
+    });
+    expect(projection.master.certifications?.map((item) => item.id)).toEqual(['itil']);
   });
 
   it('projects only eligible master project facts and keeps their provenance', () => {
@@ -788,3 +807,20 @@ function assertionsIn(
     (item): item is ResumeAssertion<string | boolean> => item !== null,
   );
 }
+
+describe('targeted CV quantitative fact gate', () => {
+  it('permits verbatim claims and rejects changed metrics and their transfer between employments', () => {
+    const { master } = buildResumeStudioProjection(completeInput());
+    const targeted = buildTargetedResumeSlice(master, { title: 'Operations Director', requirements: [] }).document;
+    expect(() => assertTargetedResumeQuantities(master, targeted)).not.toThrow();
+    const role = targeted.experience.find((entry) => entry.id === 'current-role')!;
+    const bullet = role.bullets.find((item) => item.memoryId === 'outcome-current')!;
+    const changed = { ...bullet, value: 'Вырастил выручку на 99%' };
+    expect(() => assertTargetedResumeQuantities(master, {
+      ...targeted, experience: [{ ...role, bullets: [changed] }],
+    })).toThrow('targeted_resume_unsubstantiated_quantity');
+    expect(() => assertTargetedResumeQuantities(master, {
+      ...targeted, experience: [{ ...role, id: 'another-role', bullets: [bullet] }],
+    })).toThrow('targeted_resume_unsubstantiated_quantity');
+  });
+});

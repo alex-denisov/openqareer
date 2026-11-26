@@ -4,6 +4,7 @@ import type { RecruiterContact } from '../../../shared/recruiterContact';
 import { FootprintRequestGate } from '../../osint/adapters/requestScheduler';
 import { collectCompanyPages } from './companyPages';
 import { withDossier } from './recruiterDossierService';
+import { timeBudget } from '../../../shared/testing/timeBudget';
 
 const now = () => new Date('2026-10-27T00:00:00.000Z');
 
@@ -98,7 +99,7 @@ describe('company pages', () => {
   it('parses a hostile page in linear time', async () => {
     const started = Date.now();
     await collectCompanyPages('acme.com', deps(site({ 'https://acme.com/team': `${'a'.repeat(90_000)}${'<'.repeat(9_000)}` })));
-    expect(Date.now() - started).toBeLessThan(3_000);
+    expect(Date.now() - started).toBeLessThan(timeBudget(3_000));
   });
 
   it('replaces the generic guess with the company format and caches the site', async () => {

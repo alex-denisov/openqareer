@@ -213,3 +213,64 @@ describe('fit order reads percents before the page is built (PRB-041: reader.rea
     expect(typeof order.prepare).toBe('function');
   });
 });
+
+describe('B702 part 2: the percents of the previous process answer the first read', () => {
+  const sealed = () => {
+    const rows = new Map<string, string>();
+    return {
+      rows,
+      readSealedFitViews: (candidate: string, stamp: string) => rows.get(`${candidate}/${stamp}`),
+      sealFitViews: async (candidate: string, stamp: string, text: string) => {
+        rows.set(`${candidate}/${stamp}`, text);
+      },
+    };
+  };
+
+  it('a new process orders by the sealed percents without reading a row before the answer', async () => {
+    const store = sealed();
+    const pool = ['a', 'b', 'c'].map(item);
+    const scored = { a: 10, b: 90, c: 50 };
+    await withVacancyFitOrder(deps(scored, store), 'seal-first', FIT).prepare?.(pool);
+    await turns();
+    const [[key, text]] = [...store.rows];
+    // Neither the candidate nor anything but the profile stamp is in the stored key.
+    expect(key).not.toContain('|seal-first');
+    const next = { ...store, readSealedFitViews: () => text };
+    const view = vi.fn(() => ready(1));
+    const fit = withVacancyFitOrder(deps(scored, { ...next, view }), 'seal-next', FIT);
+
+    const prepared = fit.prepare?.(pool);
+    expect(view).not.toHaveBeenCalled();
+    expect(await prepared).toBe(0);
+    expect(ids(fit(pool))).toEqual(['b', 'c', 'a']);
+    await turns();
+    expect(view).toHaveBeenCalled(); // read again behind the answer
+  });
+
+  it('a seal that does not parse is a cold read', async () => {
+    const pool = ['a', 'b'].map(item);
+    const fit = withVacancyFitOrder(
+      deps({ a: 10, b: 90 }, { readSealedFitViews: () => '{', sealFitViews: async () => undefined }),
+      'seal-broken',
+      FIT,
+    );
+    expect(await fit.prepare?.(pool)).toBe(2);
+    expect(ids(fit(pool))).toEqual(['b', 'a']);
+  });
+
+  it('known titles do not give turns away while other work waits', async () => {
+    const pool = Array.from({ length: 900 }, (_, index) => item(`r${index}`));
+    const isExact = () => true;
+    let passed = 0;
+    let running = true;
+    const spin = () => {
+      passed += 1;
+      if (running) setImmediate(spin);
+    };
+    setImmediate(spin);
+    const fit = withVacancyFitOrder(deps({}), 'turns', FIT, undefined, 'read', isExact);
+    await fit.prepare?.(pool);
+    running = false;
+    expect(passed).toBeLessThan(10);
+  });
+});

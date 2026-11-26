@@ -142,8 +142,10 @@ describe('B643-9 tick without a model', () => {
     const result = await runSiteDiscoveryTick(db, fakeFetch({
       'https://boards-api.greenhouse.io/v1/boards/northwindlabs/jobs': [200, '{"jobs":[{}]}'],
     }), new Date('2026-11-11T00:00:00Z'), undefined, publicHost);
-    expect(result).toEqual({ checked: 1, boards: 1, ambiguous: 0 });
-    expect(db.prepare("SELECT ats_provider, ats_slug FROM company_directory").get()).toEqual({ ats_provider: 'greenhouse', ats_slug: 'northwindlabs' });
+    expect(result).toMatchObject({ checked: 1, boards: 1, ambiguous: 0 });
+    expect(db.prepare(`SELECT ats_provider, ats_slug, json_extract(evidence, '$.ats.value') AS candidate FROM company_directory`).get())
+      .toEqual({ ats_provider: null, ats_slug: null, candidate: 'greenhouse:northwindlabs' });
+    expect(db.prepare('SELECT count(*) AS placed FROM company_placement').get()).toEqual({ placed: 0 });
     expect(readPendingCompanies(db, 10)).toEqual([]);
   });
 });

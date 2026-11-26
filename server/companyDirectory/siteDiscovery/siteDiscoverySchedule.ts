@@ -9,7 +9,9 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { resolveCompany } from './deterministicResolver';
 import { politeFetch } from './hostLimiter';
-import { orderByVacancies, readPendingPage, vacancyCounts, writeDiscovery, type HostCheck, type PendingCompany } from './siteDiscovery';
+import { publicApiCounter } from '../freehire/freehireRepoCheck';
+import { DirectAtsDiscovery, DIRECT_ATS_FRESH_MS } from './directAtsDiscovery';
+import { directoryWindowEnd, orderByVacancies, readPendingPage, vacancyCounts, writeDiscovery, type HostCheck, type PendingCompany } from './siteDiscovery';
 
 interface Log {
   info(details: Record<string, unknown>, message: string): void;
@@ -21,20 +23,24 @@ const BATCH = 200;
 const WORKERS = 12;
 const FIRST_RUN_MS = 7 * 60_000;
 const BETWEEN_MS = 5_000;
-const PAGE = 2_000;
+/** Directory rows one read looks at; a page of matches walked the whole directory at once (B761). */
+const WINDOW = 500;
 const QUEUE_TTL_MS = 6 * 60 * 60_000;
-const IDLE_MS = 6 * 60 * 60_000;
+const IDLE_MS = 10 * 60_000;
 
 export interface TickResult {
   readonly checked: number;
   readonly boards: number;
   readonly ambiguous: number;
+  readonly directChecks: number;
+  readonly liveDirectBoards: number;
 }
 
 /**
- * Pending companies, most pool vacancies first. The directory is read in pages
- * of PAGE rows with the event loop free between pages; the list is reread when
- * empty or older than QUEUE_TTL_MS.
+ * Pending companies, most pool vacancies first. The directory is read in windows
+ * of WINDOW rows with the event loop free between them; the list is reread when older
+ * than QUEUE_TTL_MS. A drained list is not: companies with a known board stay pending,
+ * and rereading for them held 75 % of the maintenance CPU (B761, prod 25.11).
  */
 export class PendingQueue {
   private items: PendingCompany[] = [];
@@ -43,24 +49,37 @@ export class PendingQueue {
   constructor(
     private readonly database: DatabaseSync,
     private readonly now: () => number = Date.now,
+    private readonly direct?: Pick<DirectAtsDiscovery, 'prioritized'>,
   ) {}
 
   async next(count: number): Promise<readonly PendingCompany[]> {
-    if (this.items.length === 0 || this.now() - this.readAt > QUEUE_TTL_MS) await this.refresh();
+    if (this.now() - this.readAt > QUEUE_TTL_MS) await this.refresh();
     return this.items.splice(0, count);
   }
 
   private async refresh(): Promise<void> {
     const all: PendingCompany[] = [];
     let after = '';
+    const directSince = this.direct ? this.now() - DIRECT_ATS_FRESH_MS : undefined;
     for (;;) {
-      const page = readPendingPage(this.database, after, PAGE);
-      all.push(...page);
-      if (page.length < PAGE) break;
-      after = page.at(-1)!.companyKey;
+      const until = directoryWindowEnd(this.database, after, WINDOW);
+      if (until === undefined) break;
+      all.push(...readPendingPage(this.database, after, WINDOW, directSince, until));
+      after = until;
       await new Promise((resolve) => setImmediate(resolve));
     }
-    this.items = orderByVacancies(all, vacancyCounts(this.database));
+    const ordered = orderByVacancies(all, vacancyCounts(this.database));
+    if (this.direct) {
+      const priority: PendingCompany[] = [];
+      const fallback: PendingCompany[] = [];
+      for (const company of ordered) {
+        if (this.direct.prioritized(company)) priority.push(company);
+        else if (!company.siteSearched) fallback.push(company);
+      }
+      this.items = [...priority, ...fallback];
+    } else {
+      this.items = ordered;
+    }
     this.readAt = this.now();
   }
 }
@@ -72,30 +91,54 @@ export async function runSiteDiscoveryTick(
   now: Date = new Date(),
   queue: Pick<PendingQueue, 'next'> = new PendingQueue(database),
   hostIsPublic?: HostCheck,
+  direct?: Pick<DirectAtsDiscovery, 'probe'>,
 ): Promise<TickResult> {
   const companies = await queue.next(BATCH);
   const day = now.toISOString().slice(0, 10);
   let boards = 0;
   let ambiguous = 0;
+  let directChecks = 0;
+  let liveDirectBoards = 0;
   let cursor = 0;
   const worker = async () => {
     while (cursor < companies.length) {
       const company = companies[cursor++]!;
+      const result = await direct?.probe(company, now);
+      if (result) {
+        directChecks += result.checked;
+        liveDirectBoards += result.live;
+        if (result.live > 0) continue;
+      }
+      if (company.siteSearched) continue;
       const found = await resolveCompany(company, fetchImpl, day, hostIsPublic);
       if (found.board) boards += 1;
       if (found.evidence.atsAmbiguous) ambiguous += 1;
-      writeDiscovery(database, found, now.toISOString());
+      // A guessed board or careers URL can activate an incomplete profile.
+      // Keep the observation in evidence until the company is reviewed,
+      // while verified site pages and hh employer IDs go to placements.
+      writeDiscovery(
+        database,
+        {
+          companyKey: found.companyKey,
+          evidence: found.evidence,
+          ...(found.evidence.careersUrl ? { careersUrl: found.careersUrl } : {}),
+          ...(found.hhEmployerIds && found.hhEmployerIds.length > 0 ? { hhEmployerIds: found.hhEmployerIds } : {}),
+        },
+        now.toISOString(),
+      );
     }
   };
   await Promise.all(Array.from({ length: Math.min(WORKERS, companies.length) }, worker));
-  return { checked: companies.length, boards, ambiguous };
+  return { checked: companies.length, boards, ambiguous, directChecks, liveDirectBoards };
 }
 
 export function scheduleSiteDiscovery(database: DatabaseSync, log: Log): () => void {
   let timer: NodeJS.Timeout | undefined;
   let stopped = false;
-  const queue = new PendingQueue(database);
   const polite = politeFetch(fetch);
+  const directFetch: typeof fetch = (input, init) => polite(input, { ...init, redirect: 'error' });
+  const direct = new DirectAtsDiscovery(database, publicApiCounter(directFetch));
+  const queue = new PendingQueue(database, Date.now, direct);
   const next = (delay: number) => {
     if (stopped) return;
     timer = setTimeout(() => void run(), delay);
@@ -103,7 +146,7 @@ export function scheduleSiteDiscovery(database: DatabaseSync, log: Log): () => v
   };
   const run = async () => {
     try {
-      const result = await runSiteDiscoveryTick(database, polite, new Date(), queue);
+      const result = await runSiteDiscoveryTick(database, polite, new Date(), queue, undefined, direct);
       if (result.checked > 0) log.info({ ...result }, 'site-discovery-tick');
       next(result.checked === 0 ? IDLE_MS : BETWEEN_MS);
     } catch (error: unknown) {

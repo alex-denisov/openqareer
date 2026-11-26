@@ -22,10 +22,11 @@ const admin = { ...candidate, role: 'admin' } as unknown as AuthUser;
 
 const FEED_STATS: LandingStats = {
   ...LANDING_STATS_SNAPSHOT,
+  reach: { companies: 67_726, careerSites: 13_514, newToday: 5_976 },
   feed: Array.from({ length: 12 }, (_, index) => ({
     title: `Бухгалтер ${index}`,
     salary: '120–140 тыс. ₽ в месяц',
-    meta: 'Москва · hh.ru · 26.10',
+    meta: 'Офис · Москва · Сбер',
     href: `/vacancies/job/accountant-${index}`,
   })),
 };
@@ -65,14 +66,22 @@ describe('LandingPage (B569, mockup 01-home)', () => {
     expect(html).toContain('<b>712 тыс.</b> вакансий');
     expect(html).toContain('· обновлено 26.10.2026');
     expect(html).not.toContain('1,1 млн');
-    expect(html).toContain('и ещё 320');
+  });
+
+  it('heads the feed with live reach chips, never with aggregators first (B648)', () => {
+    const html = render();
+    const head = html.slice(html.indexOf('class="src"'), html.indexOf('class="card raised"'));
+    expect(head).toContain('67 тыс. компаний');
+    expect(head).toContain('13 тыс. карьерных сайтов');
+    expect(head).toContain('+5,9 тыс. за сутки');
+    expect(head).not.toMatch(/hh\.ru|LinkedIn|и ещё/u);
   });
 
   it('feeds five rows that link to public catalog cards, with a pause button', () => {
     const html = render();
     expect(html.match(/<a href="\/vacancies\/job\/accountant-\d+">/gu)).toHaveLength(5);
     expect(html).toContain('Бухгалтер 0');
-    expect(html).toContain('Москва · hh.ru · 26.10');
+    expect(html).toContain('Офис · Москва · Сбер');
     expect(html).toContain('aria-pressed="false">Пауза</button>');
   });
 
@@ -89,7 +98,7 @@ describe('LandingPage (B569, mockup 01-home)', () => {
     for (const token of [
       '%%OQ_ACTIVE%%',
       '%%OQ_F0_HREF%%',
-      '%%OQ_SOURCES_MORE%%',
+      '%%OQ_REACH_0%%',
       '%%OQ_STATS_JSON%%',
     ]) {
       expect(html).toContain(token);
@@ -98,6 +107,7 @@ describe('LandingPage (B569, mockup 01-home)', () => {
     expect(served).not.toContain('%%OQ_');
     expect(served).toContain('href="/vacancies/job/accountant-0"');
     expect(served).toContain('712 тыс.');
+    expect(served).toContain('67 тыс. компаний');
   });
 
   it('shows the tariffs of tariffsData in order, Pro recommended first on a phone', () => {

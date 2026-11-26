@@ -1,4 +1,7 @@
+import { hhTextNeedsRead } from './hhStubText';
+import { hasDetailText } from './detailTextPriority';
 import { confirmsLiveness, freshnessAnchorMs, NOT_SEEN_PRUNE_DAYS } from './poolLiveness';
+import { sourceMemberKey } from './vacancyDeduplicator';
 
 /** B642: запись доски работодателя, невиденная неделю, уборка снимает. */
 function notSeenTooLong(vacancy: UnifiedVacancy): boolean {
@@ -112,7 +115,7 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
   clusterIdForMemberKey(key: string): string | undefined {
     for (const cluster of this.clusters.values()) {
       for (const source of cluster.sources) {
-        if (source.externalId === key || source.sourceUrl === key) return cluster.id;
+        if (sourceMemberKey(source) === key || source.sourceUrl === key) return cluster.id;
       }
     }
     return undefined;
@@ -210,8 +213,12 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
       .map((row) => ({ id: row.vacancy.id, url: row.vacancy.url }));
   }
 
-  loadSourceStates(): StoredSourceState[] {
-    return Array.from(this.states.values());
+  loadSourceStates(sourceIds?: readonly string[]): StoredSourceState[] {
+    if (!sourceIds) return Array.from(this.states.values());
+    return sourceIds.flatMap((id) => {
+      const state = this.states.get(id);
+      return state ? [state] : [];
+    });
   }
 
   saveSourceState(written: StoredSourceState): void {
@@ -323,21 +330,22 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
   }
 
   prune(knownSourceIds: readonly string[], oldestPublishedAt: string): void {
+    // Как в SQLite: пустой или неполный реестр значит «источники не
+    // загрузились», а не «всё чужое»; по возрасту чистим всегда.
+    const dropUnknown =
+      knownSourceIds.length > 0 && knownSourceIds.length >= this.states.size * 0.98;
     const known = new Set(knownSourceIds);
     for (const [id, row] of this.rows) {
       if (
         (freshnessAnchorMs(row.vacancy) ?? 0) < Date.parse(oldestPublishedAt) ||
         notSeenTooLong(row.vacancy) ||
-        !known.has(row.sourceId)
+        (dropUnknown && !known.has(row.sourceId))
       ) {
         this.rows.delete(id);
       }
     }
     for (const sourceId of this.states.keys()) {
-      if (!known.has(sourceId)) this.states.delete(sourceId);
-    }
-    if (knownSourceIds.length === 0) {
-      this.clusters.clear();
+      if (dropUnknown && !known.has(sourceId)) this.states.delete(sourceId);
     }
   }
 
@@ -574,7 +582,7 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     const ordered = [...this.hhTextPriority.entries()].sort((a, b) => a[1] - b[1]);
     const needs = (id: string) => {
       const row = this.rows.get(id);
-      return Boolean(row && row.expiredAt === undefined && !row.vacancy.fullDescription?.trim());
+      return Boolean(row && row.expiredAt === undefined && hhTextNeedsRead(row.vacancy));
     };
     this.dropHhTextPriority(ordered.filter(([id]) => !needs(id)).map(([id]) => id));
     return ordered
@@ -587,6 +595,39 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     const next = new Map(this.hhTextPriority);
     vacancyIds.forEach((id) => next.delete(id));
     this.hhTextPriority = next;
+  }
+
+  private detailTextPriority: ReadonlyMap<string, number> = new Map();
+
+  /** Как в базе: подборки первыми в дочитке площадок без текста в списке (B791). */
+  requestDetailTextPriority(vacancyIds: readonly string[], baseRank = 0): void {
+    const next = new Map(this.detailTextPriority);
+    vacancyIds.filter(hasDetailText).forEach((id, index) => {
+      const rank = baseRank + index;
+      next.set(id, Math.min(next.get(id) ?? rank, rank));
+    });
+    this.detailTextPriority = next;
+  }
+
+  peekDetailTextPriority(
+    sourceId: string,
+    limit: number,
+    excludeIds: readonly string[] = [],
+  ): string[] {
+    const excluded = new Set(excludeIds);
+    const needs = (id: string) => {
+      const row = this.rows.get(id);
+      return Boolean(
+        row?.sourceId === sourceId &&
+        row.expiredAt === undefined &&
+        !row.vacancy.fullDescription?.trim(),
+      );
+    };
+    return [...this.detailTextPriority]
+      .sort((a, b) => a[1] - b[1])
+      .map(([id]) => id)
+      .filter((id) => !excluded.has(id) && needs(id))
+      .slice(0, limit);
   }
 
   /** Как в базе, без каталога: живые hh-записи без текста, свежие первыми (B535). */
@@ -628,6 +669,13 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
       )
       .slice(0, Math.max(1, Math.trunc(limit)))
       .map((row) => row.vacancy);
+  }
+
+  reloadVacanciesWithoutFullText(sourceId: string, ids: readonly string[]): UnifiedVacancy[] {
+    const wanted = new Set(ids);
+    return this.loadVacanciesWithoutFullText(sourceId, Number.MAX_SAFE_INTEGER, []).filter(
+      (vacancy) => wanted.has(vacancy.id),
+    );
   }
 
   backfillDescriptionSkillsStep(chunk = 100): {

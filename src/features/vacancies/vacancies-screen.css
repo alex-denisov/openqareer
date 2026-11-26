@@ -746,7 +746,7 @@
   line-height: 1.35;
 }
 
-/* B546: market estimate — tag on its own line, then sample and cut date (mockup 4). */
+/* B546, B803: the estimate tag with its date wraps inside the cell. */
 .vacancy-screen-money-source.is-estimate {
   display: grid;
   justify-items: start;
@@ -762,10 +762,10 @@
   border-radius: var(--career-space-1);
   color: var(--career-text-dim);
   font-weight: 600;
-  white-space: nowrap;
 }
 
 .vacancy-screen-money-tag svg {
+  flex: none;
   inline-size: 14px;
   block-size: 14px;
 }

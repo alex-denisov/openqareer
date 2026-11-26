@@ -1,4 +1,6 @@
+import type { FactCorrectionMethods } from './factCorrectionMethods';
 import type { FactProvenance, ImportPlatform, ImportWalk } from '../domain/factProvenance';
+import type { ConsultantHistoryMethods } from './consultantHistoryContract';
 import type { EmployerRead } from './applicationEmployerReads';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import type {
@@ -137,6 +139,33 @@ export interface CandidateSnapshot {
 export interface CandidateExport extends CandidateSnapshot {
   adaptationApplications: import('./adaptationApplications').AdaptationApplication[];
   interviewPractices: import('../../shared/careerDiary').CareerDiaryInterviewPractice[];
+  /** B683: записи дневника и итоги недель. */
+  careerDiaryEntries: {
+    entries: import('../../shared/careerDiaryEntries').CareerDiaryEntry[];
+    weekSummaries: import('../../shared/careerDiaryEntries').CareerDiaryWeekSummary[];
+  };
+  /** B689: остальной дневник — цели, замеры, места работы с планом, люди, черновики KPI. */
+  careerDiary: import('./careerDiaryExport').CareerDiaryExport;
+  /** n02: как почта и Telegram присылают уведомления и скрыто ли название компании. */
+  notificationDeliverySettings: import('./notificationDeliverySettings').DeliverySettings;
+  /** B738 · 1: отклики с событиями, собеседованиями и оффером, анкеты, отказы, действия. */
+  tracker: import('./trackerExport').TrackerExport;
+  notifications: import('./notificationExport').NotificationExport;
+  /** B755: ключи доступа — название устройства и даты, без ключей. */
+  passkeys: import('./passkeyExport').ExportedPasskey[];
+  profileHistory: import('./profileHistoryExport').ProfileHistoryExport;
+  /** B738 · 4: черновики, посты ленты, варианты текстов и LinkedIn. */
+  content: import('./contentExport').ContentExport;
+  /** B738 · 5: контакты рекрутёров, сообщения и статусы «писали / ответили». */
+  contacts: import('./contactsCareerExport').ContactsExport;
+  /** B738 · 6: компании, цели роста, доход, путь профессии, места переезда, вакансии подписки. */
+  careerSections: import('./contactsCareerExport').CareerSectionsExport;
+  /** B738 · 7: логин, оплаты и подписка, настройки, согласия, статусы — без паролей, кодов и ключей провайдера. */
+  account: import('./accountExport').AccountExport;
+  /** B738 · 8: автоотклики и hh.ru — настройки, очередь с письмами, журнал, попытки, подъём, снимок резюме. */
+  automation: import('./automationExport').AutomationExport;
+  /** B738 · 9: записи интервью с расшифровкой и разбором, имя собеседника. */
+  interviewRecordings: import('./interviewRecordingExport').InterviewRecordingExport;
   relocationScenarios: import('../../shared/relocationScenario').SavedRelocationScenario[];
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];
@@ -301,6 +330,8 @@ export interface ConsultantConversationDetail extends ConsultantConversationSumm
 }
 
 export interface ConsultantConversationExport extends ConsultantConversationDetail {
+  /** B738: the conversation is not closed yet (open now or continued); its summaries may be older. */
+  readonly open: boolean;
   readonly summaries: Array<{
     readonly version: number;
     readonly messageCount: number;
@@ -431,7 +462,7 @@ export interface CommittedResumeImport {
   readonly idempotentReplay: boolean;
 }
 
-export interface CandidateStore {
+export interface CandidateStore extends ConsultantHistoryMethods {
   /** Candidate inbox and preferences share the candidate SQLite database. */
   readonly notificationRepository?: SqliteNotificationRepository;
   /** Candidate-scoped, encrypted profile revision journal on the same SQLite connection. */
@@ -452,6 +483,8 @@ export interface CandidateStore {
   readonly careerVectorRepo: SqliteCareerVectorRepository;
   /** Карьерный дневник: кандидатские цели, замеры и разборы (B456). */
   readonly careerDiaryRepo: SqliteCareerDiaryRepository;
+  /** B683: записи дневника и итоги недель (маршруты за флагом B640). */
+  readonly diaryEntryRepo: import('./sqliteDiaryEntryRepository').SqliteDiaryEntryRepository;
   /** Профиль ограничений кандидата (B384), запечатан. */
   readonly decisionProfileRepo: SqliteDecisionProfileRepository;
   /** Separate, encrypted relocation questionnaire and purpose-specific consent. */
@@ -497,28 +530,6 @@ export interface CandidateStore {
     stage?: CoachTurnStage,
     subject?: CoachTurnSubject,
   ): CoachMessage[];
-  listConsultantConversations(
-    candidateId: string,
-    options?: { readonly cursor?: string; readonly limit?: number },
-  ): ConsultantConversationPage;
-  getConsultantConversation(
-    candidateId: string,
-    conversationId: string,
-  ): ConsultantConversationDetail | null;
-  deleteConsultantConversation(candidateId: string, conversationId: string): boolean;
-  exportConsultantConversations(candidateId: string): ConsultantConversationExport[];
-  listPendingConsultantSummaries(candidateId: string): ConsultantSummaryTask[];
-  getConsultantSummaryInput(
-    candidateId: string,
-    task: ConsultantSummaryTask,
-  ): CoachTurnInput | null;
-  saveConsultantSummary(
-    candidateId: string,
-    task: ConsultantSummaryTask,
-    result: CoachProviderResult,
-  ): boolean;
-  claimConsultantSummary(candidateId: string, task: ConsultantSummaryTask): boolean;
-  releaseConsultantSummaryClaim(candidateId: string, task: ConsultantSummaryTask): void;
   rejectConsultantProposal(candidateId: string, proposalKey: string, reason?: string): void;
   getConsultantRejections(candidateId: string): ConsultantRejection[];
   withdrawConsultantRejection(candidateId: string, proposalKey: string): void;
@@ -531,6 +542,9 @@ export interface CandidateStore {
   /** B639: настоящее название вместо маски работодателя или ответ «это и есть название». */
   answerEmployerName(candidateId: string, memoryId: string, employer: string,
     answer: { readonly name: string } | { readonly keepAsIs: true }): StoredMemory | null;
+  /** B796: исправление факта во всех его копиях; записанное перечитано в той же транзакции. */
+  correctFact: FactCorrectionMethods['correctFact'];
+  revertFactCorrection: FactCorrectionMethods['revertFactCorrection'];
   changeMemory(
     candidateId: string,
     memoryId: string,
@@ -691,6 +705,8 @@ export interface CandidateStore {
 
   getApplication(candidateId: string, applicationId: string): ApplicationView | null;
 
+  findSentApplication(candidateId: string, lookup: import('../domain/sentApplication').SentLookup): string | null;
+
   createApplication(
     candidateId: string,
     input: CreateApplicationInput & { manualVacancy?: import('../../shared/vacancyApplication').VacancyApplicationSnapshot },
@@ -728,6 +744,9 @@ export interface CandidateStore {
     documentId: string,
   ): StoredApplicationMaterial;
 
+  /** Документ, приложенный к отклику сейчас. */
+  linkedMaterialId(candidateId: string, applicationId: string, role: ApplicationMaterialRole): string | null;
+
   createApplicationInterview(
     candidateId: string,
     applicationId: string,
@@ -756,6 +775,12 @@ export interface CandidateStore {
   listApplicationOffers(
     candidateId: string,
   ): StoredApplicationOffer[];
+
+  /** `false`, если интервью нет; чужой отклик — `ApplicationNotFoundError`. */
+  deleteApplicationInterview?(candidateId: string, applicationId: string, interviewId: string): boolean;
+
+  /** `false`, если оффера нет; чужой отклик — `ApplicationNotFoundError`. */
+  deleteApplicationOffer?(candidateId: string, applicationId: string): boolean;
 
   listVacancySkips(candidateId: string): StoredVacancySkip[];
 

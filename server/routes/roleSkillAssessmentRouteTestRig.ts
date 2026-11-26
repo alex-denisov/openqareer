@@ -292,6 +292,7 @@ export async function createRig(
     cookieToken,
     provider,
     getMatchedVacanciesAsync,
+    deps,
   };
 }
 

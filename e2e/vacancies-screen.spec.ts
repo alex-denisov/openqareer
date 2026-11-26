@@ -1291,9 +1291,11 @@ test.describe('B250 vacancies screen', () => {
     const isMobile = testInfo.project.name === 'mobile-390';
     const vpSuffix = isMobile ? '390' : '1440';
 
+    // Дата от сегодня: закреплённая 25.09 стала старше 60 дней 24.11 и уронила CI.
+    const recent = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
     const freshItem = {
       cluster: cluster('c-fresh', 'Enterprise Architect', 'Fresh Tech Corp', {
-        firstObservedAt: '2026-09-25T10:00:00.000Z',
+        firstObservedAt: recent,
         canonicalLocation: 'United States',
         isRemote: true,
       }),
@@ -1315,7 +1317,7 @@ test.describe('B250 vacancies screen', () => {
 
     const deadItem = {
       cluster: cluster('c-dead', 'Enterprise Architect', 'Ghost Corp', {
-        firstObservedAt: '2026-09-25T10:00:00.000Z',
+        firstObservedAt: recent,
         canonicalLocation: 'United States',
         isRemote: true,
         deadLink: true,

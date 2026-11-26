@@ -5,15 +5,22 @@
  */
 export type VacancyWorkFormat = 'hybrid' | 'office' | 'remote' | 'unknown';
 
+const REMOTE_PLACE = /\bremote\b|удал[её]нн/u;
+/** «office», но не «officer» и не «back office». */
+const OFFICE = /офис|\bon[- ]?site\b|\bin[- ]?person\b|(?<!\b(?:back|front|middle|home|head)[- ])\boffices?\b/u;
+
 export function detectVacancyWorkFormat(input: {
   readonly location?: string;
   readonly summary?: string;
   readonly isRemote: boolean;
 }): VacancyWorkFormat {
-  const context = `${input.location ?? ''} ${input.summary ?? ''}`.toLocaleLowerCase('ru-RU');
+  const location = (input.location ?? '').toLocaleLowerCase('ru-RU');
+  const context = `${location} ${input.summary ?? ''}`.toLocaleLowerCase('ru-RU');
   if (/гибрид|hybrid/u.test(context)) return 'hybrid';
-  if (/офис|on[- ]?site|in[- ]?person|office/u.test(context)) return 'office';
-  return input.isRemote ? 'remote' : 'unknown';
+  // Признак площадки и «Remote» в месте сильнее слова «офис» в тексте: строка «Удалённо · везде»
+  // подписывалась «офис» из-за «Chief Operating Officer» и «офисов» в рассказе о компании.
+  if (input.isRemote || REMOTE_PLACE.test(location)) return 'remote';
+  return OFFICE.test(context) ? 'office' : 'unknown';
 }
 
 const LABELS: Readonly<Record<VacancyWorkFormat, string | undefined>> = {

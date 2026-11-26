@@ -44,12 +44,13 @@ describe('candidate footprint routes', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().data).toMatchObject({
       consent: { approved: true, granted: false, versionId: 'digital_footprint-v1.2' },
+      // B740: клиент видит коды шагов, инструменты остаются на сервере.
       sourceAvailability: {
-        sherlock: true,
-        maigret: true,
-        hibp: false,
-        wayback: true,
-        exa: false,
+        nickname: true,
+        nickname_extended: true,
+        leaks: false,
+        archive: true,
+        web: false,
       },
       plan: [],
       audit: null,
@@ -123,6 +124,7 @@ describe('candidate footprint routes', () => {
       hibp: noAdapter('hibp'),
       wayback: { id: 'wayback', passive: true, run: waybackRun },
       exa: noAdapter('exa'),
+      youtube: noAdapter('youtube'),
     };
     const plan: FootprintQueryPlanItem[] = [
       {

@@ -33,6 +33,11 @@ describe('buildTodayTeamSizeDecision (B540)', () => {
     });
   });
 
+  it('B801: молчит, если кандидат не хочет указывать', () => {
+    const experience = [{ ...fintech, teamSizeDeclined: true }];
+    expect(buildTodayTeamSizeDecision({ experience, favorites, now: NOW })).toBeNull();
+  });
+
   it('stays silent when no favorite names a team size', () => {
     expect(
       buildTodayTeamSizeDecision({

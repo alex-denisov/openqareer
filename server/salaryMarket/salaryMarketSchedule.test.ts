@@ -6,7 +6,7 @@ import { readSalaryMarketSnapshot, readSalaryMarketIndex } from './salaryMarketS
 afterEach(() => vi.useRealTimers());
 
 describe('salary snapshot maintenance schedule', () => {
-  it('writes a real catalog snapshot after startup and stops its timers', () => {
+  it('writes a real catalog snapshot after startup and stops its timers', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-23T00:00:00Z'));
     const db = new DatabaseSync(':memory:');
@@ -21,23 +21,23 @@ describe('salary snapshot maintenance schedule', () => {
     const log = { info: vi.fn(), error: vi.fn() };
     const stop = scheduleSalaryMarketSnapshots(db, log);
     expect(readSalaryMarketSnapshot(db, 'analyst')).toBeNull();
-    vi.advanceTimersByTime(4 * 60_000);
+    await vi.advanceTimersByTimeAsync(4 * 60_000);
     expect(readSalaryMarketSnapshot(db, readSalaryMarketIndex(db)[0]!.role)?.skills).toEqual([
       { name: 'SQL', count: 1, frequency: 100 },
     ]);
-    expect(log.info).toHaveBeenCalledOnce();
+    expect(log.info.mock.calls.filter(([, m]) => m === 'salary-market-snapshots-written')).toHaveLength(1);
     stop();
-    vi.advanceTimersByTime(24 * 60 * 60_000);
-    expect(log.info).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60_000);
+    expect(log.info.mock.calls.filter(([, m]) => m === 'salary-market-snapshots-written')).toHaveLength(1);
     db.close();
   });
-  it('reports a failed projection without publishing fabricated data', () => {
+  it('reports a failed projection without publishing fabricated data', async () => {
     vi.useFakeTimers();
     const db = new DatabaseSync(':memory:');
     db.exec('CREATE TABLE vacancy_clusters (id TEXT PRIMARY KEY, cluster_json TEXT)');
     const log = { info: vi.fn(), error: vi.fn() };
     const stop = scheduleSalaryMarketSnapshots(db, log);
-    vi.advanceTimersByTime(4 * 60_000);
+    await vi.advanceTimersByTimeAsync(4 * 60_000);
     expect(log.error).toHaveBeenCalledOnce();
     expect(readSalaryMarketSnapshot(db, 'analyst')).toBeNull();
     stop();

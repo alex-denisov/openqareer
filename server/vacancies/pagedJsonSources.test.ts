@@ -79,6 +79,21 @@ describe('paging plans (B216)', () => {
     expect(plan.next(next!, { count: 15, positions: [{}] })).toBeNull();
   });
 
+  it('B646-3 SmartRecruiters reads past 100 by offset and stops at totalFound', () => {
+    const plan = pagingPlanFor('ats-smartrecruiters-BoschGroup')!;
+    const base = 'https://api.smartrecruiters.com/v1/companies/BoschGroup/postings?limit=100';
+    const first = plan.first(base, 0);
+    expect(first.url).toBe(`${base}&offset=0`);
+    const page = (n: number) => ({ totalFound: 250, content: Array.from({ length: n }, () => ({})) });
+    const second = plan.next(first, page(100))!;
+    expect(second.url).toBe(`${base}&offset=100`);
+    const third = plan.next(second, page(100))!;
+    expect(third.url).toBe(`${base}&offset=200`);
+    expect(plan.next(third, page(50))).toBeNull();
+    expect(plan.next(first, { totalFound: 40, content: Array.from({ length: 40 }, () => ({})) })).toBeNull();
+    expect(plan.pagesPerSync * 100).toBeGreaterThanOrEqual(5000);
+  });
+
   it('Workday: POST со смещением по 20 до total', () => {
     const plan = pagingPlanFor('ats-workday-nvidia')!;
     const first = plan.first('https://t.wd5.myworkdayjobs.com/wday/cxs/t/Site/jobs', 0);
@@ -343,5 +358,28 @@ describe('paging plans (B216)', () => {
     }
     expect([...starts].sort((a, b) => a - b)).toEqual([1, 11, 21, 31, 41]);
     expect(rotatingWindowStart(5 * 60 * 60_000, 60, 10, 50)).toBe(1);
+  });
+});
+
+describe('Работа России (B647)', () => {
+  const plan = pagingPlanFor('src-trudvsem')!;
+  const page = (n: number) => ({ results: { vacancies: Array.from({ length: n }, () => ({ vacancy: {} })) } });
+
+  it('reads the records changed in the last two hours, from the top of the hour', () => {
+    const first = plan.first('https://opendata.trudvsem.ru/api/v1/vacancies?limit=100', Date.parse('2026-11-11T14:37:00Z'));
+    const url = new URL(first.url);
+    expect(url.searchParams.get('modifiedFrom')).toBe('2026-11-11T12:00:00Z');
+    expect(url.searchParams.get('offset')).toBe('0');
+    expect(url.searchParams.get('limit')).toBe('100');
+  });
+
+  it('turns pages by number, stops on a short page, and never asks past 60 pages', () => {
+    const first = plan.first('https://opendata.trudvsem.ru/api/v1/vacancies?limit=100', 0);
+    const second = plan.next(first, page(100))!;
+    expect(new URL(second.url).searchParams.get('offset')).toBe('1');
+    expect(plan.next(second, page(40))).toBeNull();
+    expect(plan.pagesPerSync).toBeLessThanOrEqual(60);
+    expect(plan.delayMs).toBeGreaterThanOrEqual(1000);
+    expect(plan.fanWindow).toBe(true);
   });
 });

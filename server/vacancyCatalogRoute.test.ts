@@ -12,6 +12,7 @@ import {
   setListingHistory,
 } from './seo/catalogSitemapSchedule';
 import { buildSitemapFiles } from './seo/sitemapXml';
+import { timeBudget } from '../shared/testing/timeBudget';
 
 afterEach(() => resetCatalogSitemaps());
 
@@ -121,9 +122,9 @@ describe('B209: публичный каталог вакансий', () => {
     expect(second.statusCode).toBe(200);
     expect(second.body).toContain('Страница 2 из 2');
     // Курсор сдвигается с каждой новой вакансией: это ссылка для обхода, а не адрес для индекса.
-    // B615: без canonical — noindex вместе с canonical на первую страницу смешивает сигналы.
-    expect(second.body).not.toContain('rel="canonical"');
-    expect(second.body).toContain('<meta name="robots" content="noindex, follow">');
+    // 11.11: без noindex; canonical ведёт на первую страницу.
+    expect(second.body).toContain('rel="canonical"');
+    expect(second.body).not.toContain('noindex');
   });
 
   it('страница списка за курсором не индексируется, но ведёт дальше к карточкам', async () => {
@@ -147,8 +148,10 @@ describe('B209: публичный каталог вакансий', () => {
       url: `/vacancies/moscow/page/2?after=${after}`,
     });
     expect(second.statusCode).toBe(200);
-    expect(second.body).toContain('<meta name="robots" content="noindex, follow">');
-    expect(second.body).not.toContain('rel="canonical"');
+    expect(second.body).not.toContain('noindex');
+    expect(second.body).toContain(
+      '<link rel="canonical" href="https://openqareer.com/vacancies/moscow">',
+    );
     expect(second.body).toContain('/vacancies/job/');
     expect(second.body).toMatch(/\/vacancies\/moscow\/page\/3\?after=/u);
     // Устаревший курсор отвечает так же, а голый адрес по-прежнему ведёт на первую страницу.
@@ -258,7 +261,10 @@ describe('B209: публичный каталог вакансий', () => {
     });
     expect(remote.statusCode).toBe(200);
     expect(remote.body).toContain('aria-current="true">Удалённо или гибрид</a>');
-    expect(remote.body).toContain('noindex');
+    expect(remote.body).not.toContain('noindex');
+    expect(remote.body).toContain(
+      '<link rel="canonical" href="https://openqareer.com/vacancies/berlin/frontend-developer">',
+    );
     expect(remote.body.match(/class="lv-job"/gu)?.length).toBe(2);
 
     const unknown = await app.inject({
@@ -377,19 +383,25 @@ describe('SEO review 20.10: sitemap index and card indexing', () => {
     expect(response.body).toContain('<loc>https://openqareer.com/sitemaps/listings-1.xml</loc>');
     expect(response.body).toContain('<loc>https://openqareer.com/sitemaps/jobs-1.xml</loc>');
     expect(response.body).not.toContain('<urlset');
-  }, 20_000);
+  }, timeBudget(20_000));
 
   it('serves each child file and keeps deep pages and unsalaried cards out', async () => {
-    setCatalogSitemaps(
-      buildSitemapFiles({
-        listings: [{ path: '/vacancies/berlin', lastmod: '2026-10-20' }],
-        jobs: [{ path: '/vacancies/job/data-engineer-at-paid-co-test', lastmod: '2026-10-20' }],
-      }),
-    );
     const app = await appWithPool([
       ...Array.from({ length: 30 }, (_, index) => vacancy(index)),
       vacancy(40, { title: 'Data Engineer', company: 'Paid Co', salary: SALARY }),
     ]);
+    const root = await app.inject({ method: 'GET', url: '/vacancies' });
+    const live = /href="(\/vacancies\/job\/data-engineer-at-paid-co-[^"]+)"/u.exec(root.body)![1]!;
+    // 11.11: a closed card (unknown key) is dropped from the served file.
+    setCatalogSitemaps(
+      buildSitemapFiles({
+        listings: [{ path: '/vacancies/berlin', lastmod: '2026-10-20' }],
+        jobs: [
+          { path: live, lastmod: '2026-10-20' },
+          { path: '/vacancies/job/closed-at-gone-co-zzz', lastmod: '2026-10-20' },
+        ],
+      }),
+    );
     const statics = await app.inject({ method: 'GET', url: '/sitemaps/static-1.xml' });
     expect(statics.statusCode).toBe(200);
     expect(statics.body).toContain('<loc>https://openqareer.com/vacancies</loc>');
@@ -406,13 +418,13 @@ describe('SEO review 20.10: sitemap index and card indexing', () => {
 
     const all = statics.body + listings.body + jobs.body;
     expect(all).not.toContain('/vacancies/page/');
-  }, 20_000);
+  }, timeBudget(20_000));
 
   it('answers 404 for a job file that does not exist', async () => {
     const app = await appWithPool([vacancy(1, { salary: SALARY })]);
     const response = await app.inject({ method: 'GET', url: '/sitemaps/jobs-7.xml' });
     expect(response.statusCode).toBe(404);
-  }, 20_000);
+  }, timeBudget(20_000));
 
   it('serves the files written by the maintenance process when they are loaded', async () => {
     setCatalogSitemaps(
@@ -429,13 +441,15 @@ describe('SEO review 20.10: sitemap index and card indexing', () => {
     expect(index.body).not.toContain('jobs-1.xml');
     const listings = await app.inject({ method: 'GET', url: '/sitemaps/listings-1.xml' });
     expect(listings.body).toContain('/vacancies/moscow');
-  }, 20_000);
+  }, timeBudget(20_000));
 
   it('marks a card outside the indexable set noindex, follow and drops its JobPosting', async () => {
-    const app = await appWithPool([vacancy(1)]);
+    const app = await appWithPool([
+      vacancy(1, { description: 'Короткий', fullDescription: undefined }),
+    ]);
     const detail = await app.inject({ method: 'GET', url: await cardHref(app) });
     expect(detail.statusCode).toBe(200);
-    expect(detail.body).toContain('<meta name="robots" content="noindex, follow">');
+    expect(detail.body).not.toContain('noindex');
     expect(detail.body).not.toContain('itemtype="https://schema.org/JobPosting"');
   });
 
@@ -463,7 +477,7 @@ describe('03.11: listings keep their address and index between thresholds', () =
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain('Здесь пока мало вакансий');
     expect(response.body).toContain('href="/vacancies/berlin"');
-    expect(robots(response.body)).toBe('noindex, follow');
+    expect(robots(response.body)).toBeUndefined();
   });
 
   it('keeps a once-indexed listing with fewer vacancies than the threshold indexable', async () => {

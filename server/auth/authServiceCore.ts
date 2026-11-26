@@ -1,3 +1,4 @@
+import { dropUserPasskeys } from './passkeySchema';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { withEffectiveProTrial } from '../billing/proTrial';
@@ -56,6 +57,7 @@ import {
 import { isValidTimezone } from '../../shared/timezoneUtils';
 import {
   ensureSessionDeviceHashSchema,
+  labelSessionDevice,
   storeAuthSession,
   type SessionDeletionLog,
 } from './sessionRepository';
@@ -123,12 +125,14 @@ export class AuthServiceCore implements SessionAuth {
   >;
   protected readonly database: DatabaseSync;
   private readonly onPasswordReset?: AuthServiceOptions['onPasswordReset'];
+  private readonly onPasskeyAdded?: AuthServiceOptions['onPasskeyAdded'];
   protected readonly checkEmailDomain: ReturnType<typeof createEmailDomainChecker>;
   protected candidateStore?: CandidateStore;
   private sessionLog?: SessionDeletionLog;
 
   constructor(options: AuthServiceOptions) {
     this.onPasswordReset = options.onPasswordReset;
+    this.onPasskeyAdded = options.onPasskeyAdded;
     this.candidateStore = options.candidateStore;
     this.checkEmailDomain = createEmailDomainChecker({
       resolver: options.emailDomainResolver,
@@ -302,24 +306,20 @@ export class AuthServiceCore implements SessionAuth {
       return null;
     }
 
+    return this.issueSession(user, clientDeviceId);
+  }
+
+  /** Новая скользящая сессия пользователя; B401: её же выдаёт вход после кода второго фактора. */
+  protected issueSession(user: UserRow, clientDeviceId?: string): { principal: AuthPrincipal; sessionToken: string } {
     const sessionToken = `oqs_${randomBytes(32).toString('base64url')}`;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SESSION_IDLE_MS);
     storeAuthSession(
       this.database,
-      {
-        userId: user.id,
-        tokenHash: hashToken(sessionToken),
-        expiresAt,
-        now,
-        clientDeviceId,
-      },
+      { userId: user.id, tokenHash: hashToken(sessionToken), expiresAt, now, clientDeviceId },
       this.sessionLog,
     );
-    return {
-      principal: this.principalForRow(user),
-      sessionToken,
-    };
+    return { principal: this.principalForRow(user), sessionToken };
   }
 
   authenticate(sessionToken: string): AuthPrincipal | null {
@@ -334,6 +334,7 @@ export class AuthServiceCore implements SessionAuth {
          WHERE sessions.token_hash = ? AND sessions.expires_at > ? AND users.blocked_at IS NULL`,
       )
       .get(hashToken(sessionToken), now) as UserRow | undefined;
+    const impersonatedBy = row ? this.sessionImpersonator(sessionToken) : null;
     if (!row) {
       return null;
     }
@@ -341,7 +342,15 @@ export class AuthServiceCore implements SessionAuth {
     this.database
       .prepare('UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?')
       .run(now, slidTo, hashToken(sessionToken));
-    return this.principalForRow(row);
+    const principal = this.principalForRow(row);
+    return impersonatedBy ? { ...principal, impersonatedBy } : principal;
+  }
+
+  private sessionImpersonator(sessionToken: string): string | null {
+    const session = this.database
+      .prepare('SELECT impersonated_by FROM sessions WHERE token_hash = ?')
+      .get(hashToken(sessionToken)) as { impersonated_by: string | null } | undefined;
+    return session?.impersonated_by ?? null;
   }
 
   logout(sessionToken: string): void {
@@ -412,7 +421,13 @@ export class AuthServiceCore implements SessionAuth {
     const expiresAt = new Date(now.getTime() + SESSION_IDLE_MS);
     storeAuthSession(
       this.database,
-      { userId: user.id, tokenHash: hashToken(sessionToken), expiresAt, now },
+      {
+        userId: user.id,
+        tokenHash: hashToken(sessionToken),
+        expiresAt,
+        now,
+        impersonatedBy: actorPrincipal?.userId ?? 'admin',
+      },
       this.sessionLog,
     );
 
@@ -446,6 +461,12 @@ export class AuthServiceCore implements SessionAuth {
     return adminListAudit(this.database, query);
   }
 
+  /** B754: название устройства сессии, если его ещё нет. */
+  labelSession(sessionToken: string, label: string): void {
+    if (!sessionToken) return;
+    labelSessionDevice(this.database, hashToken(sessionToken), label);
+  }
+
   getAccount(sessionToken: string): AccountSnapshot | null {
     const principal = this.authenticate(sessionToken);
     if (!principal) return null;
@@ -454,7 +475,7 @@ export class AuthServiceCore implements SessionAuth {
     const currentTokenHash = hashToken(sessionToken);
     const sessions = this.database
       .prepare(
-        `SELECT token_hash, expires_at, created_at, last_seen_at, device_id_hash
+        `SELECT token_hash, expires_at, created_at, last_seen_at, device_id_hash, device_label
          FROM sessions
          WHERE user_id = ? AND expires_at > ?
          ORDER BY last_seen_at DESC, created_at DESC`,
@@ -477,6 +498,7 @@ export class AuthServiceCore implements SessionAuth {
         createdAt: session.created_at,
         lastSeenAt: session.last_seen_at,
         expiresAt: session.expires_at,
+        deviceLabel: session.device_label ?? null,
       })),
     };
   }
@@ -595,6 +617,8 @@ export class AuthServiceCore implements SessionAuth {
         )
         .run(salt.toString('base64'), passwordHash.toString('base64'), now, user.id);
       this.database.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+      // Пароль меняют и при подозрении на захват: ключ, добавленный чужим, не должен пережить смену.
+      dropUserPasskeys(this.database, user.id);
       this.database.exec('COMMIT');
     } catch (error) {
       this.database.exec('ROLLBACK');
@@ -603,6 +627,21 @@ export class AuthServiceCore implements SessionAuth {
     const authenticated = await this.login(user.username, newPassword);
     if (!authenticated) throw new Error('changed password cannot authenticate');
     return authenticated;
+  }
+
+  async notifyPasskeyAdded(
+    userId: string,
+    passkeyId: string,
+    deviceLabel: string | null,
+  ): Promise<void> {
+    const user = this.findUserById(userId);
+    if (!user?.email || !this.onPasskeyAdded) return;
+    await this.onPasskeyAdded({
+      email: user.email,
+      displayName: user.display_name,
+      passkeyId,
+      deviceLabel,
+    });
   }
 
   async requestPasswordReset(identifierInput: string): Promise<void> {
@@ -693,6 +732,7 @@ export class AuthServiceCore implements SessionAuth {
         )
         .run(salt.toString('base64'), passwordHash.toString('base64'), now, userId);
       this.database.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+      dropUserPasskeys(this.database, userId);
       this.database
         .prepare(
           `DELETE FROM password_reset_tokens

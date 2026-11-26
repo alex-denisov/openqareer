@@ -1,23 +1,53 @@
+import { withTextSalary } from './textSalary';
 import { freshnessAnchorMs, VACANCY_POOL_INDEX_FIRST_SEEN_COLUMN } from './poolLiveness';
 /* eslint-disable max-lines -- pool persistence and its bounded public projection
    share one SQLite transaction boundary. */
 import { readInWorker } from '../data/readInWorker';
 import { PLACEMENT_TABLES } from '../companyDirectory/placement/placementSchema';
+import { CLUSTER_SPLIT_TABLES } from '../data/clusterSplitSchema';
 import {
   prunePoolInBatches,
+  prunePoolInBatchesAsync,
+  type PruneControl,
   pruneClustersInBatches,
+  pruneClustersInBatchesAsync,
   type PruneLimits,
   type PruneReport,
 } from './poolPruneBatches';
-import { CATALOG_LISTINGS_TABLE, CATALOG_TOTALS_TABLE } from './catalogTotalsTable';
+import {
+  CATALOG_ENTRIES_TOTAL_TABLE,
+  CATALOG_LISTINGS_TABLE,
+  CATALOG_TOTALS_TABLE,
+} from './catalogTotalsTable';
 import { expireClusterSources } from './clusterExpiry';
 import { CLUSTER_TEXT_PENDING_TABLE } from './clusterTextPendingTable';
+import { HH_STUB_TEXT_CHARS } from './hhStubText';
+import {
+  DETAIL_TEXT_PRIORITY_TABLE,
+  peekDetailTextPriority,
+  requestDetailTextPriority,
+} from './detailTextPriority';
+import {
+  dueSelectionLiveness,
+  markSelectionLivenessChecked,
+  markSelectionLivenessTried,
+  closedSelection,
+  recentlyChecked,
+  requestSelectionLiveness,
+  SELECTION_LIVENESS_TABLE,
+} from './selectionLiveness';
 import { HH_TEXT_PRIORITY_MAX_IDS, HH_TEXT_PRIORITY_TABLE } from './hhTextPriorityTable';
 import { loadRoleTextPage, type HhRoleTextPage, type HhTextRoleTarget } from './hhTextRolePosition';
 import { normalizeSalaryLabel } from './catalogCopy';
+import { readUnclusteredPoolPage, type UnclusteredPoolPage } from './unclusteredPoolPage';
+import {
+  createUnclusteredCatchUpCursor,
+  type UnclusteredCatchUpCursor,
+} from './unclusteredCatchUpCursor';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
+import { prepareCatalogProjectionStatements, writeCatalogEntry } from './catalogEntryWriter';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import {
   MIGRATION_23,
@@ -36,6 +66,7 @@ import {
 import { MATCH_ORDER_SCHEMA } from './vacancyMatchIndex';
 import { VacancyMatchReader, type MatchRowReader } from './vacancyMatchReader';
 import { buildSemanticMatchQuery } from './semanticMatchQuery';
+import { hasSemanticCoverIndex } from './semanticCoverIndex';
 import {
   storedHhSampleByRole,
   storedHhSampleByText,
@@ -72,13 +103,13 @@ import type {
   CatalogChipQuery,
   CatalogTotalsRow,
   MergeSliceResult,
+  SliceWriteOptions,
   StoredSourceState,
   VacancyLink,
   VacancyPoolStore,
   ClusterMerge,
 } from './vacancyPoolStore';
 import {
-  catalogEntryRowOfCluster,
   type CatalogEntriesPage,
   type CatalogEntriesQuery,
   type CatalogEntryRow,
@@ -99,9 +130,12 @@ import { readCatalogSalaryStats } from './catalogSalaryStatsStore';
 import { readCatalogChipCounts, readCatalogChipKeys } from './catalogChipStore';
 import type { ChipCounts } from './catalogChips';
 import { extractSkillsFromText } from '../connectors/telegramChannelParser';
+import { mapYielding } from './mapYielding';
 
 const CATALOG_TOTALS_SLICE_ROWS = 20_000;
 const CATALOG_ACTIVE_CLUSTERS_SQL = `SELECT coalesce(sum(json_extract(cluster_json, '$.status') = 'active'), 0) AS active FROM vacancy_clusters`;
+const PUBLIC_CATALOG_ENTRY = "status = 'active' AND path <> ''";
+const CATALOG_ENTRIES_TOTAL_SQL = `SELECT count(*) AS n FROM catalog_entries WHERE ${PUBLIC_CATALOG_ENTRY}`;
 const CATALOG_LISTINGS_SQL = `SELECT place_slug, max(place_label) AS place_label,
                 NULL AS role_slug, NULL AS role_label, NULL AS role_title,
                 count(*) AS count
@@ -123,6 +157,8 @@ const CATALOG_LISTINGS_SQL = `SELECT place_slug, max(place_label) AS place_label
          HAVING count(*) >= 3
           ORDER BY count DESC, place_slug ASC, role_slug ASC`;
 const CATALOG_TOTALS_SLICE_PAUSE_MS = 50;
+/** Prod 19.11: the coldest selection seen took 45 s; the snapshot waits, no request does. */
+const SNAPSHOT_READ_TIMEOUT_MS = 120_000;
 
 export interface CatalogTotalsSliceOptions {
   readonly sliceRows?: number;
@@ -171,12 +207,6 @@ interface CatalogEntrySqlRow {
   last_seen_ms: number;
 }
 
-interface CatalogProjectionStatements {
-  readonly upsert: { run(...values: SQLInputValue[]): unknown };
-  readonly markSeen: { run(...values: SQLInputValue[]): unknown };
-  readonly remove: { run(...values: SQLInputValue[]): unknown };
-}
-
 /** 03.11: a sibling process holding an older reading ledger never overwrites a newer one. */
 const OBSERVATIONS_NEWER_WINS = `CASE
   WHEN excluded.observations IS NULL THEN vacancy_source_state.observations
@@ -191,11 +221,23 @@ const SOURCE_STATUSES = new Set(['healthy', 'degraded', 'error']);
 
 /** Сколько строк дочитывается из `payload` за один шаг фонового прохода. */
 export const BACKFILL_CHUNK = 2_000;
+/** Окно `rowid` одного шага дочитывания после готовности (B649-2). */
+export const BACKFILL_WINDOW_ROWS = 5_000;
+
+interface BackfillRow {
+  rowid: number;
+  id: string;
+  source_id: string;
+  payload: string;
+  expired_at: string | null;
+}
 /** Public catalog projection is intentionally smaller than the legacy index pass. */
 export const CATALOG_BACKFILL_CHUNK = 100;
 
 /** Дальше этого корзина ключа не считается: сторона и так «большая» (B230). */
 const BUCKET_SIZE_CAP = 2_000;
+/** Во сколько раз большая сторона пары ещё читается целиком, а не точечно. */
+const COMPARABLE_BUCKET_RATIO = 8;
 
 /** Живые строки индекса: похороненная запись из пула не отдаётся (B200 срез 2). */
 const ALIVE = 'i.expired = 0';
@@ -281,6 +323,8 @@ function semanticDateColumns(vacancy: UnifiedVacancy): SQLInputValue[] {
  * локальный бенч давал 0,3 мс и не считается. 100 строк — с запасом вдвое.
  */
 export const DEFAULT_POOL_WRITE_CHUNK = 100;
+/** Площадок на один запрос состояний по списку — ниже предела параметров SQLite. */
+const SOURCE_STATE_ID_CHUNK = 500;
 /**
  * PRB-041 (prod 03.11): a 100-row hh upsert held the write lock 21 s and the web process
  * waited 15 s for it. A transaction commits once it has worked this long, so a web write
@@ -323,6 +367,10 @@ export interface SqliteVacancyPoolStoreOptions {
   readonly onWrite?: (event: PoolWriteEvent) => void;
   /** Подбор по смыслу вместо LIKE по описанию (B267 S3); по умолчанию старое поведение. */
   readonly matchMode?: 'legacy' | 'semantic';
+  /** Потолок корзины токена (B230/B761); по умолчанию `BUCKET_SIZE_CAP`, меньше — в тестах. */
+  readonly bucketSizeCap?: number;
+  /** Часы для памяти о токенах за потолком (B761); по умолчанию `Date.now`. */
+  readonly now?: () => number;
 }
 
 interface CatalogListingRow {
@@ -373,6 +421,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   /** Newest `stored_at` this process gave each source (see nextSliceTimestamp). */
   private readonly lastSliceAt = new Map<string, number>();
   private matchReader?: MatchRowReader;
+  /**
+   * Prod 19.11: one candidate's selection read 2.5 GB of pages, 20-45 s on a cold cache. It has its
+   * own reader with a budget that lets it finish; the snapshot, not the HTTP request, waits for it.
+   */
+  private snapshotReader?: MatchRowReader;
   private readonly hhTextTargetNoted = new Map<string, { key: string; ms: number }>();
   private readonly writeChunkSize: number;
   private readonly writeBudgetMs: number;
@@ -383,6 +436,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   readonly matchMode: 'legacy' | 'semantic';
   /** Докуда дошёл фоновый проход по `rowid`: каждый шаг начинает с него, а не с начала таблицы. */
   private backfillCursor = 0;
+  private backfillWindowCursor = 0;
   /** Докуда дошёл bounded materialized-catalog pass. */
   private catalogBackfillCursor = 0;
   /** Completion is durable and makes later timer ticks pure no-ops. */
@@ -393,13 +447,19 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   /** Раз увидели строку в `vacancy_semantic` — считаем таблицу наполненной насовсем:
    * обслуживатель её не опустошает, а лишний запрос на каждого кандидата не нужен. */
   private semanticTableSeenReady = false;
+  private semanticCoverIndexSeen = false;
   /** Докуда дошло обогащение управленческими навыками по описаниям (B307). */
   private descriptionSkillsCursor = 0;
   /** Позиция прохода очистки сирот (B535): сначала кластеры, потом карточки. */
+  /** Курсор прохода записей без кластера (B763), как у сирот — в памяти процесса. */
+  private unclusteredCursor: UnclusteredCatchUpCursor | undefined;
+  private readonly bucketSizeCap: number;
   private orphanCursor: { phase: 'clusters' | 'entries'; rowid: number } = {
     phase: 'clusters',
     rowid: 0,
   };
+  private readonly overCapTokens = new OverCapTokens();
+  private readonly clock: () => number;
 
   constructor(options: SqliteVacancyPoolStoreOptions) {
     this.matchReader = options.matchReader;
@@ -409,26 +469,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.clusterWritePause = options.clusterWritePause;
     this.onWrite = options.onWrite;
     this.matchMode = options.matchMode ?? 'legacy';
-    if (options.databasePath !== ':memory:') {
+    this.bucketSizeCap = Math.max(1, Math.floor(options.bucketSizeCap ?? BUCKET_SIZE_CAP));
+    this.clock = options.now ?? Date.now;
+    if (options.databasePath !== ':memory:')
       mkdirSync(dirname(options.databasePath), { recursive: true });
-    }
     this.databasePath = options.databasePath;
     this.database = new DatabaseSync(options.databasePath);
     this.database.exec('PRAGMA journal_mode = WAL;');
     applySqliteBusyTimeout(this.database);
     this.database.exec('PRAGMA foreign_keys = ON;');
     this.database.exec(MIGRATION_23);
-    this.ensureColumn('vacancy_source_state', 'observations', VACANCY_SOURCE_OBSERVATIONS_COLUMN);
-    this.ensureColumn(
-      'vacancy_source_state',
-      'sync_requested_at',
-      VACANCY_SOURCE_SYNC_REQUESTED_AT_COLUMN,
-    );
-    this.ensureColumn(
-      'vacancy_source_state',
-      'sync_started_at',
-      VACANCY_SOURCE_SYNC_STARTED_AT_COLUMN,
-    );
+    this.ensureSourceStateColumns();
     this.ensureColumn('vacancy_pool', 'expired_at', VACANCY_POOL_EXPIRED_AT_COLUMN);
     this.ensurePoolIndex();
     // Match LIMIT must stop in index order; CASE remote sorting previously
@@ -437,9 +488,12 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_CLUSTER_INPUT_TABLE);
     this.database.exec(VACANCY_CLUSTERS_TABLE);
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
-    this.database.exec(CATALOG_TOTALS_TABLE + CATALOG_LISTINGS_TABLE);
-    this.database.exec(HH_TEXT_PRIORITY_TABLE + CLUSTER_TEXT_PENDING_TABLE);
-    this.database.exec(VACANCY_CLUSTER_KEYS_TABLE + PLACEMENT_TABLES);
+    this.database.exec(CATALOG_TOTALS_TABLE + CATALOG_LISTINGS_TABLE + CATALOG_ENTRIES_TOTAL_TABLE);
+    this.database.exec(
+      HH_TEXT_PRIORITY_TABLE + DETAIL_TEXT_PRIORITY_TABLE + CLUSTER_TEXT_PENDING_TABLE +
+        SELECTION_LIVENESS_TABLE,
+    );
+    this.database.exec(VACANCY_CLUSTER_KEYS_TABLE + PLACEMENT_TABLES + CLUSTER_SPLIT_TABLES);
     // `vacancy_semantic` (B267 S2/S3): тот же файл наполняет обслуживатель,
     // но собственное соединение пула должно видеть таблицу и вне прод-файла
     // (например, `:memory:` в тестах, где второго соединения не будет).
@@ -466,6 +520,20 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private ensurePoolIndex(): void {
     this.database.exec(`${VACANCY_POOL_INDEX_TABLE};${SOURCE_SYNC_REQUESTED_INDEX};`);
     this.ensureColumn('vacancy_pool_index', 'first_seen_ms', VACANCY_POOL_INDEX_FIRST_SEEN_COLUMN);
+  }
+
+  private ensureSourceStateColumns(): void {
+    this.ensureColumn('vacancy_source_state', 'observations', VACANCY_SOURCE_OBSERVATIONS_COLUMN);
+    this.ensureColumn(
+      'vacancy_source_state',
+      'sync_requested_at',
+      VACANCY_SOURCE_SYNC_REQUESTED_AT_COLUMN,
+    );
+    this.ensureColumn(
+      'vacancy_source_state',
+      'sync_started_at',
+      VACANCY_SOURCE_SYNC_STARTED_AT_COLUMN,
+    );
   }
 
   private ensureColumn(table: string, column: string, ddl: string): void {
@@ -510,17 +578,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
                OR NOT EXISTS (SELECT 1 FROM vacancy_cluster_input c WHERE c.id = p.id))
           ORDER BY p.rowid LIMIT ?`,
       )
-      .all(this.backfillCursor, chunk) as unknown as Array<{
-      rowid: number;
-      id: string;
-      source_id: string;
-      payload: string;
-      expired_at: string | null;
-    }>;
+      .all(this.backfillCursor, chunk) as unknown as BackfillRow[];
     if (rows.length === 0) {
       this.backfillCursor = 0;
       return 0;
     }
+    this.backfillRows(rows);
+    this.backfillCursor = rows[rows.length - 1]!.rowid;
+    return rows.length;
+  }
+
+  private backfillRows(rows: readonly BackfillRow[]): void {
     const insert = this.prepareIndexUpsert();
     const projection = this.prepareProjectionUpsert();
     const hasIndexRow = this.database.prepare('SELECT 1 FROM vacancy_pool_index WHERE id = ?');
@@ -547,8 +615,38 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         insert.run(...indexColumns(projected, row.source_id), row.expired_at === null ? 0 : 1);
       }
     });
-    this.backfillCursor = rows[rows.length - 1]!.rowid;
-    return rows.length;
+  }
+
+  /**
+   * Шаг дочитывания по окну `rowid` (B649-2): `backfillStep` искал первую
+   * недочитанную строку и на пуле, где дочитывать нечего, проходил его весь
+   * одним запросом (172 с на проде 12.11). Окно ограничивает и чтение.
+   */
+  backfillWindowStep(
+    windowRows: number = BACKFILL_WINDOW_ROWS,
+    fromCursor?: number,
+  ): { done: boolean; cursor: number } {
+    const from = fromCursor ?? this.backfillWindowCursor;
+    const upper = from + windowRows;
+    const rows = this.database
+      .prepare(
+        `SELECT p.rowid AS rowid, p.id, p.source_id, p.payload, p.expired_at
+           FROM vacancy_pool p
+          WHERE p.rowid > ? AND p.rowid <= ?
+            AND (NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = p.id)
+               OR NOT EXISTS (SELECT 1 FROM vacancy_cluster_input c WHERE c.id = p.id))
+          ORDER BY p.rowid`,
+      )
+      .all(from, upper) as unknown as BackfillRow[];
+    if (rows.length > 0) this.backfillRows(rows);
+    const max = (
+      this.database.prepare('SELECT coalesce(max(rowid), 0) AS n FROM vacancy_pool').get() as {
+        n: number;
+      }
+    ).n;
+    const done = upper >= max;
+    this.backfillWindowCursor = done ? 0 : upper;
+    return { done, cursor: this.backfillWindowCursor };
   }
 
   private readVacancies(sql: string, params: SQLInputValue[]): UnifiedVacancy[] {
@@ -614,6 +712,15 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return row.n;
   }
 
+  async countVacanciesInWorker(window: FreshnessWindow): Promise<number> {
+    const rows = await readInWorker<{ n: number }>(
+      this.database,
+      `SELECT count(*) AS n FROM vacancy_pool_index i WHERE ${FRESH}`,
+      [window.fromMs, window.toMs],
+    );
+    return Number(rows[0]?.n ?? 0);
+  }
+
   countBySource(window: FreshnessWindow): ReadonlyMap<string, number> {
     const rows = this.database
       .prepare(
@@ -654,8 +761,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const where: string[] = [FRESH];
     const params: SQLInputValue[] = [query.window.fromMs, query.window.toMs];
     if (query.sourceIds) {
-      where.push(`i.source_id IN (${query.sourceIds.map(() => '?').join(', ')})`);
-      params.push(...query.sourceIds);
+      // Один JSON-параметр: источников больше предела переменных SQLite (B649).
+      where.push('i.source_id IN (SELECT value FROM json_each(?))');
+      params.push(JSON.stringify(query.sourceIds));
     }
     if (query.isRemote !== undefined) {
       where.push('i.is_remote = ?');
@@ -693,9 +801,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const termFilter = terms.length
       ? `AND (${terms.map(() => 'i.search_text LIKE ?').join(' OR ')})`
       : '';
-    const exclusion = seenIds.size
-      ? `AND i.id NOT IN (${[...seenIds].map(() => '?').join(',')})`
-      : '';
+    const exclusion = seenIds.size ? 'AND i.id NOT IN (SELECT value FROM json_each(?))' : '';
     const index = preferRemote ? 'vacancy_pool_match_remote' : 'vacancy_pool_match_recent';
     return {
       // Only selected IDs join wide cluster JSON. MATERIALIZED is intentional:
@@ -709,7 +815,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       ) SELECT c.cluster_json AS payload FROM selected s
         JOIN vacancy_cluster_input c ON c.id = s.id
         ORDER BY ${preferRemote ? 's.remote_order DESC, ' : ''}s.published_ms DESC, s.id ASC`,
-      params: [window.fromMs, window.toMs, ...terms.map((term) => `%${term}%`), ...seenIds, limit],
+      params: [
+        window.fromMs,
+        window.toMs,
+        ...terms.map((term) => `%${term}%`),
+        ...(seenIds.size ? [JSON.stringify([...seenIds])] : []),
+        limit,
+      ],
     };
   }
 
@@ -763,7 +875,14 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       window,
       preferRemote,
       limit,
+      coverIndex: this.isSemanticCoverIndexReady(),
     });
+  }
+
+  /** B725: индекс строит обслуживание; до того подбор идёт по прежнему. */
+  private isSemanticCoverIndexReady(): boolean {
+    this.semanticCoverIndexSeen ||= hasSemanticCoverIndex(this.database);
+    return this.semanticCoverIndexSeen;
   }
 
   queryMatchCandidates(
@@ -820,7 +939,6 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     if (limit <= 0) return [];
     const window = freshnessWindow(options?.nowMs);
     const preferRemote = Boolean(candidate.preferredRemote);
-    this.matchReader ??= new VacancyMatchReader(this.databasePath);
 
     const semanticFunctions = candidate.semanticRoleFunctions?.length
       ? candidate.semanticRoleFunctions
@@ -834,13 +952,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         preferRemote,
         semanticLimit,
       );
-      const rows = await this.readMatchRows(query, false);
-      const results: UnifiedVacancy[] = [];
-      for (const row of rows) {
-        const item = parseVacancy(row.payload);
-        if (item) results.push(item);
-      }
-      return results;
+      const rows = await this.readSnapshotRows(query, false);
+      // B702: thousands of payloads parsed in one piece held the loop seconds on a cold read.
+      const parsed = await mapYielding(rows, (row) => parseVacancy(row.payload));
+      return parsed.filter((item): item is UnifiedVacancy => Boolean(item));
     }
 
     const terms = extractMatchTerms(candidate);
@@ -849,9 +964,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     for (const phase of terms.length ? [terms, []] : [[]]) {
       if (results.length >= limit) break;
       const query = this.matchQuery(phase, seenIds, window, preferRemote, limit - results.length);
-      const rows = await this.readMatchRows(query, phase.length > 0);
-      for (const row of rows) {
-        const item = parseVacancy(row.payload);
+      const rows = await this.readSnapshotRows(query, phase.length > 0);
+      const parsed = await mapYielding(rows, (row) => parseVacancy(row.payload));
+      for (const item of parsed) {
         if (item && !seenIds.has(item.id)) {
           results.push(item);
           seenIds.add(item.id);
@@ -896,17 +1011,28 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     if (this.databasePath === ':memory:') return;
     const reader = (this.matchReader ??= new VacancyMatchReader(this.databasePath));
     if (reader instanceof VacancyMatchReader) reader.warm();
+    const snapshots = this.snapshotRowReader();
+    if (snapshots instanceof VacancyMatchReader) snapshots.warm();
+  }
+
+  /** An injected stand-in (tests) answers the snapshot reads too. */
+  private snapshotRowReader(): MatchRowReader {
+    this.snapshotReader ??=
+      this.matchReader && !(this.matchReader instanceof VacancyMatchReader)
+        ? this.matchReader
+        : new VacancyMatchReader(this.databasePath, SNAPSHOT_READ_TIMEOUT_MS);
+    return this.snapshotReader;
   }
 
   /** Роль, которой нет ни в одной записи, заставляет обойти весь пул — на
    * проде это ~20 с, дольше бюджета читателя. Такой отказ фазы по терминам
    * не отменяет подбор: кандидат получает свежие записи из фазы дополнения,
    * а отказ самой фазы дополнения остаётся отказом чтения. */
-  private async readMatchRows(
+  private async readSnapshotRows(
     query: { sql: string; params: SQLInputValue[] },
     termPhase: boolean,
   ): Promise<{ payload: string }[]> {
-    const reader = (this.matchReader ??= new VacancyMatchReader(this.databasePath));
+    const reader = this.snapshotRowReader();
     try {
       return await reader.read(query.sql, query.params);
     } catch (error) {
@@ -934,14 +1060,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    */
   loadUnseenLinks(sourceIds: readonly string[], beforeMs: number, limit: number): VacancyLink[] {
     if (sourceIds.length === 0 || limit <= 0) return [];
-    const placeholders = sourceIds.map(() => '?').join(', ');
     return this.database
       .prepare(
         `SELECT i.id, i.url FROM vacancy_pool_index i INDEXED BY vacancy_pool_index_source
-          WHERE i.expired = 0 AND i.source_id IN (${placeholders}) AND i.observed_ms < ?
+          WHERE i.expired = 0 AND i.source_id IN (SELECT value FROM json_each(?)) AND i.observed_ms < ?
           ORDER BY i.observed_ms LIMIT ?`,
       )
-      .all(...sourceIds, beforeMs, limit) as unknown as VacancyLink[];
+      .all(JSON.stringify(sourceIds), beforeMs, limit) as unknown as VacancyLink[];
   }
 
   markSeen(vacancyIds: readonly string[], nowMs: number): void {
@@ -1001,16 +1126,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     }));
   }
 
-  loadSourceStates(): StoredSourceState[] {
-    const rows = this.database
-      .prepare(
-        `SELECT source_id, last_sync_at, last_status, last_error_message,
-                items_found_total, items_active_total, observations,
-                sync_requested_at, sync_started_at
-           FROM vacancy_source_state`,
-      )
-      .all() as unknown as SourceStateRow[];
-    return rows.map((row) => ({
+  loadSourceStates(sourceIds?: readonly string[]): StoredSourceState[] {
+    return this.readSourceStateRows(sourceIds).map((row) => ({
       sourceId: row.source_id,
       ...(row.last_sync_at ? { lastSyncAt: row.last_sync_at } : {}),
       ...(row.last_status && SOURCE_STATUSES.has(row.last_status)
@@ -1025,6 +1142,26 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         ? {}
         : { observations: parseObservations(row.observations) as SourceObservations }),
     }));
+  }
+
+  /**
+   * B736: на проде 76 275 состояний и 55 МБ наблюдений — полное чтение занимало
+   * 4,5 с. Страница админки читает только свои площадки по первичному ключу.
+   */
+  private readSourceStateRows(sourceIds?: readonly string[]): SourceStateRow[] {
+    const columns = `SELECT source_id, last_sync_at, last_status, last_error_message,
+                items_found_total, items_active_total, observations,
+                sync_requested_at, sync_started_at
+           FROM vacancy_source_state`;
+    if (!sourceIds) return this.database.prepare(columns).all() as unknown as SourceStateRow[];
+    const unique = [...new Set(sourceIds)];
+    const rows: SourceStateRow[] = [];
+    for (let start = 0; start < unique.length; start += SOURCE_STATE_ID_CHUNK) {
+      const chunk = unique.slice(start, start + SOURCE_STATE_ID_CHUNK);
+      const sql = `${columns} WHERE source_id IN (${chunk.map(() => '?').join(', ')})`;
+      rows.push(...(this.database.prepare(sql).all(...chunk) as unknown as SourceStateRow[]));
+    }
+    return rows;
   }
 
   /**
@@ -1161,8 +1298,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       const placeholders = selected.map(() => '?').join(', ');
       const rows = this.database
         .prepare(
+          // `+source_id`: with ~800 bound ids the planner otherwise walks the
+          // whole source index (458k hh rows on prod, 82 s of a 90 s profile, B761).
           `SELECT id, payload FROM vacancy_pool
-            WHERE source_id = ? AND id IN (${placeholders})
+            WHERE +source_id = ? AND id IN (${placeholders})
               AND CASE WHEN json_valid(payload) THEN (
                 length(trim(coalesce(json_extract(payload, '$.description'), ''))) > 0 OR
                 length(trim(coalesce(json_extract(payload, '$.fullDescription'), ''))) > 0 OR
@@ -1266,14 +1405,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     sourceId: string,
     vacancies: readonly UnifiedVacancy[],
     tally: WriteTally,
+    onChunkWritten?: SliceWriteOptions['onChunkWritten'],
   ): Promise<string> {
     const storedAt = this.nextSliceTimestamp(sourceId);
     const statements = this.prepareUpsertStatements();
     for (let offset = 0; offset < vacancies.length; offset += this.writeChunkSize) {
-      let pending = this.prepareUpsertRows(
-        sourceId,
-        vacancies.slice(offset, offset + this.writeChunkSize),
-      );
+      const chunk = vacancies.slice(offset, offset + this.writeChunkSize);
+      let pending = this.prepareUpsertRows(sourceId, chunk);
       await yieldToEventLoop();
       while (pending.length > 0) {
         const rows = pending;
@@ -1284,6 +1422,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         );
         await yieldToEventLoop();
       }
+      // B763: порция сводится сразу — остановка посреди среза не оставит её без кластера.
+      await onChunkWritten?.(chunk);
     }
     return storedAt;
   }
@@ -1470,10 +1610,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   async replaceSourceSliceAsync(
     sourceId: string,
     vacancies: readonly UnifiedVacancy[],
+    options: SliceWriteOptions = {},
   ): Promise<void> {
     const startedAt = performance.now();
     const tally: WriteTally = { transactions: 0, maxTransactionMs: 0 };
-    const storedAt = await this.upsertAllAsync(sourceId, vacancies, tally);
+    const storedAt = await this.upsertAllAsync(sourceId, vacancies, tally, options.onChunkWritten);
     const stale = this.database.prepare(
       `SELECT p.rowid AS row, p.id, i.url FROM vacancy_pool p
          LEFT JOIN vacancy_pool_index i ON i.id = p.id
@@ -1553,11 +1694,12 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     sourceId: string,
     vacancies: readonly UnifiedVacancy[],
     dropObservedBefore?: string,
+    options: SliceWriteOptions = {},
   ): Promise<MergeSliceResult> {
     const startedAt = performance.now();
     const tally: WriteTally = { transactions: 0, maxTransactionMs: 0 };
     const dropBeforeMs = parseMs(dropObservedBefore);
-    await this.upsertAllAsync(sourceId, vacancies, tally);
+    await this.upsertAllAsync(sourceId, vacancies, tally, options.onChunkWritten);
     let dropped: VacancyLink[] = [];
     if (dropBeforeMs !== undefined) {
       dropped = this.database
@@ -1688,31 +1830,47 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   prune(knownSourceIds: readonly string[], oldestPublishedAt: string): void {
-    if (knownSourceIds.length > 0) {
-      const report = prunePoolInBatches(
-        this.database,
-        knownSourceIds,
-        oldestPublishedAt,
-        this.pruneLimits(),
-      );
-      this.onWrite?.({ kind: 'prune', ...report });
-      return;
-    }
-    this.inTransaction(() => {
-      this.database.exec('DELETE FROM vacancy_pool');
-      this.database.exec('DELETE FROM vacancy_pool_index');
-      this.database.exec('DELETE FROM vacancy_cluster_input');
-      this.database.exec('DELETE FROM vacancy_company');
-      this.database.exec('DELETE FROM vacancy_clusters');
-      this.database.exec('DELETE FROM catalog_entries');
-      this.database.exec('DELETE FROM catalog_entries_seen');
-      this.database.exec(
-        `UPDATE catalog_projection_state
-            SET cursor_rowid = 0, completed = 1, updated_at = ${Date.now()}
-          WHERE id = 1`,
-      );
-      this.database.exec('DELETE FROM vacancy_source_state');
-    });
+    // Пустой или неполный список значит «источники не загрузились», а не
+    // «всё чужое»: чистка неизвестных тогда пропускается (инцидент 12.11).
+    const report = prunePoolInBatches(
+      this.database,
+      knownSourceIds,
+      oldestPublishedAt,
+      this.pruneLimits(),
+    );
+    this.onWrite?.({ kind: 'prune', ...report });
+  }
+
+  /** То же, что `prune`, но отпускает цикл событий между транзакциями (B649-2). */
+  async pruneAsync(
+    knownSourceIds: readonly string[],
+    oldestPublishedAt: string,
+    control?: PruneControl,
+  ): Promise<void> {
+    const report = await prunePoolInBatchesAsync(
+      this.database,
+      knownSourceIds,
+      oldestPublishedAt,
+      this.pruneLimits(),
+      control,
+    );
+    this.onWrite?.({ kind: 'prune', ...report });
+  }
+
+  async pruneClustersBeforeAsync(
+    oldestPublishedAt: string,
+    control?: PruneControl,
+  ): Promise<number> {
+    const cutoffMs = Date.parse(oldestPublishedAt);
+    if (!Number.isFinite(cutoffMs)) return 0;
+    const { clusters, report } = await pruneClustersInBatchesAsync(
+      this.database,
+      cutoffMs,
+      this.pruneLimits(),
+      control,
+    );
+    this.onWrite?.({ kind: 'prune', ...report });
+    return clusters;
   }
 
   private pruneLimits(): PruneLimits {
@@ -1735,61 +1893,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     );
   }
 
-  /**
-   * The 32-bit `vacancyKey` of two different clusters can collide (03.11 prod:
-   * UNIQUE entry_key aborted a whole Indeed write). The first holder keeps the
-   * key, the later cluster is simply not addressable, and the write goes on.
-   */
-  private prepareCatalogEntryUpsert(): CatalogProjectionStatements['upsert'] {
-    const holder = this.database.prepare(
-      'SELECT cluster_id FROM catalog_entries WHERE entry_key = ? AND cluster_id <> ?',
-    );
-    const statement = this.prepareCatalogEntryStatement();
-    return {
-      run: (...values: SQLInputValue[]) => {
-        if (holder.get(values[1] as string, values[0] as string)) return undefined;
-        return statement.run(...values);
-      },
-    };
-  }
-
-  private prepareCatalogEntryStatement() {
-    return this.database.prepare(
-      `INSERT INTO catalog_entries (
-         cluster_id, entry_key, path, title, company, location, is_remote,
-         salary_label, summary, skills_json, source_url, source_name,
-         published_at, last_seen_at, source_count, status,
-         place_slug, place_label, role_slug, role_label, published_ms, last_seen_ms
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(cluster_id) DO UPDATE SET
-         entry_key = excluded.entry_key,
-         path = excluded.path,
-         title = excluded.title,
-         company = excluded.company,
-         location = excluded.location,
-         is_remote = excluded.is_remote,
-         salary_label = excluded.salary_label,
-         summary = excluded.summary,
-         skills_json = excluded.skills_json,
-         source_url = excluded.source_url,
-         source_name = excluded.source_name,
-         published_at = excluded.published_at,
-         last_seen_at = excluded.last_seen_at,
-         source_count = excluded.source_count,
-         status = excluded.status,
-         place_slug = excluded.place_slug,
-         place_label = excluded.place_label,
-         role_slug = excluded.role_slug,
-         role_label = excluded.role_label,
-         published_ms = excluded.published_ms,
-         last_seen_ms = excluded.last_seen_ms`,
-    );
-  }
-
   private markCatalogSeen(
     clusterId: string,
     processedAt = Date.now(),
-    statement?: CatalogProjectionStatements['markSeen'],
+    statement?: { run(...values: SQLInputValue[]): unknown },
   ): void {
     const markSeen =
       statement ??
@@ -1800,75 +1907,20 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     markSeen.run(clusterId, processedAt);
   }
 
-  private writeCatalogEntry(
-    cluster: VacancyCluster,
-    statements: CatalogProjectionStatements,
-  ): void {
-    const entry = catalogEntryRowOfCluster(cluster);
-    if (!entry) {
-      // An unaddressable role is intentionally absent from the public catalog,
-      // but still marked as inspected so it cannot hold the backfill open.
-      statements.remove.run(cluster.id);
-      this.markCatalogSeen(cluster.id, Date.now(), statements.markSeen);
-      return;
-    }
-    const publishedMs = Date.parse(entry.publishedAt);
-    const lastSeenMs = Date.parse(entry.lastSeenAt);
-    statements.upsert.run(
-      entry.clusterId,
-      entry.key,
-      entry.path,
-      entry.title,
-      entry.company,
-      entry.location ?? null,
-      entry.isRemote ? 1 : 0,
-      entry.salaryLabel ?? null,
-      entry.summary,
-      JSON.stringify(entry.skills),
-      entry.sourceUrl,
-      entry.sourceName ?? null,
-      entry.publishedAt,
-      entry.lastSeenAt,
-      entry.sourceCount,
-      entry.status,
-      entry.placeSlug ?? null,
-      entry.placeLabel ?? null,
-      entry.roleSlug ?? null,
-      entry.roleLabel ?? null,
-      Number.isFinite(publishedMs) ? publishedMs : 0,
-      Number.isFinite(lastSeenMs) ? lastSeenMs : 0,
-    );
-    this.markCatalogSeen(cluster.id, Date.now(), statements.markSeen);
-  }
-
   private upsertCatalogEntry(cluster: VacancyCluster): void {
-    this.writeCatalogEntry(cluster, {
-      upsert: this.prepareCatalogEntryUpsert(),
-      markSeen: this.database.prepare(
-        `INSERT INTO catalog_entries_seen (cluster_id, processed_at) VALUES (?, ?)
-         ON CONFLICT(cluster_id) DO UPDATE SET processed_at = excluded.processed_at`,
-      ),
-      remove: this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?'),
-    });
+    writeCatalogEntry(cluster, prepareCatalogProjectionStatements(this.database));
   }
 
   private persistCatalogProjectionBatch(
     rows: ReadonlyArray<{ rowid: number; id: string; cluster_json: string }>,
   ): void {
-    const statements: CatalogProjectionStatements = {
-      upsert: this.prepareCatalogEntryUpsert(),
-      markSeen: this.database.prepare(
-        `INSERT INTO catalog_entries_seen (cluster_id, processed_at) VALUES (?, ?)
-         ON CONFLICT(cluster_id) DO UPDATE SET processed_at = excluded.processed_at`,
-      ),
-      remove: this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?'),
-    };
+    const statements = prepareCatalogProjectionStatements(this.database);
     this.inTransaction(() => {
       for (const row of rows) {
         try {
           const parsed = JSON.parse(row.cluster_json) as VacancyCluster;
           if (parsed && typeof parsed.id === 'string') {
-            this.writeCatalogEntry(parsed, statements);
+            writeCatalogEntry(parsed, statements);
           } else {
             statements.remove.run(row.id);
             this.markCatalogSeen(row.id, Date.now(), statements.markSeen);
@@ -1993,7 +2045,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const rows = this.database
       .prepare(
         `SELECT q.vacancy_id AS id,
-                CASE WHEN p.id IS NOT NULL AND ${HH_NEEDS_TEXT} THEN 1 ELSE 0 END AS need
+                CASE WHEN p.id IS NOT NULL AND ${HH_NEEDS_PRIORITY_TEXT} THEN 1 ELSE 0 END AS need
            FROM hh_text_priority q
            LEFT JOIN vacancy_pool p ON p.id = q.vacancy_id
           ORDER BY q.rank ASC, q.requested_ms DESC
@@ -2008,9 +2060,52 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       .map((row) => row.id);
   }
 
+  /** B797: верх подборки в сверку живости. */
+  requestSelectionLiveness(vacancyIds: readonly string[], nowMs: number = Date.now()): void {
+    requestSelectionLiveness(this.database, vacancyIds, nowMs);
+  }
+
+  closedSelection(): ReadonlySet<string> {
+    return closedSelection(this.database);
+  }
+
+  selectionRecentlyChecked(id: string, nowMs: number = Date.now()): boolean {
+    return recentlyChecked(this.database, id, nowMs);
+  }
+
+  dueSelectionLiveness(limit: number, nowMs: number = Date.now()): string[] {
+    return dueSelectionLiveness(this.database, limit, nowMs);
+  }
+
+  markSelectionLivenessTried(vacancyId: string, nowMs: number = Date.now()): void {
+    markSelectionLivenessTried(this.database, vacancyId, nowMs);
+  }
+
+  markSelectionLivenessChecked(vacancyId: string, nowMs: number = Date.now()): void {
+    markSelectionLivenessChecked(this.database, vacancyId, nowMs);
+  }
+
   dropHhTextPriority(vacancyIds: readonly string[]): void {
     const remove = this.database.prepare('DELETE FROM hh_text_priority WHERE vacancy_id = ?');
     for (const id of vacancyIds) remove.run(id);
+  }
+
+  /** B791: подборки и открытые карточки первыми в дочитке площадок без текста в списке. */
+  requestDetailTextPriority(
+    vacancyIds: readonly string[],
+    baseRank = 0,
+    nowMs: number = Date.now(),
+  ): void {
+    if (vacancyIds.length === 0) return;
+    this.inTransaction(() => requestDetailTextPriority(this.database, vacancyIds, baseRank, nowMs));
+  }
+
+  peekDetailTextPriority(
+    sourceId: string,
+    limit: number,
+    excludeIds: readonly string[] = [],
+  ): string[] {
+    return peekDetailTextPriority(this.database, sourceId, limit, excludeIds);
   }
 
   /** Позиция обхода текста hh (02.11): воркер перезапускается ~22 раза в сутки и шёл заново. */
@@ -2301,6 +2396,19 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       .filter((vacancy): vacancy is UnifiedVacancy => vacancy !== undefined);
   }
 
+  /** Те из `ids` площадки, что живы и всё ещё без текста; порядок — как у `ids` (B761). */
+  reloadVacanciesWithoutFullText(sourceId: string, ids: readonly string[]): UnifiedVacancy[] {
+    const statement = this.database.prepare(
+      `SELECT payload FROM vacancy_pool
+        WHERE id = ? AND source_id = ? AND expired_at IS NULL
+          AND length(trim(coalesce(json_extract(payload, '$.fullDescription'), ''))) = 0`,
+    );
+    return ids
+      .map((id) => statement.get(id, sourceId) as { payload: string } | undefined)
+      .map((row) => (row ? parseVacancy(row.payload) : undefined))
+      .filter((vacancy): vacancy is UnifiedVacancy => vacancy !== undefined);
+  }
+
   /**
    * Один шаг обогащения вакансий с описанием, но без ключевых навыков (B307).
    * Идёт пачками по `rowid`, не перегружая память и уступая цикл событий.
@@ -2513,6 +2621,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private candidateClusterIds(lookups: readonly VacancyClusterLookup[]): string[] {
     const ids = new Set<string>();
     const bucketSizes = new Map<string, number>();
+    // B761: в срезе ATS-доски одна компания и горстка названий — пара читается раз за партию.
+    const pairs = new Map<string, readonly string[]>();
     const direct = this.database.prepare(
       'SELECT cluster_id FROM vacancy_cluster_keys WHERE kind = ? AND key = ?',
     );
@@ -2523,8 +2633,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         }
       }
       if (lookup.companyTokens.length === 0 || lookup.titleTokens.length === 0) continue;
-      for (const row of this.clustersSharingCompanyAndTitle(lookup, bucketSizes)) {
-        ids.add(row.cluster_id);
+      for (const id of this.clustersSharingCompanyAndTitle(lookup, bucketSizes, pairs)) {
+        ids.add(id);
       }
     }
     return this.orderByCreation(Array.from(ids));
@@ -2553,31 +2663,99 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private clustersSharingCompanyAndTitle(
     lookup: VacancyClusterLookup,
     bucketSizes: Map<string, number>,
-  ): Array<{ cluster_id: string }> {
-    const size = (kind: string, keys: readonly string[]): number =>
-      keys.reduce((total, key) => total + this.bucketSize(kind, key, bucketSizes), 0);
-    const companySide = size('company_token', lookup.companyTokens);
-    if (companySide === 0) return [];
-    const titleSide = size('title_token', lookup.titleTokens);
-    if (titleSide === 0) return [];
+    pairs: Map<string, readonly string[]>,
+  ): readonly string[] {
+    const company = this.matchTokens('company_token', lookup.companyTokens, bucketSizes);
+    if (company.size === 0) return [];
+    const title = this.matchTokens('title_token', lookup.titleTokens, bucketSizes);
+    if (title.size === 0) return [];
+    const pairKey = `${[...company.keys].sort().join('\u0001')}\u0000${[...title.keys].sort().join('\u0001')}`;
+    const known = pairs.get(pairKey);
+    if (known) return known;
+    const found = this.companyAndTitleNeighbours(company, title);
+    pairs.set(pairKey, found);
+    return found;
+  }
+
+  private companyAndTitleNeighbours(
+    company: { keys: readonly string[]; size: number },
+    title: { keys: readonly string[]; size: number },
+  ): readonly string[] {
     const [outerKind, outerKeys, innerKind, innerKeys] =
-      companySide <= titleSide
-        ? (['company_token', lookup.companyTokens, 'title_token', lookup.titleTokens] as const)
-        : (['title_token', lookup.titleTokens, 'company_token', lookup.companyTokens] as const);
+      company.size <= title.size
+        ? (['company_token', company.keys, 'title_token', title.keys] as const)
+        : (['title_token', title.keys, 'company_token', company.keys] as const);
     const outerMarks = outerKeys.map(() => '?').join(', ');
     const innerMarks = innerKeys.map(() => '?').join(', ');
-    return this.database
+    // B761 25.11, прод: при близких корзинах точечная проверка каждого кластера бьёт по
+    // разным страницам индекса (в среднем 25 мс, до 456), две корзины подряд — 1,4 мс, до 10.
+    const comparable =
+      Math.max(company.size, title.size) <=
+      Math.min(company.size, title.size) * COMPARABLE_BUCKET_RATIO;
+    const rows = this.database
       .prepare(
         `SELECT DISTINCT o.cluster_id AS cluster_id FROM vacancy_cluster_keys o
           WHERE o.kind = ? AND o.key IN (${outerMarks})
-            AND EXISTS (
+            AND ${
+              comparable
+                ? `+o.cluster_id IN (
+              SELECT i.cluster_id FROM vacancy_cluster_keys i
+               WHERE i.kind = ? AND i.key IN (${innerMarks})
+            )`
+                : `EXISTS (
               SELECT 1 FROM vacancy_cluster_keys i
                WHERE i.cluster_id = o.cluster_id AND i.kind = ? AND i.key IN (${innerMarks})
-            )`,
+            )`
+            }`,
       )
       .all(outerKind, ...outerKeys, innerKind, ...innerKeys) as unknown as Array<{
       cluster_id: string;
     }>;
+    return rows.map((row) => row.cluster_id);
+  }
+
+  /**
+   * B761: токены стороны для сопоставления. Корзина не меньше потолка — слово
+   * вроде «group» (29 тыс. кластеров) или «manager» (95 тыс.): соседей по нему
+   * обход ищет десятки миллисекунд на запись, а различает он мало. Такие токены
+   * не участвуют — список берётся из счёта корзин. Если редких на стороне нет,
+   * остаётся самый редкий по точному счёту: у крупного работодателя двойники
+   * всё равно встречаются.
+   */
+  private matchTokens(
+    kind: string,
+    tokens: readonly string[],
+    bucketSizes: Map<string, number>,
+  ): { keys: readonly string[]; size: number } {
+    const sized = tokens.map((key) => ({ key, size: this.bucketSize(kind, key, bucketSizes) }));
+    const present = sized.filter((token) => token.size > 0);
+    const rare = present.filter((token) => token.size < this.bucketSizeCap);
+    if (rare.length > 0) {
+      return { keys: rare.map((token) => token.key), size: sum(rare.map((token) => token.size)) };
+    }
+    if (present.length === 0) return { keys: [], size: 0 };
+    const counted = present.map((token) => ({
+      key: token.key,
+      size: this.exactBucketSize(kind, token.key, bucketSizes),
+    }));
+    const rarest = counted.reduce((best, token) => (token.size < best.size ? token : best));
+    return { keys: [rarest.key], size: rarest.size };
+  }
+
+  /**
+   * Точный размер корзины — только для стороны, где все токены за потолком. B761: размер
+   * помнится между партиями рядом с токенами за потолком (14 % профиля без памяти).
+   */
+  private exactBucketSize(kind: string, key: string, cache: Map<string, number>): number {
+    const cacheKey = `exact\u0000${kind}\u0000${key}`;
+    const cached = cache.get(cacheKey) ?? this.overCapTokens.exactSize(cacheKey, this.clock());
+    if (cached !== undefined) return cached;
+    const row = this.database
+      .prepare('SELECT count(*) AS n FROM vacancy_cluster_keys WHERE kind = ? AND key = ?')
+      .get(kind, key) as { n: number };
+    cache.set(cacheKey, row.n);
+    this.overCapTokens.rememberExact(cacheKey, row.n);
+    return row.n;
   }
 
   /**
@@ -2589,14 +2767,16 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const cacheKey = `${kind}\u0000${key}`;
     const cached = cache.get(cacheKey);
     if (cached !== undefined) return cached;
+    if (this.overCapTokens.has(cacheKey, this.clock())) return this.bucketSizeCap;
     const row = this.database
       .prepare(
         `SELECT count(*) AS n FROM (
-           SELECT 1 FROM vacancy_cluster_keys WHERE kind = ? AND key = ? LIMIT ${BUCKET_SIZE_CAP}
+           SELECT 1 FROM vacancy_cluster_keys WHERE kind = ? AND key = ? LIMIT ${this.bucketSizeCap}
          )`,
       )
       .get(kind, key) as { n: number };
     cache.set(cacheKey, row.n);
+    if (row.n >= this.bucketSizeCap) this.overCapTokens.add(cacheKey);
     return row.n;
   }
 
@@ -2795,6 +2975,20 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    * основателя) нет в индексе пула; похороненная запись — ещё запись. Потом
    * тот же проход снимает карточки, у которых кластера нет вовсе.
    */
+  /** Окно пула после курсора: записи, ни один ключ членства которых не лежит в кластерах (B763). */
+  readUnclusteredPoolPage(chunk = 500, maxUnclustered?: number): UnclusteredPoolPage {
+    this.unclusteredCursor ??= createUnclusteredCatchUpCursor(this.database);
+    const page = readUnclusteredPoolPage(
+      this.database,
+      this.unclusteredCursor.read(),
+      chunk,
+      parseVacancy,
+      maxUnclustered,
+    );
+    this.unclusteredCursor.write(page.cursor);
+    return page;
+  }
+
   removeOrphanClustersStep(chunk = 500): {
     inspected: number;
     removed: number;
@@ -2950,15 +3144,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     // B641 10.11: на проде первая порция держала цикл до 4,9 с, а свод мест в
     // конце — ещё ~2 с. На файловой базе оба чтения идут в своём потоке.
     if (this.database.location() && options.sliceRows === undefined) {
-      const [activeRows, listingRows] = await Promise.all([
+      const [activeRows, listingRows, entryRows] = await Promise.all([
         readInWorker<{ active: number }>(this.database, CATALOG_ACTIVE_CLUSTERS_SQL),
         readInWorker<CatalogListingRow>(this.database, CATALOG_LISTINGS_SQL),
+        readInWorker<{ n: number }>(this.database, CATALOG_ENTRIES_TOTAL_SQL),
       ]);
       return this.writeCatalogTotals(
         activeRows[0]?.active ?? 0,
         observedAt,
         computedAt,
         listingRows.map(listingSummaryOf),
+        entryRows[0]?.n ?? 0,
       );
     }
     const slice = this.database.prepare(
@@ -2989,6 +3185,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     observedAt: string,
     computedAt: string,
     listings: CatalogListingSummary[] = this.countCatalogListings(),
+    entriesTotal: number = this.countCatalogEntries(PUBLIC_CATALOG_ENTRY, []),
   ): CatalogTotalsRow {
     this.database
       .prepare(
@@ -3005,6 +3202,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
            computed_at = excluded.computed_at`,
       )
       .run(JSON.stringify(listings), computedAt);
+    this.database
+      .prepare(
+        `INSERT INTO catalog_entries_total (id, total, computed_at) VALUES (1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET total = excluded.total,
+           computed_at = excluded.computed_at`,
+      )
+      .run(entriesTotal, computedAt);
     return { clusters, updatedAt: observedAt, computedAt };
   }
 
@@ -3015,6 +3219,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return row
       ? { clusters: row.catalog_total, updatedAt: row.observed_at, computedAt: row.computed_at }
       : undefined;
+  }
+
+  readCatalogEntriesTotal(): number | undefined {
+    const row = this.database
+      .prepare('SELECT total FROM catalog_entries_total WHERE id = 1')
+      .get() as { total: number } | undefined;
+    return row?.total;
   }
 
   private catalogEntryFromRow(row: CatalogEntrySqlRow): CatalogEntryRow {
@@ -3052,7 +3263,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     };
   }
 
-  /** Walks every active row (`path <> ''` is in no index): ~1.4 s on prod; the engine passes a cached total for big groups. */
+  /** Walks every active row of the group: ~1.4 s on prod for the whole catalog; the engine passes a stored total. */
   private countCatalogEntries(condition: string, params: readonly SQLInputValue[]): number {
     return (
       this.database
@@ -3063,7 +3274,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   loadCatalogEntriesPage(query: CatalogEntriesQuery): CatalogEntriesPage {
     const limit = Math.max(1, Math.min(Math.trunc(query.limit), 50_000));
-    const where = ["status = 'active'", "path <> ''"];
+    const where = [PUBLIC_CATALOG_ENTRY];
     const filterParams: SQLInputValue[] = [];
     if (query.place) {
       where.push('place_slug = ?');
@@ -3078,7 +3289,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const pageWhere = [...where];
     const pageParams = [...filterParams];
     if (query.after) {
-      pageWhere.push('(published_ms < ? OR (published_ms = ? AND entry_key > ?))');
+      // B776: the bound is spelled out so the index seeks; a bare OR of distinct
+      // parameters is no range, and the read walked every row above the cursor.
+      pageWhere.push('published_ms <= ? AND (published_ms < ? OR entry_key > ?)');
       pageParams.push(query.after.publishedMs, query.after.publishedMs, query.after.key);
     }
     pageParams.push(limit + 1);
@@ -3196,6 +3409,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   close(): void {
     this.matchReader?.close();
+    if (this.snapshotReader !== this.matchReader) this.snapshotReader?.close();
     try {
       this.database.close();
     } catch {
@@ -3266,6 +3480,11 @@ const HH_TEXT_TARGET_REFRESH_MS = 60 * 60 * 1_000;
 const HH_NEEDS_TEXT = `p.expired_at IS NULL AND
       length(trim(coalesce(json_extract(p.payload, '$.fullDescription'), ''))) = 0 AND
       coalesce(json_extract(p.payload, '$.descriptionHidden'), 0) = 0`;
+/** B794: строка подборки с обрывком текста читается ещё раз; общий обход обрывков не трогает. */
+const HH_NEEDS_PRIORITY_TEXT = `p.expired_at IS NULL AND
+      coalesce(json_extract(p.payload, '$.descriptionShort'), 0) = 0 AND
+      length(trim(coalesce(json_extract(p.payload, '$.fullDescription'), ''))) < ${HH_STUB_TEXT_CHARS} AND
+      coalesce(json_extract(p.payload, '$.descriptionHidden'), 0) = 0`;
 const HH_TEXT_PHASES = ['catalog', 'pool'] as const;
 
 function nextHhTextPhase(at: HhTextPosition): HhTextPosition | undefined {
@@ -3312,7 +3531,9 @@ function mergeUpsertRows(
   const latest = new Map(existing);
   return chunk.map((vacancy) => {
     const previous = latest.get(vacancy.id);
-    const stored = previous ? mergeStoredSnapshot(sourceId, previous, vacancy) : vacancy;
+    const stored = withTextSalary(
+      previous ? mergeStoredSnapshot(sourceId, previous, vacancy) : vacancy,
+    );
     latest.set(vacancy.id, stored);
     return {
       vacancy,
@@ -3359,4 +3580,48 @@ export function parseVacancy(payload: string): UnifiedVacancy | undefined {
 /** Текст дочитан этой записью впервые: сведение должно поискать двойника (01.11). */
 function gainedFullText(previous: UnifiedVacancy | undefined, stored: UnifiedVacancy): boolean {
   return Boolean(previous && !previous.fullDescription?.trim() && stored.fullDescription?.trim());
+}
+
+function sum(values: readonly number[]): number {
+  return values.reduce((total, value) => total + value, 0);
+}
+
+/** Сколько живёт память о токенах за потолком: корзина «group» за час не станет редкой. */
+export const OVER_CAP_TOKENS_TTL_MS = 60 * 60_000;
+
+/**
+ * B761: токены, чья корзина достигла потолка. Без памяти каждый такой токен в каждой
+ * партии заново читал 2 000 строк индекса (12,5 % профиля после стоп-листа). Раз в
+ * `OVER_CAP_TOKENS_TTL_MS` память сбрасывается — токен, ставший редким, вернётся.
+ * Там же точные размеры таких корзин: их считает сторона, где все токены за потолком.
+ */
+class OverCapTokens {
+  private keys = new Set<string>();
+  private exact = new Map<string, number>();
+  private since: number | undefined;
+
+  has(key: string, nowMs: number): boolean {
+    this.expire(nowMs);
+    return this.keys.has(key);
+  }
+
+  add(key: string): void {
+    this.keys.add(key);
+  }
+
+  exactSize(key: string, nowMs: number): number | undefined {
+    this.expire(nowMs);
+    return this.exact.get(key);
+  }
+
+  rememberExact(key: string, size: number): void {
+    this.exact.set(key, size);
+  }
+
+  private expire(nowMs: number): void {
+    if (this.since !== undefined && nowMs - this.since < OVER_CAP_TOKENS_TTL_MS) return;
+    this.keys = new Set();
+    this.exact = new Map();
+    this.since = nowMs;
+  }
 }

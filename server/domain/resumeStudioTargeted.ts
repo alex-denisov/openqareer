@@ -1,5 +1,11 @@
+import { vacancyAbout } from './resumeAbout';
+import { languageRequirementMet } from './resumeLanguageRequirement';
+import { termAppears } from './requirementTerm';
+import { isResult, resultStrength } from './resumeResult';
+import { withoutIntentLines, withoutSearchIntent } from './resumeSearchIntent';
 import { estimateLength } from './resumeStudioInternals';
 import type {
+  ResumeAssertion,
   ResumeDocument,
   ResumeExperience,
   ResumeProject,
@@ -7,6 +13,8 @@ import type {
   TargetedResumeSlice,
 } from './resumeStudioTypes';
 
+/** Навыков в резюме под вакансию, когда совпавших меньше. */
+const TARGET_SKILLS = 15;
 const TARGET_TEXT_CHARACTERS_PER_LINE = 88;
 
 interface RankedEntry<Entry> {
@@ -34,12 +42,42 @@ export function buildTargetedResumeSlice(
 ): TargetedResumeSlice {
   const requirements = normalizeRequirements(vacancy.requirements);
   const coverage = coverRequirements(master, requirements);
-  const prepared = prepareTargetedDocument(master, vacancy, requirements, coverage.missingRequirements);
+  const prepared = prepareTargetedDocument(master, vacancy, requirements);
+  assertTargetedResumeQuantities(master, prepared.document);
   return {
     ...coverage,
     ...prepared,
     estimatedPages: prepared.document.length.pages,
   };
+}
+
+// Include quantities in English and Russian words as well as Unicode digits.
+const QUANTITY = /\p{N}|(?<!\p{L})(?:hundred|thousand|million|billion|double[ds]?|triple[ds]?|percent|тысяч\p{L}*|миллион\p{L}*|миллиард\p{L}*|процент\p{L}*|вдвое|втрое)(?!\p{L})/iu;
+
+function checkQuantity(value: string | null | undefined, sources: readonly string[]): void {
+  if (value && QUANTITY.test(value) && !sources.includes(value)) {
+    throw new Error('targeted_resume_unsubstantiated_quantity');
+  }
+}
+
+function assertionQuantity(claim: ResumeAssertion | null | undefined, sources: readonly (ResumeAssertion | null | undefined)[]): void {
+  if (!claim) return;
+  checkQuantity(claim.value, sources.flatMap((source) =>
+    source?.memoryId === claim.memoryId ? [source.value] : []));
+}
+
+/** Quantitative achievements in a targeted draft must retain text and evidence from the same entry. */
+export function assertTargetedResumeQuantities(master: ResumeDocument, targeted: ResumeDocument): void {
+  checkQuantity(targeted.about, master.about ? [master.about, vacancyAbout(master.about)] : []);
+  for (const entry of targeted.experience) {
+    const source = master.experience.find((item) => item.id === entry.id);
+    assertionQuantity(entry.description, [source?.description, withoutIntentLines(source?.description)]);
+    for (const bullet of entry.bullets) assertionQuantity(bullet, source?.bullets ?? []);
+  }
+  for (const project of targeted.projects ?? []) {
+    const source = master.projects?.find((item) => item.id === project.id);
+    assertionQuantity(project.description, [source?.description]);
+  }
 }
 
 function coverRequirements(
@@ -49,7 +87,9 @@ function coverRequirements(
   const facts = documentFactTexts(master);
   const matches = requirements.map((requirement) => ({
     requirement: requirement.label,
-    matched: requirementAppears(requirement.normalized, facts),
+    matched:
+      requirementAppears(requirement.label, facts) ||
+      languageRequirementMet(requirement.normalized, master.languages),
   }));
   return {
     requirements: matches,
@@ -62,25 +102,19 @@ function prepareTargetedDocument(
   master: ResumeDocument,
   vacancy: TargetedResumeInput,
   requirements: readonly { label: string; normalized: string }[],
-  missingRequirements: readonly string[],
 ): PreparedTargetedDocument {
-  const experience = targetedExperience(master.experience, requirements);
+  const experience = latestFirst(master.experience.map(withoutSearchIntent).map(resultsFirst));
   const projects = targetedProjects(master.projects ?? [], requirements);
   const skills = targetedSkills(master.skills ?? [], requirements);
-  const about =
-    requirements.length === 0 ||
-    matchingIndexes([master.about ?? ''], requirements).length > 0
-      ? master.about
-      : null;
   const initialDocument: ResumeDocument = {
     ...master,
+    ...(master.about ? { about: vacancyAbout(master.about) } : {}),
     targetRole: clean(vacancy.title) || master.targetRole,
-    about,
     experience,
     projects,
     skills,
   };
-  const estimatedLength = targetedLength(initialDocument, missingRequirements);
+  const estimatedLength = targetedLength(initialDocument);
   const document = { ...initialDocument, length: estimatedLength };
   return {
     document,
@@ -101,27 +135,52 @@ function normalizeRequirements(
   return requirements.flatMap((requirement) => {
     const label = clean(requirement);
     const normalized = normalizeText(label);
-    if (!label || !normalized || seen.has(normalized)) return [];
-    seen.add(normalized);
+    // «C++» и «C#» без знаков совпали бы: повтор ищем по самому названию.
+    const key = label.toLocaleLowerCase();
+    if (!label || !normalized || seen.has(key)) return [];
+    seen.add(key);
     return [{ label, normalized }];
   });
 }
 
-function targetedExperience(
-  experience: readonly ResumeExperience[],
-  requirements: readonly { normalized: string }[],
-): ResumeExperience[] {
-  return rankEntries(experience, experienceFactTexts, requirements)
-    .map(({ entry, matchedRequirementIndexes }) =>
-      requirements.length === 0 || matchedRequirementIndexes.length > 0
-        ? entry
-        : { ...entry, bullets: [] },
-    );
+/**
+ * Places go from the latest to the earliest whatever they match (B785): a resume out of time order
+ * reads as a mistake. Every place keeps its bullets (B713); length is fitted later by trimming
+ * bullets that match nothing (`estimateResumePages`).
+ */
+function latestFirst(experience: readonly ResumeExperience[]): ResumeExperience[] {
+  const dated = experience.map((role) => ({ role, start: monthOf(role.startDate), end: endMonth(role) }));
+  return dated
+    .sort((left, right) => right.end - left.end || right.start - left.start)
+    .map(({ role }) => role);
+}
+
+/** Месяцы от нулевого года; без даты — 0, такое место внизу. */
+function monthOf(date: ResumeAssertion | null): number {
+  const value = date?.value.trim() ?? '';
+  const year = /(?:19|20)\d{2}/u.exec(value)?.[0];
+  if (!year) return 0;
+  const month = /^(?:19|20)\d{2}-(\d{2})/u.exec(value)?.[1] ?? /^(\d{1,2})[./](?:19|20)\d{2}$/u.exec(value)?.[1];
+  return Number(year) * 12 + Number(month ?? 0);
+}
+
+function endMonth(role: ResumeExperience): number {
+  if (role.current.value) return Number.MAX_SAFE_INTEGER;
+  return monthOf(role.endDate) || monthOf(role.startDate);
+}
+
+/** Измеримые результаты места стоят первыми; правки под вакансию ложатся поверх этого порядка. */
+function resultsFirst(role: ResumeExperience): ResumeExperience {
+  const order = ({ value }: ResumeAssertion) => (isResult(value) ? resultStrength(value) : 0);
+  const bullets = [...role.bullets].sort(
+    (left, right) => order(right) - order(left),
+  );
+  return { ...role, bullets };
 }
 
 function targetedProjects(
   projects: readonly ResumeProject[],
-  requirements: readonly { normalized: string }[],
+  requirements: readonly { label: string }[],
 ): ResumeProject[] {
   return rankEntries(projects, projectFactTexts, requirements)
     .filter(
@@ -131,20 +190,23 @@ function targetedProjects(
     .map(({ entry }) => entry);
 }
 
+/** Навыки вакансии первыми, остальные — до полного раздела: пустым он не остаётся (B785). */
 function targetedSkills(
   skills: NonNullable<ResumeDocument['skills']>,
-  requirements: readonly { normalized: string }[],
+  requirements: readonly { label: string }[],
 ) {
   if (requirements.length === 0) return skills;
-  return skills.filter((skill) =>
-    matchingIndexes([skill.name], requirements).length > 0,
-  );
+  const isMatched = (skill: { readonly name: string }) =>
+    matchingIndexes([skill.name], requirements).length > 0;
+  const matched = skills.filter(isMatched);
+  if (matched.length >= TARGET_SKILLS) return matched;
+  return [...matched, ...skills.filter((skill) => !isMatched(skill))].slice(0, TARGET_SKILLS);
 }
 
 function rankEntries<Entry>(
   entries: readonly Entry[],
   getFactTexts: (entry: Entry) => readonly string[],
-  requirements: readonly { normalized: string }[],
+  requirements: readonly { label: string }[],
 ): RankedEntry<Entry>[] {
   return entries
     .map((entry, originalIndex) => ({
@@ -164,16 +226,15 @@ function rankEntries<Entry>(
 
 function matchingIndexes(
   factTexts: readonly string[],
-  requirements: readonly { normalized: string }[],
+  requirements: readonly { label: string }[],
 ): number[] {
   return requirements.flatMap((requirement, index) =>
-    requirementAppears(requirement.normalized, factTexts) ? [index] : [],
+    requirementAppears(requirement.label, factTexts) ? [index] : [],
   );
 }
 
 function requirementAppears(requirement: string, factTexts: readonly string[]): boolean {
-  const paddedRequirement = ` ${requirement} `;
-  return factTexts.some((fact) => ` ${normalizeText(fact)} `.includes(paddedRequirement));
+  return factTexts.some((fact) => termAppears(requirement, fact));
 }
 
 function documentFactTexts(document: ResumeDocument): string[] {
@@ -200,6 +261,7 @@ function documentFactTexts(document: ResumeDocument): string[] {
       return [...assertionTexts([item.name, item.cefr]), ...nativeFacts];
     }),
     ...(document.courses ?? []).flatMap((item) => [item.name, item.provider, item.institution]),
+    ...(document.certifications ?? []).map((item) => item.name),
     ...(document.tests ?? []).flatMap((item) => [item.name, item.provider, item.score]),
     ...(document.recommendations ?? []).flatMap((item) => [
       item.author,
@@ -232,10 +294,7 @@ function assertionTexts(
   return assertions.flatMap((item) => (item && typeof item.value === 'string' ? [item.value] : []));
 }
 
-function targetedLength(
-  document: ResumeDocument,
-  missingRequirements: readonly string[],
-) {
+function targetedLength(document: ResumeDocument) {
   const baseline = estimateLength(
     document.contact,
     document.experience,
@@ -251,15 +310,13 @@ function targetedLength(
     ...(document.tests ?? []).map((test) => test.name),
     ...(document.recommendations ?? []).map((item) => item.text ?? item.author ?? item.recommender),
     ...Object.values(document.additional ?? {}),
-    ...missingRequirements,
   ].filter((value): value is string => Boolean(value));
   const lines =
     baseline.lines +
     extraLines.reduce(
       (total, value) => total + Math.max(1, Math.ceil(value.length / TARGET_TEXT_CHARACTERS_PER_LINE)),
       0,
-    ) +
-    Number(missingRequirements.length > 0);
+    );
   return {
     lines,
     pages: Math.max(1, Math.ceil(lines / baseline.linesPerPage)),

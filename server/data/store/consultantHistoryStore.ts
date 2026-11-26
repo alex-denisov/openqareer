@@ -198,7 +198,7 @@ export class ConsultantHistoryStore {
     let conversation = active;
     // 28.10: беседа о компании («Компании и люди») не продолжает беседу о вакансии того же раздела.
     const topicChanged = active !== null && companyTopic(request.subject) !== this.activeCompany(candidateId, active.id);
-    if (active && (active.stage !== stage || topicChanged || Date.now() - Date.parse(active.last_message_at) > IDLE_CLOSE_MS)) {
+    if (active && (active.stage !== stage || topicChanged || this.isIdle(candidateId, active, Date.now()))) {
       const reason = active.stage === stage && !topicChanged ? 'idle_timeout' : 'stage_changed';
       const task = this.close(active, reason, now);
       if (task) closedConversations.push(task);
@@ -456,14 +456,16 @@ export class ConsultantHistoryStore {
   export(candidateId: string): ConsultantConversationExport[] {
     this.ensureLegacyHistory(candidateId);
     const rows = this.database
-      .prepare('SELECT id, stage, opened_at, last_message_at, closed_at, message_count, first_user_message_id FROM consultant_conversations WHERE candidate_id = ? AND closed_at IS NOT NULL ORDER BY opened_at, id')
+      .prepare('SELECT id, stage, opened_at, last_message_at, closed_at, message_count, first_user_message_id FROM consultant_conversations WHERE candidate_id = ? ORDER BY opened_at, id')
       .all(candidateId) as unknown as ConversationRow[];
+    // B738: every conversation, the open one and a continued one too; `open` marks it not closed yet.
     return rows.map((row) => {
       const versions = this.database
         .prepare('SELECT id, message_count, version, summary_cipher, created_at FROM consultant_summaries WHERE candidate_id = ? AND conversation_id = ? ORDER BY version')
         .all(candidateId, row.id) as unknown as Array<Pick<SummaryRow, 'id' | 'message_count' | 'version' | 'summary_cipher' | 'created_at'>>;
       return {
         ...this.summaryView(candidateId, row),
+        open: row.closed_at === null,
         messages: this.readMessages(candidateId, row.id),
         summaries: versions.map((summary) => ({
           version: summary.version,
@@ -492,10 +494,6 @@ export class ConsultantHistoryStore {
     this.database.prepare('DELETE FROM consultant_conversations WHERE candidate_id = ? AND id = ?')
       .run(candidateId, conversationId);
     return true;
-  }
-
-  deleteAllIndexes(candidateId: string): void {
-    this.database.prepare('DELETE FROM consultant_messages_fts WHERE candidate_id = ?').run(candidateId);
   }
 
   private summaryView(candidateId: string, row: ConversationRow): ConsultantConversationSummary {
@@ -568,7 +566,100 @@ export class ConsultantHistoryStore {
     return row;
   }
 
-  private close(row: ConversationRow, reason: 'stage_changed' | 'idle_timeout', at: string): ConsultantSummaryTask | null {
+  /**
+   * B688 «Новый разговор»: кандидат сам закрывает текущий разговор. Причина пустая —
+   * прежний список причин в базе не меняется. Возвращает задачу сводки, если в нём были реплики.
+   */
+  closeActive(candidateId: string, at: string): { readonly closedId: string | null; readonly task: ConsultantSummaryTask | null } {
+    this.ensureLegacyHistory(candidateId);
+    const active = this.activeConversation(candidateId);
+    if (!active) return { closedId: null, task: null };
+    return { closedId: active.id, task: this.close(active, null, at) };
+  }
+
+  /**
+   * B688: продолжить закрытый разговор. Текущий закрывается, выбранный снова открыт;
+   * время продолжения держит его открытым ещё полчаса без новых реплик.
+   */
+  resume(candidateId: string, conversationId: string, at: string): {
+    readonly conversation: ConsultantConversationDetail;
+    readonly task: ConsultantSummaryTask | null;
+  } | null {
+    this.ensureLegacyHistory(candidateId);
+    const row = this.getConversation(candidateId, conversationId);
+    if (!row?.closed_at) return null;
+    const active = this.activeConversation(candidateId);
+    const task = active ? this.close(active, null, at) : null;
+    this.ensureResumeTable();
+    this.database.prepare('UPDATE consultant_conversations SET closed_at = NULL, close_reason = NULL WHERE candidate_id = ? AND id = ?')
+      .run(candidateId, conversationId);
+    this.database.prepare(
+      `INSERT INTO consultant_conversation_resumes (candidate_id, conversation_id, resumed_at) VALUES (?, ?, ?)
+       ON CONFLICT (candidate_id, conversation_id) DO UPDATE SET resumed_at = excluded.resumed_at`,
+    ).run(candidateId, conversationId, at);
+    const reopened = { ...row, closed_at: null };
+    return { conversation: { ...this.summaryView(candidateId, reopened), messages: this.readMessages(candidateId, conversationId) }, task };
+  }
+
+  /**
+   * B688: открытый разговор для ленты панели. Разговор другого раздела и разговор,
+   * молчащий дольше получаса, лентой не считаются: следующая реплика их закроет.
+   * Продолжённый из истории разговор показывается в любом разделе.
+   */
+  current(candidateId: string, stage: CoachTurnStage, now: number): ConsultantConversationDetail | null {
+    this.ensureLegacyHistory(candidateId);
+    const active = this.activeConversation(candidateId);
+    if (!active || this.isIdle(candidateId, active, now)) return null;
+    if (active.stage !== stage && this.resumedAt(candidateId, active.id) === null) return null;
+    return { ...this.summaryView(candidateId, active), messages: this.readMessages(candidateId, active.id) };
+  }
+
+  /** B688: завершённые ходы разговора кандидата — ответ консультанта и ключ хода. */
+  replyTurns(candidateId: string, conversationId: string): Array<{ readonly messageId: string; readonly key: string }> {
+    const rows = this.database
+      .prepare(
+        `SELECT t.assistant_message_id AS message_id, t.idempotency_key AS key
+         FROM consultant_conversation_turns c
+         JOIN turns t ON t.candidate_id = c.candidate_id AND t.idempotency_key = c.idempotency_key
+         WHERE c.candidate_id = ? AND c.conversation_id = ? AND t.status = 'completed'
+           AND t.assistant_message_id IS NOT NULL
+         ORDER BY t.created_at, t.idempotency_key`,
+      )
+      .all(candidateId, conversationId) as Array<{ message_id: string; key: string }>;
+    return rows.map((row) => ({ messageId: row.message_id, key: row.key }));
+  }
+
+  private isIdle(candidateId: string, row: ConversationRow, now: number): boolean {
+    const resumed = this.resumedAt(candidateId, row.id);
+    const last = Math.max(Date.parse(row.last_message_at), resumed ? Date.parse(resumed) : 0);
+    return now - last > IDLE_CLOSE_MS;
+  }
+
+  private resumedAt(candidateId: string, conversationId: string): string | null {
+    this.ensureResumeTable();
+    const row = this.database
+      .prepare('SELECT resumed_at FROM consultant_conversation_resumes WHERE candidate_id = ? AND conversation_id = ?')
+      .get(candidateId, conversationId) as { resumed_at: string } | undefined;
+    return row?.resumed_at ?? null;
+  }
+
+  private resumeTableReady = false;
+
+  /** Таблица добавлена рядом (B688): прежние таблицы истории не меняются. */
+  private ensureResumeTable(): void {
+    if (this.resumeTableReady) return;
+    this.database.exec(`CREATE TABLE IF NOT EXISTS consultant_conversation_resumes (
+      candidate_id TEXT NOT NULL,
+      conversation_id TEXT NOT NULL,
+      resumed_at TEXT NOT NULL,
+      PRIMARY KEY (candidate_id, conversation_id),
+      FOREIGN KEY (candidate_id, conversation_id)
+        REFERENCES consultant_conversations(candidate_id, id) ON DELETE CASCADE
+    ) STRICT`);
+    this.resumeTableReady = true;
+  }
+
+  private close(row: ConversationRow, reason: 'stage_changed' | 'idle_timeout' | null, at: string): ConsultantSummaryTask | null {
     this.database.prepare('UPDATE consultant_conversations SET closed_at = ?, close_reason = ? WHERE id = ? AND closed_at IS NULL')
       .run(at, reason, row.id);
     return row.message_count > 0

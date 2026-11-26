@@ -8,6 +8,7 @@ import { config, noSessions, successProvider } from './appTestHarness';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { resetCatalogSitemaps, setCatalogSitemaps } from './seo/catalogSitemapSchedule';
 import { buildSitemapFiles } from './seo/sitemapXml';
+import { timeBudget } from '../shared/testing/timeBudget';
 
 const directories: string[] = [];
 const closers: Array<() => Promise<void> | void> = [];
@@ -88,7 +89,7 @@ describe('B209: сервер поднимается с раздачей стат
     expect(child.statusCode).toBe(200);
     expect(child.body).toContain('/legal/terms');
     expect(child.body).not.toContain('STATIC CHILD SITEMAP FILE');
-  }, 20_000);
+  }, timeBudget(20_000));
 
   it('keeps sitemap route names out of public and dist', () => {
     for (const root of [resolve('public'), resolve('dist')]) {

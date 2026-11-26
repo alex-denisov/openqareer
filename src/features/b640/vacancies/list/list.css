@@ -1,0 +1,90 @@
+/* Подборка вакансий в узкой области контента (открыта панель консультанта, окно уже 1100):
+   «Роль» остаётся читаемой, места ей уступают сначала «Формат», затем «Дата».
+   Столбцы не убираем из таблицы, а сводим к нулевой ширине: раскрытая строка занимает
+   восемь колонок, и без этого лишние колонки отняли бы место у роли. */
+@layer b640.sections {
+  @media (min-width: 768px) {
+    @container main (max-width: 1091px) {
+      .b640 .vt-th.vt-format,
+      .b640 .vt-row > .vt-format {
+        inline-size: 0;
+        padding: 0;
+        border-inline: 0;
+        overflow: hidden;
+        visibility: hidden;
+      }
+    }
+    @container main (max-width: 1011px) {
+      .b640 .vt-th.vt-date,
+      .b640 .vt-row > .vt-date {
+        inline-size: 0;
+        padding: 0;
+        border-inline: 0;
+        overflow: hidden;
+        visibility: hidden;
+      }
+    }
+  }
+  /* Н-А: без числа вакансий (подборка ещё читается) кнопки остаются справа, как в макете s07. */
+  .b640 .vl-countbar .vl-acts {
+    margin-inline-start: auto;
+  }
+  /* Режим «Помочь выбрать»: на 390 вся строка — область нажатия названия (её ::after);
+     флажок лежит выше неё, иначе его нельзя снять. */
+  .b640 .vt-rl .vz-ck {
+    position: relative;
+    z-index: 1;
+  }
+  /* B791: краткое содержание в раскрытой строке. */
+  .b640 .vs-br {
+    display: grid;
+    gap: var(--career-space-4) var(--career-space-8);
+    padding-block: var(--career-space-2);
+  }
+  .b640 .vs-br.is-two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .b640 .vs-br > div {
+    display: grid;
+    gap: var(--career-space-2);
+    align-content: start;
+    min-inline-size: 0;
+  }
+  .b640 .vs-br :is(p, ul) {
+    margin: 0;
+    max-inline-size: var(--career-measure);
+    color: var(--career-text);
+    font-size: var(--career-text-sm);
+    line-height: 1.5;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+  }
+  .b640 .vs-br ul {
+    padding-inline-start: 1.1em;
+    list-style: disc;
+  }
+  .b640 .vs-br-k {
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+    color: var(--career-text-soft);
+  }
+  .b640 .vs-br-miss {
+    color: var(--career-warning);
+    white-space: nowrap;
+  }
+  .b640 .vs-br.is-skel {
+    gap: var(--career-space-2);
+  }
+  .b640 .vs-br.is-skel > span {
+    block-size: calc(var(--career-text-sm) * 1.25);
+    max-inline-size: var(--career-measure);
+    border-radius: var(--career-radius-sm);
+    background: var(--career-line);
+  }
+  @media (max-width: 767px) {
+    .b640 .vs-br.is-two {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}

@@ -1,3 +1,8 @@
+import { registerCareerDiaryEntryRoutes } from './careerDiaryEntryRoutes';
+import { registerAdaptationStepsRoutes } from './adaptationStepsRoutes';
+import { registerCareerDiaryCardRoutes } from './careerDiaryCardRoutes';
+import { registerCareerDiaryPeopleRoutes } from './careerDiaryPeopleRoutes';
+import { registerCareerDiaryCheckpointRoutes } from './careerDiaryCheckpointRoutes';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { evaluateCareerGoalRisk } from '../../shared/careerDiary';
@@ -32,7 +37,9 @@ const weekStartSchema = dateSchema.refine(
   (value) => new Date(value + 'T00:00:00.000Z').getUTCDay() === 1,
   'week_start_must_be_monday',
 );
-const diaryIdSchema = z.string().uuid();
+/** Цели из KPI, принятые до 22.11, хранят id `kpi:<импорт>:<n>`: их тоже замеряют и удаляют. */
+const LEGACY_KPI_GOAL_ID = /^kpi:[0-9a-f-]{36}:\d{1,2}$/;
+const diaryIdSchema = z.union([z.string().uuid(), z.string().regex(LEGACY_KPI_GOAL_ID)]);
 const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   cursor: z.string().min(1).max(300).optional(),
@@ -101,6 +108,8 @@ const workplaceFieldsSchema = z.object({
   startDate: dateSchema,
   endDate: dateSchema.nullable().optional(),
   sourceExperienceId: z.string().trim().max(200).nullable().optional(),
+  // d01: «Что от вас ждут»; предел — EXPECTATIONS_MAX формы.
+  expectations: z.string().trim().max(1500).nullable().optional(),
 }).strict();
 
 const workplaceSchema = workplaceFieldsSchema.refine(
@@ -635,6 +644,13 @@ const handleArchiveWorkplace: Handler = async (deps, request, reply) => {
 };
 
 export function registerCareerDiaryRoutes(app: FastifyInstance, deps: RouteDeps): void {
+  // B683: записи и итог недели — свои маршруты, закрыты флагом B640.
+  registerCareerDiaryEntryRoutes(app, deps);
+  // B684: цель с показателями и шаги адаптации — свои маршруты, закрыты флагом B640.
+  registerCareerDiaryCardRoutes(app, deps);
+  registerCareerDiaryPeopleRoutes(app, deps);
+  registerCareerDiaryCheckpointRoutes(app, deps);
+  registerAdaptationStepsRoutes(app, deps);
   const readLimit = { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } };
   const writeLimit = { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } };
   const base = '/api/v1/candidate/career-diary';

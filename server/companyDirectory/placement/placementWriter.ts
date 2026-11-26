@@ -14,7 +14,7 @@ export interface CompanyPlacements {
   readonly siteUrl?: string | null;
   /** B643: hh employer ids linked from the company's own pages. */
   readonly hhEmployerIds?: readonly string[];
-  readonly discoveredBy: 'freehire' | 'site_discovery';
+  readonly discoveredBy: 'freehire' | 'site_discovery' | 'aggregator_site';
 }
 
 export function placementSiteHost(url: string | null | undefined): string | null {

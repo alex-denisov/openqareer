@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS ${COMPANY_DIRECTORY_TABLE} (
 CREATE INDEX IF NOT EXISTS idx_company_directory_name ON ${COMPANY_DIRECTORY_TABLE}(company_name);
 CREATE INDEX IF NOT EXISTS idx_company_directory_source_type ON ${COMPANY_DIRECTORY_TABLE}(source_type);
 CREATE INDEX IF NOT EXISTS idx_company_directory_status ON ${COMPANY_DIRECTORY_TABLE}(status);
+CREATE INDEX IF NOT EXISTS idx_company_directory_board ON ${COMPANY_DIRECTORY_TABLE}(ats_provider, ats_slug COLLATE NOCASE);
 `;
 
 /** B619: per-field provenance. Added by ALTER on existing databases. */

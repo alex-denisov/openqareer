@@ -1,5 +1,7 @@
+import { UNKNOWN_PUBLISHED_AT } from './jsonVacancyRecord';
 import { isAtsBoardSourceId } from './atsSourceId';
 import { sourceKind } from './poolLiveness';
+import { withTextSalary } from './textSalary';
 import { periodOfEvidence } from '../../shared/vacancySalaryPeriod';
 import type {
   UnifiedVacancy,
@@ -9,6 +11,7 @@ import type {
 } from '../domain/unifiedVacancy';
 import { createHash } from 'node:crypto';
 import { normalizeTextForComparison } from './vacancyFingerprint';
+import { runSteps, type Steps } from './yieldingSteps';
 
 const ATS_URL_REGEX =
   /(https?:\/\/(?:boards\.greenhouse\.io|job-boards\.greenhouse\.io|jobs\.lever\.co|api\.eu\.lever\.co|jobs\.ashbyhq\.com|apply\.workable\.com|[a-z0-9-]+\.recruitee\.com|[a-z0-9-]+\.pinpointhq\.com|[a-z0-9-]+\.myworkdayjobs\.com)\/[^\s"')]+)/i;
@@ -76,7 +79,7 @@ export function extractAtsLink(text?: string): string | null {
     .toLowerCase();
 }
 
-function normalizeUrl(url: string): string {
+export function normalizeUrl(url: string): string {
   return url
     .trim()
     .replace(/[?#].*$/, '')
@@ -215,6 +218,8 @@ function pickHigherPrioritySource(cluster: VacancyCluster, vacancy: UnifiedVacan
     cluster.canonicalCompany = vacancy.company;
     if (vacancy.employerIsPerson === true) cluster.employerIsPerson = true;
     else delete cluster.employerIsPerson;
+    if ((vacancy.company ?? '').trim()) delete cluster.companyUnspecified;
+    else cluster.companyUnspecified = true;
   }
 }
 
@@ -281,6 +286,22 @@ function prefersIncomingSalary(
   return !current.to && incoming.to !== undefined;
 }
 
+/**
+ * B803: доска Recruitee перечитывает запись целиком; вилка с неподдержанным периодом
+ * (неделя) больше не приходит — прежняя, без периода, снимается. Вилку, которую могла
+ * дать другая площадка, и вилку с доказанным периодом повторное чтение не трогает.
+ */
+function dropsWithdrawnSalary(cluster: VacancyCluster, vacancy: UnifiedVacancy): boolean {
+  const { sourceId } = vacancy.provenance;
+  return (
+    !vacancy.salary &&
+    cluster.salary !== undefined &&
+    /^(?:ats|src-fh)-recruitee-/.test(sourceId) &&
+    !hasExplicitSalaryPeriod(cluster.salary) &&
+    cluster.sources.every((source) => source.sourceId === sourceId)
+  );
+}
+
 export function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: UnifiedVacancy): void {
   const existingSourceIndex = cluster.sources.findIndex((source) => {
     if (source.sourceId !== vacancy.provenance.sourceId) return false;
@@ -317,13 +338,14 @@ export function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: Unifie
 
   if (vacancy.salary && prefersIncomingSalary(cluster.salary, vacancy.salary)) {
     cluster.salary = vacancy.salary;
+  } else if (!isNewMembership && dropsWithdrawnSalary(cluster, vacancy)) {
+    // Опрос приносит запись до вилки из её текста: её доска не отзывала.
+    cluster.salary = withTextSalary(vacancy).salary;
   }
 
   updateClusterLocation(cluster, vacancy.location);
 
-  if (new Date(vacancy.publishedAt) < new Date(cluster.firstObservedAt)) {
-    cluster.firstObservedAt = vacancy.publishedAt;
-  }
+  cluster.firstObservedAt = earliestKnown(cluster.firstObservedAt, firstKnownDate(vacancy));
   if (new Date(vacancy.provenance.observedAt) > new Date(cluster.lastSeenAt)) {
     cluster.lastSeenAt = vacancy.provenance.observedAt;
   }
@@ -349,10 +371,22 @@ export function absorbCluster(target: VacancyCluster, twin: VacancyCluster): voi
   target.skills = Array.from(new Set([...target.skills, ...twin.skills]));
   if (twin.salary && prefersIncomingSalary(target.salary, twin.salary)) target.salary = twin.salary;
   if (!target.textKey && twin.textKey) target.textKey = twin.textKey;
-  if (new Date(twin.firstObservedAt) < new Date(target.firstObservedAt)) {
-    target.firstObservedAt = twin.firstObservedAt;
-  }
+  target.firstObservedAt = earliestKnown(target.firstObservedAt, twin.firstObservedAt);
   if (new Date(twin.lastSeenAt) > new Date(target.lastSeenAt)) target.lastSeenAt = twin.lastSeenAt;
+}
+
+/** B797: нулевая дата значит «площадка её не дала» (лента Pinpoint), а не 1970 год. */
+function firstKnownDate(vacancy: UnifiedVacancy): string {
+  return vacancy.publishedAt === UNKNOWN_PUBLISHED_AT
+    ? vacancy.provenance.observedAt
+    : vacancy.publishedAt;
+}
+
+/** Записанная раньше нулевая дата уступает любой известной. */
+function earliestKnown(current: string, next: string): string {
+  if (current === UNKNOWN_PUBLISHED_AT) return next;
+  if (next === UNKNOWN_PUBLISHED_AT) return current;
+  return new Date(next) < new Date(current) ? next : current;
 }
 
 export function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluster {
@@ -361,6 +395,8 @@ export function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluste
     id: `cluster-${vacancy.id}`,
     canonicalTitle: vacancy.title,
     canonicalCompany: vacancy.company,
+    // B756: пустая компания — явный признак, а не только пустая строка.
+    ...((vacancy.company ?? '').trim() ? {} : { companyUnspecified: true as const }),
     ...(vacancy.employerIsPerson === true ? { employerIsPerson: true } : {}),
     canonicalLocation: vacancy.location,
     isRemote: Boolean(vacancy.isRemote),
@@ -371,7 +407,7 @@ export function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluste
     skills: [...vacancy.requiredSkills],
     primaryUrl: vacancy.url,
     sources: [vacancy.provenance],
-    firstObservedAt: vacancy.publishedAt,
+    firstObservedAt: firstKnownDate(vacancy),
     lastSeenAt: vacancy.provenance.observedAt,
     status: vacancy.status,
     vacanciesCount: 1,
@@ -526,12 +562,18 @@ function addVacancyToClusterIndex(
 }
 
 export function clusterVacancies(vacancies: Iterable<UnifiedVacancy>): VacancyCluster[] {
+  return runSteps(clusterVacancySteps(vacancies));
+}
+
+/** B770: one vacancy per step; 4000 candidates in one piece held the loop up to 2.6 s on prod. */
+export function* clusterVacancySteps(vacancies: Iterable<UnifiedVacancy>): Steps<VacancyCluster[]> {
   const clusters: VacancyCluster[] = [];
   const prepared: PreparedVacancy[] = [];
   const index = new ClusterIndex();
 
   for (const vacancy of vacancies) {
     addVacancyToClusterIndex(vacancy, clusters, prepared, index);
+    yield;
   }
 
   return clusters;
@@ -747,11 +789,7 @@ export function clusterKeys(cluster: VacancyCluster): ClusterKey[] {
   for (const token of prepared.roleTitleTokens) keys.push({ kind: 'title_token', key: token });
   // Членство — только по источникам: основатель тоже лежит в `sources`, а
   // после снятия его id в имени кластера не должен находить кластер.
-  const members = new Set<string>();
-  for (const source of cluster.sources) {
-    if (source.externalId) members.add(source.externalId);
-    if (source.sourceUrl) members.add(source.sourceUrl);
-  }
+  const members = sourceMemberKeys(cluster.sources);
   for (const member of members) keys.push({ kind: 'member', key: member });
   return keys;
 }
@@ -774,6 +812,8 @@ export function vacancyClusterLookup(vacancy: UnifiedVacancy): VacancyClusterLoo
   if (prepared.atsLink) direct.push({ kind: 'ats', key: prepared.atsLink });
   if (prepared.textKey) direct.push({ kind: 'text', key: prepared.textKey });
   for (const member of memberKeysOf(vacancy)) direct.push({ kind: 'member', key: member });
+  const legacy = legacyMemberKeyOf(vacancy);
+  if (legacy) direct.push({ kind: 'member', key: legacy });
   return {
     direct,
     companyTokens: Array.from(prepared.companyTokens),
@@ -781,17 +821,57 @@ export function vacancyClusterLookup(vacancy: UnifiedVacancy): VacancyClusterLoo
   };
 }
 
-/** Чем запись находит свой кластер: id, ссылка, `externalId`, `sourceUrl`. */
+/**
+ * Чем запись находит свой кластер: id, ссылка, пара «площадка:внешний id»,
+ * `sourceUrl`. Голый внешний id не ключ (B752): у VK и у Oracle-тенанта
+ * бывает одна и та же 55418.
+ */
 export interface VacancyMemberRef {
   readonly id: string;
   readonly url?: string;
-  readonly provenance?: { readonly externalId?: string; readonly sourceUrl?: string };
+  readonly provenance?: {
+    readonly sourceId?: string;
+    readonly externalId?: string;
+    readonly sourceUrl?: string;
+  };
+}
+
+/** Ключ члена по внешнему id — только вместе с площадкой (B752). */
+export function sourceMemberKey(source: {
+  readonly sourceId?: string;
+  readonly externalId?: string;
+}): string | undefined {
+  return source.sourceId && source.externalId
+    ? `${source.sourceId}:${source.externalId}`
+    : undefined;
+}
+
+/** Ключи членства кластера: пары источников и их `sourceUrl`. */
+export function sourceMemberKeys(
+  sources: readonly { readonly sourceId?: string; readonly externalId?: string; readonly sourceUrl?: string }[],
+): Set<string> {
+  const members = new Set<string>();
+  for (const source of sources) {
+    const scoped = sourceMemberKey(source);
+    if (scoped) members.add(scoped);
+    if (source.sourceUrl) members.add(source.sourceUrl);
+  }
+  return members;
+}
+
+/**
+ * Голый внешний id из строк до B752: по нему ищут, пока разбиение кластеров
+ * не переписало ключи, но склеивают только с источником той же площадки.
+ */
+export function legacyMemberKeyOf(vacancy: VacancyMemberRef): string | undefined {
+  return vacancy.provenance?.sourceId ? vacancy.provenance.externalId : undefined;
 }
 
 export function memberKeysOf(vacancy: VacancyMemberRef): string[] {
   const keys = new Set<string>([vacancy.id]);
   if (vacancy.url) keys.add(vacancy.url);
-  if (vacancy.provenance?.externalId) keys.add(vacancy.provenance.externalId);
+  const scoped = vacancy.provenance ? sourceMemberKey(vacancy.provenance) : undefined;
+  if (scoped) keys.add(scoped);
   if (vacancy.provenance?.sourceUrl) keys.add(vacancy.provenance.sourceUrl);
   return Array.from(keys);
 }
@@ -822,11 +902,7 @@ interface SerializedRepresentative {
 
 export function serializeRepresentative(cluster: VacancyCluster): string {
   const prepared = prepareCluster(cluster);
-  const members = new Set<string>();
-  for (const source of cluster.sources) {
-    if (source.externalId) members.add(source.externalId);
-    if (source.sourceUrl) members.add(source.sourceUrl);
-  }
+  const members = sourceMemberKeys(cluster.sources);
   const serialized: SerializedRepresentative = {
     f: prepared.fingerprint,
     u: prepared.url,

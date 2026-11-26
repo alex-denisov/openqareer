@@ -1,0 +1,23 @@
+[Unit]
+Description=OpenQareer B777 nightly database backup to S3 (encrypted)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/openqareer-db-backup
+# Копия 33 ГБ, проверка, сжатие и загрузка: до 4 ч, дальше это авария, а не медленная ночь.
+TimeoutStartSec=4h
+Nice=19
+IOSchedulingClass=idle
+CPUWeight=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadOnlyPaths=/srv/openqareer /etc/openqareer
+# База открывается только на чтение, но читателю WAL нужен доступ к её -shm.
+ReadWritePaths=/var/lib/openqareer /var/lib/openqareer-backup
+Environment=XDG_CACHE_HOME=/var/lib/openqareer-backup/.cache

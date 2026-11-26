@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseHhSearchState, HH_STATE_UNREADABLE } from './hhSearchState';
+import { clusterProjectionOf } from './vacancyPoolQuery';
 
 /**
  * Образцы взяты с живой страницы `hh.ru/search/vacancy?text=qa&area=113`
@@ -70,6 +71,21 @@ describe('parseHhSearchState', () => {
     expect(parsed.publishedAt).toBe('2026-09-08T13:07:42.322+03:00');
     expect(parsed.provenance.sourceId).toBe('src-hh-search');
     expect(parsed.provenance.externalId).toBe('133712099');
+    expect(parsed.employerId).toBe('9498112');
+  });
+
+  it('B643: id работодателя доживает до проекции кластера; без id поля нет', () => {
+    const parsed = parseHhSearchState(
+      pageWith({ vacancySearchResult: { totalResults: 1, vacancies: [vacancy] } }),
+      context,
+    ).vacancies[0]!;
+    expect(clusterProjectionOf(parsed).employerId).toBe('9498112');
+    const noId = parseHhSearchState(
+      pageWith({ vacancySearchResult: { totalResults: 1, vacancies: [{ ...vacancy, company: { name: 'Яндекс Крауд' } }] } }),
+      context,
+    ).vacancies[0]!;
+    expect('employerId' in noId).toBe(false);
+    expect('employerId' in clusterProjectionOf(noId)).toBe(false);
   });
 
   it('помечает работодателя-человека по категории площадки (INC-023)', () => {

@@ -1,3 +1,4 @@
+import { CoverageReport } from '../companyDirectory/placementCoverage/coverageReport';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -256,6 +257,14 @@ export class SqliteCompanyDirectoryRepository {
       .prepare(`SELECT COUNT(*) as cnt FROM ${COMPANY_DIRECTORY_TABLE}`)
       .get() as { cnt: number };
     return result.cnt;
+  }
+
+  private coverage: CoverageReport | null = null;
+
+  /** B643-10: admin coverage report; shares the 10-minute totals cache. */
+  coverageReport(): CoverageReport {
+    this.coverage ??= new CoverageReport(this.database);
+    return this.coverage;
   }
 
   close(): void {

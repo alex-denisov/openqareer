@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { gzipSync } from 'node:zlib';
 import { loadPdfEngineBytes } from './pdfEnginePayload';
+import { timeBudget } from '../../../shared/testing/timeBudget';
 
 function asBody(bytes: Uint8Array): ArrayBuffer {
   return bytes.slice().buffer as ArrayBuffer;
@@ -41,7 +42,7 @@ describe('pdf engine payload', () => {
     for (const [url] of fetchImpl.mock.calls) {
       expect(String(url)).toContain('/engine.wasm.gz');
     }
-  }, 20_000);
+  }, timeBudget(20_000));
 
   it('falls back to the plain engine where no compressed copy is published', async () => {
     const raw = engine(40_000);

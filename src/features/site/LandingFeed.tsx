@@ -1,7 +1,6 @@
 import React from 'react';
 import { ArrowRight } from '@phosphor-icons/react';
 import type { LandingFeedRow } from '../../../shared/landingStats';
-import { HERO_SOURCES } from './landingHomeContent';
 
 export const FEED_TICK_MS = 4500;
 export const FEED_SHOWN = 5;
@@ -72,32 +71,32 @@ function FeedList({
   );
 }
 
-function FeedSources({ more }: { readonly more: string }) {
+/** B648: the catalog's reach, never the aggregators first. */
+function FeedReach({ reach }: { readonly reach: readonly string[] }) {
   return (
-    <div className="src" aria-label="Источники вакансий">
-      {HERO_SOURCES.map((name) => (
-        <span className="chip" key={name}>
+    <div className="src" aria-label="Охват каталога">
+      {reach.map((label) => (
+        <span className="chip" key={label}>
           <i />
-          {name}
+          {label}
         </span>
       ))}
-      <span className="more">и ещё {more}</span>
     </div>
   );
 }
 
 export function LandingFeed({
   pool,
-  more,
+  reach,
 }: {
   readonly pool: readonly LandingFeedRow[];
-  /** «320» in «и ещё 320»; a server token while prerendering. */
-  readonly more: string;
+  /** «67 тыс. компаний» and the rest; server tokens while prerendering. */
+  readonly reach: readonly string[];
 }) {
   const { rows, paused, reduced, setPaused, setHeld } = useFeed(pool);
   return (
     <div className="feed">
-      <FeedSources more={more} />
+      <FeedReach reach={reach} />
       <div className="card raised">
         <div className="card-h">
           <b>

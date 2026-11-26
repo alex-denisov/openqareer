@@ -162,7 +162,8 @@ describe('документ публичного каталога (B209)', () => 
 
   it('закрывает от индекса карточку вне индексируемого набора, но оставляет ссылки', () => {
     const html = renderVacancyDocument(buildVacancyDetail(cluster())!);
-    expect(html).toContain('<meta name="robots" content="noindex, follow">');
+    // 11.11: живая страница без noindex; вне набора она просто не в sitemap.
+    expect(html).not.toContain('noindex');
     expect(html).not.toContain('itemtype="https://schema.org/JobPosting"');
   });
 
@@ -171,9 +172,7 @@ describe('документ публичного каталога (B209)', () => 
       cluster({ id: `c${index}`, canonicalTitle: `Data Analyst ${index}` }),
     );
     expect(renderCatalogDocument(buildCatalogPage(many, 10))).not.toContain('noindex');
-    expect(renderCatalogDocument(buildCatalogPage(many, 11))).toContain(
-      '<meta name="robots" content="noindex, follow">',
-    );
+    expect(renderCatalogDocument(buildCatalogPage(many, 11))).not.toContain('noindex');
   });
 
   it('ведёт на первоисточник и называет его, а не выдаёт вакансию за свою', () => {
@@ -223,7 +222,7 @@ describe('документ публичного каталога (B209)', () => 
   it('говорит словами, когда каталог пуст', () => {
     const html = renderCatalogDocument(buildCatalogPage([], 1));
     expect(html).toContain('Каталог пока пуст');
-    expect(html).toContain('noindex');
+    expect(html).not.toContain('noindex');
   });
 
   it('называет способ работы словами во всех трёх случаях', () => {
@@ -559,7 +558,7 @@ describe('JobPosting single-copy public document', () => {
       document.querySelectorAll('script:not([type="application/ld+json"]):not([src])'),
     ).toHaveLength(0);
     const unindexed = renderVacancyDocument({ ...detail, indexable: false });
-    expect(unindexed).toContain('noindex, follow');
+    expect(unindexed).not.toContain('noindex');
     expect(unindexed).not.toContain('itemtype="https://schema.org/JobPosting"');
   });
 });

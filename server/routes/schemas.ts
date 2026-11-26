@@ -76,6 +76,8 @@ export const passwordChangeSchema = z
   .object({
     currentPassword: z.string().min(1).max(256),
     newPassword: passwordField,
+    /** B401: при включённой двухфакторной защите смена пароля требует код. */
+    twoFactorCode: z.string().trim().max(32).optional(),
   })
   .refine((value) => value.currentPassword !== value.newPassword, {
     path: ['newPassword'],
@@ -360,6 +362,12 @@ export const adminVacancyQuerySchema = z.object({
     .optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
+});
+
+export const adminCoverageQuerySchema = z.object({
+  class: z.enum(['site', 'ats', 'linkedin_only', 'aggregator_only', 'none']).optional(),
+  cursor: z.string().min(1).max(500).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
 export const adminVacancySourceTestSchema = z.object({

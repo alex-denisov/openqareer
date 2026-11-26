@@ -1,0 +1,55 @@
+/* B401: двухфакторная защита в n04 — подключение (n04d) и резервные коды (n04e). */
+@layer b640.sections {
+  .b640 .fa-setup {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--career-space-4);
+    align-items: start;
+    grid-column: 1 / -1;
+  }
+  /* Поля шириной 295, как в макете n04d: там их задаёт ключ в одну строку, у нас ключ переносится. */
+  .b640 .fa-fields { display: grid; gap: var(--career-space-3); min-inline-size: 18.4375rem; }
+  .b640 .fa-l { color: var(--career-text-soft); font-size: var(--career-text-xs); font-weight: 600; }
+  .b640 .fa-qr {
+    inline-size: 10rem;
+    block-size: 10rem;
+    border-radius: var(--career-radius-sm);
+    border: var(--career-border-width) solid var(--career-line);
+  }
+  .b640 .fa-key { display: flex; align-items: flex-start; gap: var(--career-space-2); }
+  .b640 .fa-key code { display: grid; min-inline-size: 0; padding-block-start: var(--career-space-2); }
+  .b640 .fa-key code,
+  .b640 .fa-codes code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: var(--career-text-sm);
+    color: var(--career-text);
+    white-space: nowrap;
+  }
+  .b640 .fa-codes {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--career-space-2) var(--career-space-4);
+    margin: 0;
+    padding: var(--career-space-3) var(--career-space-4);
+    list-style: none;
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-sm);
+    background: var(--career-surface);
+  }
+  .b640 .fa-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--career-space-2); }
+  /* row-act тянет поля на −8 px: при малом зазоре зоны клика «Скачать» и «Готово» перекрывались. */
+  .b640 .fa-bar .row-act { margin-inline: 0; }
+  @media (max-width: 767px) {
+    .b640 .fa-setup { grid-template-columns: minmax(0, 1fr); justify-items: start; }
+    .b640 .fa-codes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    /* n04e на 390: «Скопировать коды» во всю ширину, ниже «Скачать» и «Готово». */
+    .b640 .fa-fields { min-inline-size: min(100%, 18.4375rem); }
+    .b640 .fa-done .fa-bar > .btn.is-primary { flex: 1 1 100%; justify-content: center; }
+    /* B645 n04e на 390: «Скачать» тянется до «Готово» справа, без линии над строкой — как в макете. */
+    .b640 .set-row.fa-done-row { border-block-start: 0; padding-block-start: 0; }
+    .b640 .fa-done-row .fa-bar { flex: 1 1 auto; flex-wrap: nowrap; gap: var(--career-space-1); }
+    .b640 .fa-done-row .fa-bar > .btn { flex: 1 1 auto; justify-content: center; }
+    .b640 .fa-done-row .fa-bar > .row-act { padding-inline: var(--career-space-2) 0; }
+  }
+}

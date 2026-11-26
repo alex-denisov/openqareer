@@ -5,8 +5,6 @@
  */
 import { TARIFF_LEVELS, type TariffTierId } from '../tariffs/tariffsData';
 
-export const HERO_SOURCES = ['hh.ru', 'LinkedIn', 'Telegram-каналы', 'Сайты компаний'] as const;
-
 export const HOW_STEPS = [
   ['Сильное резюме из вашего опыта', 'Из старого резюме или профиля hh.ru и LinkedIn.'],
   ['Должности и зарплаты', 'Куда вы проходите уже сейчас и сколько там платят.'],

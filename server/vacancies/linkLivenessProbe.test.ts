@@ -207,3 +207,22 @@ describe('B200 · проба по сети', () => {
     });
   });
 });
+
+describe('Career Ops · HTML evidence', () => {
+  it.each([
+    ['<title>Just a moment...</title>', 'unknown'],
+    ['<h1>This job is no longer available.</h1>', 'gone'],
+    ['<title>Senior engineer</title><footer>This job is no longer available.</footer>', 'open'],
+    ['<link rel="canonical" href="/acme/jobs/234567">', 'unknown'],
+  ])('judges ATS HTTP 200 using the job page: %s', async (html, verdict) => {
+    const probe = createHttpLinkProbe({
+      fetchImpl: async (_url, init) => {
+        expect(init?.method).toBe('GET');
+        expect(init?.redirect).toBe('manual');
+        return new Response(html, { headers: { 'content-type': 'text/html' } });
+      },
+    });
+    const url = 'https://job-boards.greenhouse.io/acme/jobs/123456';
+    expect(judgeLinkOutcome(await probe(url), url).verdict).toBe(verdict);
+  });
+});

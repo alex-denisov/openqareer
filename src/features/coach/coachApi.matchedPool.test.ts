@@ -86,7 +86,8 @@ describe('отказ чтения подбора называется отказ
     const items = await getMatchedVacancies();
     expect(items).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/candidate/matched-vacancies?offset=0',
+      // B729: первая страница несёт пояс кандидата для чисел «Даты».
+      expect.stringMatching(/^\/api\/v1\/candidate\/matched-vacancies\?offset=0&tz=[\w%/+-]+$/),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });

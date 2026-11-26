@@ -1,11 +1,12 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it, vi } from 'vitest';
 import { SmmAgent } from './smmAgent';
-import { pollRetryDelayMs, SmmBot } from './smmBot';
+import { SmmBot } from './smmBot';
 import type { ChatTurn, SmmModel } from './smmModel';
 import { SmmStore } from './smmStore';
-import { TelegramApiError } from './smmTelegram';
+import { createSmmTelegram } from './smmTelegram';
 import type { InlineButton, SmmTelegram, TelegramUpdate } from './smmTelegram';
+import type { LinkReaderDeps } from './smmLinkReader';
 
 const CHAT = '-100777';
 const VALID = JSON.stringify({
@@ -24,12 +25,39 @@ interface Sent {
   buttons?: readonly InlineButton[];
 }
 
-function setup(replies: Array<string | null> = [VALID]) {
+const variant = (hook: string) => ({
+  cluster: 'резюме и отклик',
+  hook,
+  parts: [`${hook}. Дальше по делу.`],
+  link: '',
+  check: '',
+});
+const EXAMPLE = JSON.stringify({
+  breakdown: {
+    hook: 'Признание с цифрой в первой строке',
+    structure: 'Проблема, поворот, три приема',
+    tone: 'Разговорный, от первого лица',
+    cta: 'Вопрос к читателю',
+  },
+  variants: [
+    variant('Мой отклик читали шесть секунд'),
+    variant('Я перестал писать письма'),
+    variant('Рекрутер видит три слова'),
+  ],
+});
+const ARTICLE_HTML =
+  '<html><head><meta property="og:title" content="Почему отклик читают за шесть секунд"><meta name="author" content="Иван Петров"></head>' +
+  '<body><article><p>Первые строки отклика решают всё: если в них нет задачи, которую вы решили, дальше не читают.</p></article></body></html>';
+const articleLinks: LinkReaderDeps = { readPage: async () => ({ ok: true, html: ARTICLE_HTML }) };
+
+function setup(replies: Array<string | null> = [VALID], links?: LinkReaderDeps) {
   const store = new SmmStore(new DatabaseSync(':memory:'));
   const prompts: ChatTurn[][] = [];
+  const budgets: unknown[] = [];
   const model: SmmModel = {
-    async complete(turns, accept) {
+    async complete(turns, accept, budget) {
       prompts.push([...turns]);
+      budgets.push(budget);
       const next = replies.length > 1 ? replies.shift() : replies[0];
       return next && (!accept || accept(next)) ? next : null;
     },
@@ -40,9 +68,6 @@ function setup(replies: Array<string | null> = [VALID]) {
   const sent: Sent[] = [];
   let nextId = 100;
   const telegram: SmmTelegram = {
-    async getUpdates() {
-      return [];
-    },
     async send(_chat, text, buttons) {
       sent.push({ text, buttons });
       return nextId++;
@@ -63,8 +88,9 @@ function setup(replies: Array<string | null> = [VALID]) {
     now,
     log: () => {},
     autopost: true,
+    links,
   });
-  return { store, bot, sent, prompts };
+  return { store, bot, sent, prompts, budgets };
 }
 
 const message = (text: string, extra: Record<string, unknown> = {}): TelegramUpdate => ({
@@ -121,11 +147,130 @@ describe('SmmBot', () => {
     expect(prompts.at(-1)?.[1].content).toContain('короче и без капса');
   });
 
-  it('a screenshot becomes a new post on its pattern, wrapped as untrusted data', async () => {
-    const { bot, sent, prompts } = setup();
-    await bot.handle(message('', { photo: [{ file_id: 'f' }] }));
+  it('a screenshot is broken down like a link, wrapped as untrusted data', async () => {
+    const { bot, sent, prompts } = setup([EXAMPLE]);
+    await bot.handle(
+      message('', { photo: [{ file_id: 'f' }], text: undefined, caption: 'про отказы' }),
+    );
     expect(sent.at(-1)?.buttons).toHaveLength(3);
-    expect(prompts.at(-1)?.[1].content).toContain('<untrusted_viral_post>');
+    expect(prompts.at(-1)?.[1].content).toContain('<untrusted_example>');
+    expect(prompts.at(-1)?.[1].content).toContain('Тема владельца: про отказы');
+  });
+
+  it('a link: the model gets the page text, not the address alone', async () => {
+    const { bot, prompts } = setup([EXAMPLE], articleLinks);
+    await bot.handle(message('https://habr.com/ru/articles/1/ отказы без причины'));
+    const task = prompts.at(-1)?.[1].content ?? '';
+    expect(task).toContain('Первые строки отклика решают всё');
+    expect(task).toContain('«Почему отклик читают за шесть секунд», автор Иван Петров');
+    expect(task).toContain('Тема владельца: отказы без причины');
+    expect(task).not.toContain('habr.com');
+  });
+
+  it('a link: the breakdown call gets a larger budget with low reasoning', async () => {
+    const { bot, budgets } = setup([EXAMPLE], articleLinks);
+    await bot.handle(message('https://habr.com/ru/articles/1/'));
+    expect(budgets.at(-1)).toEqual({ outputTokens: 16_000, reasoningEffort: 'low' });
+  });
+
+  it('a link: breakdown first, then each variant waits for the owner with its own buttons', async () => {
+    const { bot, sent, store } = setup([EXAMPLE], articleLinks);
+    await bot.handle(message('https://habr.com/ru/articles/1/'));
+    const breakdown = sent.find((s) => s.text.startsWith('Разбор примера'));
+    expect(breakdown?.text).toContain('Хук: Признание с цифрой в первой строке');
+    expect(breakdown?.text).toContain('Финал: Вопрос к читателю');
+    expect(sent.filter((s) => s.buttons?.length === 3)).toHaveLength(3);
+    expect(
+      store.recentPosts(5).every((p) => p.status === 'proposed' && p.origin === 'example'),
+    ).toBe(true);
+  });
+
+  it('a page that cannot be read: one honest line, a screenshot request, no model call', async () => {
+    const { bot, sent, prompts } = setup([EXAMPLE], {
+      readPage: async () => ({ ok: false, reason: 'failed' }),
+    });
+    await bot.handle(message('https://medium.com/@a/post-1'));
+    expect(sent.at(-1)?.text).toBe(
+      'Не смог прочитать medium.com, текст я не видел. Пришлите снимок экрана.',
+    );
+    expect(prompts).toHaveLength(0);
+  });
+
+  it('fewer than two usable variants is not delivered as a breakdown', async () => {
+    const one = JSON.stringify({ ...JSON.parse(EXAMPLE), variants: [variant('Один вариант')] });
+    const { bot, sent } = setup([one], articleLinks);
+    await bot.handle(message('https://habr.com/ru/articles/1/'));
+    expect(sent.some((s) => s.text.startsWith('Разбор примера'))).toBe(false);
+    expect(sent.at(-1)?.text).toBe('Модели не ответили, пришлите пример еще раз.');
+  });
+
+  it('a reply to a draft with a link is a metrics report, not a new example', async () => {
+    const readPage = vi.fn(async () => ({ ok: true as const, html: ARTICLE_HTML }));
+    const { bot, store } = setup([VALID, 'Хороший охват.'], { readPage });
+    await bot.handle(message('/post'));
+    await bot.handle(
+      message('1200 просмотров, вот пост https://www.threads.com/@a/post/X', {
+        reply_to_message: { message_id: 100 },
+      }),
+    );
+    expect(readPage).not.toHaveBeenCalled();
+    expect(store.getPost(1)?.metrics).toContain('1200 просмотров');
+  });
+
+  it('page title and author reach the model only as untrusted data', async () => {
+    const { bot, prompts } = setup([EXAMPLE], articleLinks);
+    await bot.handle(message('https://habr.com/ru/articles/1/'));
+    expect(prompts.at(-1)?.[1].content).toMatch(
+      /<untrusted_example_source>\n«Почему отклик читают за шесть секунд», автор Иван Петров\n<\/untrusted_example_source>/u,
+    );
+  });
+
+  it('/мой saves the owner post; it and his strong posts set the voice, weak strategy posts do not', async () => {
+    const { bot, store, prompts, sent } = setup([EXAMPLE], articleLinks);
+    await bot.handle(
+      message('/мой Я нанял пятьсот человек и ни разу не читал сопроводительное письмо целиком.'),
+    );
+    expect(sent.at(-1)?.text).toMatch(/^Сохранил ваш пост #1/u);
+    const strong = store.addPost(
+      {
+        cluster: 'поиск работы',
+        hook: 'сильный',
+        parts: ['Сильный пост стратегии'],
+        link: null,
+        origin: 'schedule',
+      },
+      1,
+    );
+    const weak = store.addPost(
+      {
+        cluster: 'поиск работы',
+        hook: 'слабый',
+        parts: ['Слабый пост стратегии'],
+        link: null,
+        origin: 'schedule',
+      },
+      2,
+    );
+    const mid = store.addPost(
+      {
+        cluster: 'поиск работы',
+        hook: 'средний',
+        parts: ['Средний пост по примеру'],
+        link: null,
+        origin: 'threads_link',
+      },
+      3,
+    );
+    for (const post of [strong, weak, mid]) store.decide(post.id, 'accepted', null, 4);
+    store.setMetrics(strong.id, '3,1к просмотров, 25 переходов');
+    store.setMetrics(weak.id, '40 просмотров');
+    store.setMetrics(mid.id, '900 просмотров');
+    await bot.handle(message('https://habr.com/ru/articles/1/'));
+    const task = prompts.at(-1)?.[1].content ?? '';
+    expect(task).toContain('<untrusted_owner_posts>');
+    expect(task.indexOf('ни разу не читал')).toBeLessThan(task.indexOf('Сильный пост стратегии'));
+    expect(task).toContain('Средний пост по примеру');
+    expect(task).not.toContain('Слабый пост стратегии');
   });
 
   it('numbers in a reply to a draft are stored as performance', async () => {
@@ -177,28 +322,31 @@ describe('SmmBot', () => {
     expect(store.recentPosts(5)).toHaveLength(0);
   });
 
-  it('answers 429 and 409 with a minute pause and grows other delays', () => {
-    expect(pollRetryDelayMs(new TelegramApiError('getUpdates', 429), 1)).toBe(60_000);
-    expect(pollRetryDelayMs(new TelegramApiError('getUpdates', 409), 5)).toBe(60_000);
-    expect(pollRetryDelayMs(new Error('x'), 1)).toBeLessThanOrEqual(6_000);
-    expect(pollRetryDelayMs(new Error('x'), 20)).toBeLessThanOrEqual(360_000);
+  it('a repeated webhook update is handled once (B732)', async () => {
+    const { bot, sent } = setup();
+    await bot.receive({ ...message('/post'), update_id: 50 });
+    const after = sent.length;
+    await bot.receive({ ...message('/post'), update_id: 50 });
+    await bot.receive({ ...message('/post'), update_id: 49 });
+    expect(after).toBeGreaterThan(0);
+    expect(sent).toHaveLength(after);
   });
 
-  it('a database error while polling is logged, not thrown out of the loop', async () => {
-    vi.useFakeTimers();
-    try {
-      const { store, bot } = setup();
-      vi.spyOn(store, 'getState').mockImplementationOnce(() => {
-        throw new Error('database is locked');
-      });
-      const polling = bot.poll();
-      await vi.advanceTimersByTimeAsync(0);
-      bot.stop();
-      await vi.advanceTimersByTimeAsync(10_000);
-      await expect(polling).resolves.toBeUndefined();
-    } finally {
-      vi.useRealTimers();
-    }
+  it('a handler error is logged, not thrown into the webhook (B732)', async () => {
+    const { store, bot } = setup();
+    vi.spyOn(store, 'getState').mockImplementationOnce(() => {
+      throw new Error('database is locked');
+    });
+    await expect(bot.receive(message('/post'))).resolves.toBeUndefined();
+  });
+});
+
+describe('SMM без опроса Bot API (B732)', () => {
+  it('клиент SMM не умеет getUpdates: обновления приходят вебхуком', () => {
+    const fetchImpl = vi.fn();
+    expect(
+      Object.keys(createSmmTelegram('1:x', fetchImpl as unknown as typeof fetch)),
+    ).not.toContain('getUpdates');
   });
 });
 

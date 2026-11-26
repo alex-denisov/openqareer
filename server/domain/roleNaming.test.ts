@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ROLE_TITLE_TRANSLATION_INSTRUCTIONS,
+  ROLE_NAMING_JSON_SCHEMA,
   ROLE_NAMING_PROMPT_VERSION,
+  checkedTitleRu,
   dropOrganisationTitles,
   roleNamingInstructions,
   roleNamingSchema,
@@ -83,6 +86,127 @@ describe('роль держится на направлении опыта (28.1
     const text = roleNamingInstructions('ru');
     expect(text).toContain('Не называй роль по одному упоминанию технологии или навыка');
     expect(text).toContain('место работы или минимум два факта');
-    expect(ROLE_NAMING_PROMPT_VERSION).toBe(3);
+    expect(ROLE_NAMING_PROMPT_VERSION).toBe(7);
+  });
+});
+
+describe('B748: русское название роли от модели проходит проверку', () => {
+  it('принимает перевод с кириллицей, сохранившими аббревиатурами', () => {
+    expect(
+      checkedTitleRu('Head of IT Service Management', 'Руководитель управления ИТ-услугами (IT)'),
+    ).toBe('Руководитель управления ИТ-услугами (IT)');
+    expect(checkedTitleRu('Co-Founder', 'Сооснователь')).toBe('Сооснователь');
+    expect(checkedTitleRu('AI Solutions Architect', 'Архитектор AI-решений')).toBe(
+      'Архитектор ИИ-решений',
+    );
+  });
+
+  it('отвергает перевод без кириллицы, длинный, без аббревиатуры или совпадающий с исходным', () => {
+    expect(checkedTitleRu('Co-Founder', 'Co-Founder')).toBeNull();
+    expect(checkedTitleRu('AI Solutions Architect', 'Архитектор решений')).toBeNull();
+    expect(checkedTitleRu('Co-Founder', 'С'.repeat(81))).toBeNull();
+    expect(checkedTitleRu('Co-Founder', '')).toBeNull();
+    expect(checkedTitleRu('Co-Founder', undefined)).toBeNull();
+  });
+
+  it('«ИИ» в переводе — та же аббревиатура, что AI', () => {
+    expect(checkedTitleRu('AI Consultant', 'Консультант по ИИ')).toBe('Консультант по ИИ');
+    expect(checkedTitleRu('AI Solutions Architect', 'Архитектор ИИ-решений')).toBe(
+      'Архитектор ИИ-решений',
+    );
+  });
+
+  it('инструкция показывает перевод роли с AI: аббревиатура остаётся, остальное по-русски', () => {
+    const text = roleNamingInstructions('en');
+    expect(text).toContain('AI Consultant');
+    expect(text).toContain('AI-консультант');
+  });
+
+  it('Operations — эксплуатация, а не инфраструктура: пример в обеих инструкциях', () => {
+    expect(roleNamingInstructions('en')).toContain('Head of IT Operations →');
+    expect(roleNamingInstructions('en')).toContain('Руководитель ИТ-эксплуатации');
+    expect(ROLE_TITLE_TRANSLATION_INSTRUCTIONS).toContain('Руководитель ИТ-эксплуатации');
+  });
+
+  it('titleRu всегда русской формулировкой вакансии, аббревиатуры остаются', () => {
+    for (const language of ['en', 'ru'] as const) {
+      expect(roleNamingInstructions(language)).toContain(
+        'titleRu всегда русской формулировкой вакансии',
+      );
+    }
+  });
+
+  // B748 (prod 23.11): «VP по ИТ-эксплуатации» — уровень латиницей вместо русского слова.
+  it('уровень не латиницей: VP, Head, Lead и редкие CxO вместо русского слова отвергаются', () => {
+    expect(checkedTitleRu('VP of IT Operations', 'VP по ИТ-эксплуатации')).toBeNull();
+    expect(checkedTitleRu('Head of AI / ML', 'Head направления AI/ML')).toBeNull();
+    expect(checkedTitleRu('Lead Product Manager', 'Lead продакт-менеджер')).toBeNull();
+    expect(checkedTitleRu('Chief Customer Officer', 'CCO по работе с клиентами')).toBeNull();
+    expect(checkedTitleRu('SVP of Sales', 'SVP по продажам')).toBeNull();
+  });
+
+  it('уровень по-русски проходит: VP в переводе не обязателен, CxO в скобках как в онтологии', () => {
+    expect(checkedTitleRu('VP of IT Operations', 'Вице-президент по ИТ-эксплуатации')).toBe(
+      'Вице-президент по ИТ-эксплуатации',
+    );
+    expect(checkedTitleRu('Chief Customer Officer', 'Директор по работе с клиентами (CCO)')).toBe(
+      'Директор по работе с клиентами (CCO)',
+    );
+    expect(checkedTitleRu('COO', 'Операционный директор (COO)')).toBe(
+      'Операционный директор (COO)',
+    );
+    expect(checkedTitleRu('CTO', 'CTO')).toBeNull();
+  });
+
+  it('правило уровня — в обеих инструкциях, с примером VP', () => {
+    for (const text of [
+      roleNamingInstructions('en'),
+      roleNamingInstructions('ru'),
+      ROLE_TITLE_TRANSLATION_INSTRUCTIONS,
+    ]) {
+      expect(text).toContain('VP of IT Operations → Вице-президент по ИТ-эксплуатации');
+      expect(text).toContain('CEO, CTO, CIO, CFO, COO');
+    }
+  });
+
+  it('русское название роли уже по-русски — перевод не нужен', () => {
+    expect(checkedTitleRu('Операционный директор', 'Операционный директор')).toBeNull();
+  });
+
+  it('схема ответа читает titleRu и отбрасывает непрошедший проверку', () => {
+    const parsed = roleNamingSchema.parse({
+      roles: [
+        {
+          title: 'Co-Founder',
+          titleRu: 'Сооснователь',
+          reason: 'основал компанию',
+          evidenceRefs: ['memory:1'],
+        },
+        {
+          title: 'AI Solutions Architect',
+          titleRu: 'Architect',
+          reason: 'строил AI',
+          evidenceRefs: ['memory:2'],
+        },
+      ],
+    });
+    expect(parsed.roles.map((role) => role.titleRu)).toEqual(['Сооснователь', undefined]);
+  });
+
+  it('JSON-схема и инструкция просят titleRu, версия промпта поднята', () => {
+    const item = ROLE_NAMING_JSON_SCHEMA.schema.properties.roles.items;
+    expect(item.required).toContain('titleRu');
+    expect(item.properties.titleRu).toEqual({ type: 'string' });
+    expect(roleNamingInstructions('en')).toContain('titleRu');
+    expect(ROLE_NAMING_PROMPT_VERSION).toBe(7);
+  });
+});
+
+describe('B767: «AI» в русском названии от модели', () => {
+  it('становится «ИИ»', () => {
+    expect(checkedTitleRu('AI Consultant', 'AI-консультант')).toBe('ИИ-консультант');
+    expect(checkedTitleRu('Head of AI / ML', 'Руководитель направления AI/ML')).toBe(
+      'Руководитель направления ИИ/ML',
+    );
   });
 });

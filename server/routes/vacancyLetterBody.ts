@@ -31,6 +31,8 @@ export interface LetterWritingRequest {
   readonly profile: string;
   /** Факты с переведёнными формулировками: проверка знает и их. */
   readonly facts: readonly VacancyPitchInputFact[];
+  /** Условия поиска: места и готовность к переезду, которые кандидат назвал сам. */
+  readonly conditions?: readonly string[];
   readonly language: PitchLanguage;
   /** Только когда кандидат выбрал язык сам. */
   readonly chosenLanguage?: PitchLanguage;
@@ -43,6 +45,8 @@ export interface LetterWritingRequest {
   readonly candidateName?: string;
   /** B639: место кандидата в компании вакансии или её группе (`letterCompanyLink`). */
   readonly companyLink?: string;
+  /** B682: пожелание кандидата к другому варианту письма. */
+  readonly wish?: string;
 }
 
 export interface WrittenLetterBody {
@@ -76,6 +80,11 @@ function letterGateSources(request: LetterWritingRequest): LetterGateSources {
   return {
     language,
     resumeAttached,
+    conditions: request.conditions ?? [],
+    ...(vacancy.location ? { vacancyLocation: vacancy.location } : {}),
+    vacancyNames: [vacancy.title, vacancy.company, vacancy.recipient?.name, vacancy.recipient?.role].flatMap(
+      (part) => (part ? [part] : []),
+    ),
     candidate: [...profile.split('\n'), ...filterUsablePitchFacts(facts).map((fact) => fact.statement)],
     vacancy: [
       vacancy.title,
@@ -102,7 +111,7 @@ function writerInput(
   letter: LetterWritingRequest,
   review: (body: string) => readonly string[],
 ): CoverLetterWriteInput {
-  const { vacancy, profile, gender, resumeAttached, candidateName, companyLink } = letter;
+  const { vacancy, profile, gender, resumeAttached, candidateName, companyLink, wish } = letter;
   return {
     profile,
     vacancy: {
@@ -119,6 +128,7 @@ function writerInput(
     ...(resumeAttached ? {} : { resumeAttached: false }),
     ...(candidateName?.trim() ? { candidateName: candidateName.trim() } : {}),
     ...(companyLink ? { companyLink } : {}),
+    ...(wish ? { wish } : {}),
     review,
   };
 }
@@ -126,7 +136,7 @@ function writerInput(
 /** Model writing is bounded. `refused` means the whole chain refused: the route answers with an error. */
 export async function writeCoverLetterBody(
   writer: CoverLetterWriter | undefined,
-  request: FastifyRequest,
+  request: Pick<FastifyRequest, 'log'>,
   letter: LetterWritingRequest,
 ): Promise<WrittenLetterBody> {
   if (!writer) return {};

@@ -1,23 +1,22 @@
+import { leanFitView } from '../vacancies/leanMatchedPage';
+import { isCountedLine } from '../../shared/vacancyWorkTerm';
+import { VACANCY_FIT_ALGORITHM_VERSION } from '../../shared/vacancyFit';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
-import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
-import { compareFitRelevance, exactRoleTest, type ExactRoleTest } from './matchedFitRelevance';
-import {
-  compareFitDirected,
-  compareMoney,
-  DEFAULT_VACANCY_SORT,
-  type VacancySort,
-} from '../../shared/vacancySort';
-import { createMoneyReader, type MoneyReader } from './matchedVacancyMoney';
+import { compareListed, compareListedGroup } from '../../shared/vacancyListOrder';
+import { exactRoleTest, type ExactRoleTest } from './matchedFitRelevance';
+import { DEFAULT_VACANCY_SORT, type VacancySort } from '../../shared/vacancySort';
+import { compareMoneyRank, createPreparedMoney, type MoneyReader } from './matchedVacancyMoney';
 import type { RouteDeps } from './deps';
+import type { ListPhasesMs } from './matchedListPhases';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyFitView } from '../../shared/vacancyFit';
-import { vacancyFitStage } from '../../shared/vacancyFitPercent';
+import { vacancyFitPercent, vacancyFitStage } from '../../shared/vacancyFitPercent';
 import { createVacancyFitContextReader, readVacancyFitTarget } from './vacancyFitContext';
 import { createGeoBlocker } from './vacancyFitGeoBlocks';
 import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { createCandidateWindowCache } from './candidateWindowCache';
 import { mapYielding } from '../vacancies/mapYielding';
-import { wantedCompaniesBreakTies, wantedCompanyKeys } from '../domain/wantedCompanyOrder';
+import { queueRowsYielding } from './queueRowsYielding';
 
 const FIT_ORDER_WINDOW_MS = 60_000;
 /** Столько точных разборов считается между уступками event loop при фоновом пересчёте. */
@@ -81,7 +80,7 @@ export function withVacancyFitOrder(
   isExact?: ExactRoleTest,
 ) {
   const relevance = sort.by === 'fit' && sort.dir === 'desc' ? isExact : undefined;
-  const money = sort.by === 'money' ? createMoneyReader(deps) : undefined;
+  const money = sort.by === 'money' ? createPreparedMoney(deps) : undefined;
   const reader = createFitViewReader(deps, candidateId, log, use);
   const stamp = reader ? fitProfileStamp(deps, candidateId) : 'none';
   const key = `${candidateId}|${stamp}`;
@@ -105,13 +104,23 @@ export function withVacancyFitOrder(
     fitViewsCache.write(key, patched);
     return orderByFit(items, patched, sort, money, relevance);
   };
+  let phases: ListPhasesMs = {};
   const prepare = async (items: readonly MatchedVacancyItem[]): Promise<number> => {
+    const startedAt = performance.now();
     const { rows, views } = reader ? await prepareFitViews(key, reader, items) : NOTHING_PREPARED;
-    if (relevance) await readRolesYielding(items, relevance);
+    const rolesAt = performance.now();
+    const roles = relevance ? await readRolesYielding(items, relevance) : NO_ROLE_TURNS;
+    phases = {
+      prepareFitViewsWall: roundMs(rolesAt - startedAt),
+      prepareRolesWall: roundMs(performance.now() - rolesAt),
+      prepareRoles: roundMs(roles.busyMs),
+      prepareRoleTurns: roles.turns,
+    };
+    await money?.prepare(items);
     prepared = views;
     return rows;
   };
-  return Object.assign(order, { prepare, fitStamp: stamp });
+  return Object.assign(order, { prepare, preparePhases: () => phases, fitStamp: stamp });
 }
 
 /** Порядок подборки и то, от чего он зависит помимо выдачи (ключ кэша списка). */
@@ -124,6 +133,8 @@ export type MatchedOrder = ((items: readonly MatchedVacancyItem[]) => MatchedVac
   readonly fitStamp: string;
   /** Reads the percents the order needs without holding the event loop; call before the order. Resolves to the rows read. */
   readonly prepare: (items: readonly MatchedVacancyItem[]) => Promise<number>;
+  /** B770: what the last `prepare` spent, by phase. */
+  readonly preparePhases?: () => ListPhasesMs;
 };
 
 /**
@@ -137,25 +148,14 @@ export function matchedOrderChoiceKeys(
 ): Pick<MatchedOrder, 'cacheKey' | 'fitStamp'> {
   return {
     fitStamp: deps.vacancyMechanics ? fitProfileStamp(deps, candidateId) : 'none',
-    cacheKey: sort.by === 'fit' ? fitChoiceKey(deps, candidateId) : '',
+    cacheKey: sort.by === 'fit' ? FIT_ORDER_RULE : '',
   };
 }
 
 /** A stored list built by an older rule must not be served again: part of the list's `choice`. */
-const FIT_ORDER_RULE = 'role-v1';
+export const FIT_ORDER_RULE = `percent-date-v2:${VACANCY_FIT_ALGORITHM_VERSION}`;
 
-function fitChoiceKey(deps: RouteDeps, candidateId: string): string {
-  return `${FIT_ORDER_RULE}|${wantedCacheKey(deps, candidateId)}`;
-}
-
-function wantedCacheKey(deps: RouteDeps, candidateId: string): string {
-  return [...wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId)].sort().join(',');
-}
-
-/**
- * 28.10: «по совпадению» ведёт процент; вакансии компаний «Хочу» поднимаются только
- * среди вакансий с тем же процентом (B422 стал вторым ключом). «Деньги» отметку не учитывают.
- */
+/** B789 (владелец 25.11): процент, затем дата — отметка «Хочу» и роль порядок процентов не меняют. */
 export function withWantedCompanyOrder(
   deps: RouteDeps,
   candidateId: string,
@@ -167,20 +167,9 @@ export function withWantedCompanyOrder(
   const isExact = targetRoles.length > 0 ? exactRoleTest(targetRoles) : undefined;
   const byFit = withVacancyFitOrder(deps, candidateId, sort, log, use, isExact);
   if (sort.by !== 'fit') return Object.assign(byFit, { cacheKey: '', dataKey: '' });
-  const wanted = wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId);
-  // Кэш списка держит уже упорядоченную подборку: новая отметка должна давать новый ключ.
-  const cacheKey = fitChoiceKey(deps, candidateId);
   // 01.11: a result that landed must reach the ordered list too, not wait out the list window.
   const dataKey = String(deps.vacancyMechanics?.cachedVacancyIds(candidateId).size ?? 0);
-  return Object.assign(
-    (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] =>
-      wantedCompaniesBreakTies(byFit(items), wanted, (left, right) =>
-        isExact && sort.dir === 'desc'
-          ? compareFitRelevance(rankedRow(left), rankedRow(right), isExact)
-          : compareFitDirected(left.explanation.fitView, right.explanation.fitView, sort.dir),
-      ),
-    { cacheKey, dataKey, prepare: byFit.prepare, fitStamp: byFit.fitStamp },
-  );
+  return Object.assign(byFit, { cacheKey: FIT_ORDER_RULE, dataKey });
 }
 
 /** Rows read on one list request when their percent landed after the order snapshot. */
@@ -208,6 +197,50 @@ interface FitViewReader {
   scoredIds(items: readonly MatchedVacancyItem[]): string[];
   read(ids: readonly string[]): Map<string, VacancyFitView>;
   readYielding(ids: readonly string[]): Promise<Map<string, VacancyFitView>>;
+  /** B702 part 2: the percents of the previous process under this key. */
+  restore(key: string): FitViews | undefined;
+  /** Keeps them for the next one, at most once per `SEAL_VIEWS_EVERY_MS`. */
+  keep(key: string, views: FitViews): void;
+}
+
+const SEAL_VIEWS_EVERY_MS = 5 * 60_000;
+/** A row's shape or rule of another release must not be restored. */
+const SEALED_VIEWS_SHAPE = `views-v1:${VACANCY_FIT_ALGORITHM_VERSION}`;
+const stampOf = (key: string) => `${SEALED_VIEWS_SHAPE}|${key.slice(key.indexOf('|') + 1)}`;
+const viewsSealedAt = new WeakMap<object, Map<string, number>>();
+
+type FitRuntime = NonNullable<RouteDeps['vacancyMechanics']>;
+
+function restoreFitViews(runtime: FitRuntime, candidateId: string, key: string): FitViews | undefined {
+  try {
+    const text = runtime.readSealedFitViews?.(candidateId, stampOf(key));
+    return text === undefined ? undefined : new Map(JSON.parse(text) as [string, VacancyFitView][]);
+  } catch {
+    return undefined;
+  }
+}
+
+async function keepFitViews(
+  runtime: FitRuntime,
+  candidateId: string,
+  key: string,
+  views: FitViews,
+  log: FitOrderLog | undefined,
+): Promise<void> {
+  if (views.size === 0 || !runtime.sealFitViews) return;
+  const sealed = viewsSealedAt.get(runtime) ?? new Map<string, number>();
+  viewsSealedAt.set(runtime, sealed);
+  if (Date.now() - (sealed.get(key) ?? 0) < SEAL_VIEWS_EVERY_MS) return;
+  sealed.set(key, Date.now());
+  try {
+    const rows = await mapYielding([...views], (entry) => JSON.stringify(entry));
+    await runtime.sealFitViews(candidateId, stampOf(key), `[${rows.join(',')}]`);
+  } catch (error) {
+    log?.warn(
+      { errorName: error instanceof Error ? error.name : 'UnknownError', rows: views.size },
+      'fit-views-seal-failed',
+    );
+  }
 }
 
 function createFitViewReader(
@@ -254,19 +287,29 @@ function createFitViewReader(
     },
     read: (ids) => collect(ids.map(readRow)),
     readYielding: async (ids) => collect(await mapYielding(ids, readRow)),
+    restore: (key) => restoreFitViews(runtime, candidateId, key),
+    keep: (key, views) => void keepFitViews(runtime, candidateId, key, views, log),
   };
 }
 
 /** PRB-041: each row retries, seals and writes, so it runs after the read and in slices. */
 function requeueStaleRows<Input>(
-  runtime: { enqueue(input: Input): unknown },
+  runtime: {
+    enqueue(input: Input): unknown;
+    fitJobHoldsKey?(input: Input): boolean;
+    takeFitRefreshSlot?(): boolean;
+  },
   inputs: readonly Input[],
   log?: FitOrderLog,
 ): void {
   if (inputs.length === 0) return;
   const rows = inputs.slice(0, STALE_REFIT_LIMIT);
   void yieldToEventLoop()
-    .then(() => mapYielding(rows, (input) => runtime.enqueue(input)))
+    .then(() => queueRowsYielding(rows, (input) => {
+        // B794: a reread selection spends the day's ceiling too; the shown page and the card do not.
+        if (runtime.fitJobHoldsKey?.(input)) return;
+        if (runtime.takeFitRefreshSlot?.() ?? true) runtime.enqueue(input);
+      }))
     .catch((error: unknown) =>
       log?.warn(
         { errorName: error instanceof Error ? error.name : 'UnknownError', rows: rows.length },
@@ -287,15 +330,24 @@ function prepareFitViews(
   return work;
 }
 
+/** The window is over for them: the list answers with them and they are read again behind it. */
+function restoredViews(key: string, reader: FitViewReader) {
+  const views = reader.restore(key);
+  if (!views) return undefined;
+  fitViewsCache.writeStale(key, views);
+  return fitViewsCache.peek(key);
+}
+
 async function readViewsAhead(
   key: string,
   reader: FitViewReader,
   items: readonly MatchedVacancyItem[],
 ): Promise<PreparedFitViews> {
-  const known = fitViewsCache.peek(key);
+  const known = fitViewsCache.peek(key) ?? restoredViews(key, reader);
   if (!known) {
     const views = await reader.readYielding(reader.scoredIds(items));
     fitViewsCache.write(key, views);
+    reader.keep(key, views);
     return { rows: views.size, views };
   }
   if (known.stale) void refreshFitViews(key, reader, items);
@@ -351,6 +403,7 @@ async function refreshFitViews(
       }
     }
     fitViewsCache.write(key, views);
+    reader.keep(key, views);
   } catch {
     // Прежний порядок остаётся в силе, а следующее чтение после окна
     // попробует пересчёт снова: отказ фона не должен ронять список.
@@ -359,23 +412,40 @@ async function refreshFitViews(
   }
 }
 
-function rankedRow(item: MatchedVacancyItem) {
-  return { title: item.cluster.canonicalTitle, view: item.explanation.fitView };
+const ROLE_SLICE_MS = 20;
+const ROLE_ROWS_PER_CHECK = 25;
+
+interface RoleTurns {
+  readonly busyMs: number;
+  readonly turns: number;
 }
 
-const ROLE_ROWS_PER_TURN = 50;
+const NO_ROLE_TURNS: RoleTurns = { busyMs: 0, turns: 0 };
+const roundMs = (ms: number): number => Number(ms.toFixed(2));
 
 /** A first read of a title parses it; the event loop gets its turn between portions (PRB-041). */
 async function readRolesYielding(
   items: readonly MatchedVacancyItem[],
   isExact: ExactRoleTest,
-): Promise<void> {
-  for (let start = 0; start < items.length; start += ROLE_ROWS_PER_TURN) {
+): Promise<RoleTurns> {
+  let busyMs = 0;
+  let turns = 0;
+  let sliceMs = 0;
+  for (let start = 0; start < items.length; start += ROLE_ROWS_PER_CHECK) {
+    const startedAt = performance.now();
     items
-      .slice(start, start + ROLE_ROWS_PER_TURN)
+      .slice(start, start + ROLE_ROWS_PER_CHECK)
       .forEach((item) => isExact(item.cluster.canonicalTitle));
+    const ms = performance.now() - startedAt;
+    busyMs += ms;
+    sliceMs += ms;
+    // B702 part 2 (prod 24.11): 10 ms of known titles gave 46 turns away and waited 2.5 s for them.
+    if (sliceMs < ROLE_SLICE_MS) continue;
+    sliceMs = 0;
+    turns += 1;
     await new Promise((resolve) => setImmediate(resolve));
   }
+  return { busyMs, turns };
 }
 
 function orderByFit(
@@ -392,10 +462,10 @@ function orderByFit(
       : item;
   });
   if (isExact) {
-    return decorated.sort(
-      (left, right) =>
-        compareFitRelevance(rankedRow(left), rankedRow(right), isExact) ||
-        compareMatchedVacancies(left, right),
+    const role = (item: MatchedVacancyItem) => Number(!isExact(item.cluster.canonicalTitle));
+    return decorated.sort((left, right) =>
+      // Непосчитанные — сначала роль кандидата: очередь подсчёта идёт по этому порядку.
+      compareListed(left, right, 'desc', () => role(left) - role(right)),
     );
   }
   if (sort.by !== 'money' || !money) {
@@ -404,7 +474,8 @@ function orderByFit(
   const amounts = new Map(decorated.map((item) => [item.cluster.id, money(item)]));
   return decorated.sort(
     (left, right) =>
-      compareMoney(amounts.get(left.cluster.id), amounts.get(right.cluster.id), sort.dir) ||
+      compareListedGroup(left, right) ||
+      compareMoneyRank(amounts.get(left.cluster.id), amounts.get(right.cluster.id), sort.dir) ||
       compareFitOrder(left, right),
   );
 }
@@ -417,16 +488,23 @@ export async function withShownPageFitViews(
   deps: RouteDeps,
   candidateId: string,
   items: readonly MatchedVacancyItem[],
+  lean = false,
 ): Promise<MatchedVacancyItem[]> {
   const runtime = deps.vacancyMechanics;
   if (!runtime) return [...items];
+  // B725: the lean row of the B640 list skips the points and lists, not just leaves them out.
+  const shape = lean ? leanFitView : compactFitView;
+  const explain = lean ? explanationWithLeanFitView : explanationWithFitView;
   const context = createVacancyFitContextReader(deps, candidateId);
   const geoBlocks = createGeoBlocker(deps, candidateId);
+  const known = freshOrderViews(deps, candidateId);
   return mapYielding(items, (item) => {
+    const ready = known.get(item.cluster.id);
+    if (ready?.state === 'ready') return { ...item, explanation: explain(item.explanation, shape(ready)) };
     const target = readVacancyFitTarget(deps, item.cluster.id);
     if (!target) return item;
     const view = runtime.view(context(target, []));
-    const fitView = compactFitView(
+    const fitView = shape(
       geoBlocks(
         target,
         textStillLoading(
@@ -438,8 +516,56 @@ export async function withShownPageFitViews(
         ),
       ),
     );
-    return { ...item, explanation: explanationWithFitView(item.explanation, fitView) };
+    return { ...item, explanation: explain(item.explanation, fitView) };
   });
+}
+
+const COUNTING_VIEW: VacancyFitView = { state: 'processing', requirements: [] };
+
+const blocksOf = (view: VacancyFitView | undefined): number => view?.result?.conditionBlocks?.length ?? 0;
+
+const withFitView = (item: MatchedVacancyItem, view: VacancyFitView): MatchedVacancyItem => ({
+  ...item,
+  explanation: explanationWithFitView(item.explanation, compactFitView(view)),
+});
+
+/**
+ * B789: показан тот процент, по которому строка встала на место. Живой разбор бывает новее снимка
+ * порядка, и страница показывала 100 → 80 → 100 до следующего чтения.
+ */
+export function withOrderedPercents(
+  shown: readonly MatchedVacancyItem[],
+  ordered: readonly MatchedVacancyItem[],
+): MatchedVacancyItem[] {
+  return shown.map((item, index) => {
+    const view = ordered[index]?.explanation.fitView;
+    const live = item.explanation.fitView;
+    if (vacancyFitPercent(view) === null) {
+      // Досчитан после снимка: место среди непосчитанных, число придёт вместе с новым местом.
+      return vacancyFitPercent(live) === null ? item : withFitView(item, view ?? COUNTING_VIEW);
+    }
+    if (!view || (vacancyFitPercent(view) === vacancyFitPercent(live) && blocksOf(view) === blocksOf(live)))
+      return item;
+    return withFitView(item, view);
+  });
+}
+
+/**
+ * B725 (прод 20.11: ~24 мс на строку, 436 мс на страницу из 20): порядок списка уже прочитал
+ * разбор каждой посчитанной строки тем же путём, что и страница, под отпечатком профиля.
+ * Страница берёт оттуда только готовый процент и только в окне порядка: строка «в очереди»
+ * и всё после окна читаются живыми, а правка профиля меняет ключ и не видит прежних.
+ */
+function freshOrderViews(deps: RouteDeps, candidateId: string): FitViews {
+  const known = fitViewsCache.peek(`${candidateId}|${fitProfileStamp(deps, candidateId)}`);
+  return known && !known.stale ? known.value : new Map();
+}
+
+/** The lean row: the fit view and the requirement count, no point lists or summary sentence. */
+function explanationWithLeanFitView(explanation: Explanation, fitView: VacancyFitView): Explanation {
+  const coverage = fitView.result?.coverage;
+  if (!coverage || coverage.total === 0) return { ...explanation, fitView };
+  return { ...explanation, fitView, requirements: { matched: coverage.matched, total: coverage.total } };
 }
 
 type Explanation = MatchedVacancyItem['explanation'];
@@ -500,8 +626,14 @@ function explanationWithFitPoints(explanation: Explanation, fitView: VacancyFitV
  * только сводка; раскрытая карточка читает полный разбор сама.
  */
 export function compactFitView(view: VacancyFitView): VacancyFitView {
-  const text = new Map(view.requirements.map((item) => [item.id, item.text]));
-  const implied = new Set((view.result?.implied ?? []).map((item) => item.requirementId));
+  // B794: the points are the lines «N из M» counts; terms, conditions and duties are not among them.
+  const duties = new Set(view.result?.duties ?? []);
+  const asked = view.requirements.filter((item) => !duties.has(item.id) && isCountedLine(item));
+  const text = new Map(asked.map((item) => [item.id, item.text]));
+  const implied = new Set([
+    ...(view.result?.implied ?? []).map((item) => item.requirementId),
+    ...(view.result?.placeCovered ?? []),
+  ]);
   const points = (view.result?.assessments ?? [])
     .filter((item) => text.has(item.requirementId))
     .slice(0, MAX_FIT_POINTS)
@@ -572,7 +704,7 @@ export async function requestFitForVacancyIds(
   const runtime = deps.vacancyMechanics;
   if (!runtime) return;
   const context = createVacancyFitContextReader(deps, candidateId);
-  await mapYielding(
+  await queueRowsYielding(
     vacancyIds.map((id, index) => ({ id, index })),
     ({ id, index }) => {
       const target = readVacancyFitTarget(deps, id);
@@ -618,7 +750,7 @@ export async function requestFitForShownPage(
   const runtime = deps.vacancyMechanics;
   if (!runtime) return;
   const context = createVacancyFitContextReader(deps, candidateId);
-  await mapYielding(
+  await queueRowsYielding(
     vacanciesAwaitingFit(items),
     (id) => {
       const target = readVacancyFitTarget(deps, id);
@@ -628,14 +760,11 @@ export async function requestFitForShownPage(
   );
 }
 
-/** «Совпадение» in the chosen direction; rows that cannot be counted go last (29.10). */
+/** «Совпадение» in the chosen direction, then the date; rows that cannot be counted go last. */
 export function compareFitOrder(
   left: MatchedVacancyItem,
   right: MatchedVacancyItem,
   sort: Pick<VacancySort, 'dir'> = DEFAULT_VACANCY_SORT,
 ): number {
-  return (
-    compareFitDirected(left.explanation.fitView, right.explanation.fitView, sort.dir) ||
-    compareMatchedVacancies(left, right)
-  );
+  return compareListed(left, right, sort.dir);
 }

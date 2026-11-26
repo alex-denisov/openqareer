@@ -12,6 +12,8 @@
   "app": {
     "windows": [
       {
+        "label": "main",
+        "create": false,
         "title": "OpenQareer",
         "width": 1280,
         "height": 860,
@@ -19,8 +21,7 @@
         "minHeight": 600,
         "center": true,
         "resizable": true,
-        "fullscreen": false,
-        "backgroundColor": "#090d12"
+        "fullscreen": false
       }
     ],
     "security": {

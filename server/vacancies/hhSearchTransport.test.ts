@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  createDirectHhTransport,
   directHhTransport,
   directThenFallback,
   parseEgressResponse,
@@ -7,6 +8,22 @@ import {
 } from './hhSearchTransport';
 
 describe('directHhTransport', () => {
+  it('сбой соединения возвращает статус 0 с причиной и временем (B643)', async () => {
+    const cause = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('fetch failed', { cause });
+      }),
+    );
+    try {
+      const result = await directHhTransport('https://hh.ru/search/vacancy');
+      expect(result.status).toBe(0);
+      expect(result.failure).toMatch(/^TypeError ECONNRESET \d+ms headers=- body=- lag=\d+ms$/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it('keeps the body of a 403 so a per-vacancy restriction can be told from a refusal (prod 28.10)', async () => {
     vi.stubGlobal(
       'fetch',
@@ -20,6 +37,99 @@ describe('directHhTransport', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('createDirectHhTransport (B756)', () => {
+  function clock(steps: number[]) {
+    let at = 0;
+    return () => (at = steps.shift() ?? at);
+  }
+  function dispatcher() {
+    return { destroy: vi.fn(async () => undefined) };
+  }
+
+  it('reports headers and body time separately, with the loop lag, on every fetch', async () => {
+    const events: unknown[] = [];
+    const transport = createDirectHhTransport({
+      fetch: async () => new Response('page', { status: 200 }),
+      newDispatcher: dispatcher,
+      loopLagMs: () => 140,
+      now: clock([0, 400, 1_000]),
+      onFetch: (event) => events.push(event),
+    });
+    await expect(transport('https://hh.ru/vacancy/1')).resolves.toEqual({
+      status: 200,
+      body: 'page',
+    });
+    expect(events).toEqual([
+      {
+        status: 200,
+        totalMs: 1_000,
+        headersMs: 400,
+        bodyMs: 600,
+        lagMs: 140,
+        freshConnection: false,
+      },
+    ]);
+  });
+
+  it('a timeout while the body is read names the body phase', async () => {
+    const timeout = Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+    const response = new Response('x', { status: 200 });
+    response.text = async () => {
+      throw timeout;
+    };
+    const transport = createDirectHhTransport({
+      fetch: async () => response,
+      newDispatcher: dispatcher,
+      loopLagMs: () => 0,
+      now: clock([0, 300, 30_300]),
+    });
+    const result = await transport('https://hh.ru/vacancy/1');
+    expect(result.failure).toBe('TimeoutError 30300ms headers=300ms body=30000ms+ lag=0ms');
+  });
+
+  it('after a timeout the next fetch goes over a new connection and the old one is dropped', async () => {
+    const made: ReturnType<typeof dispatcher>[] = [];
+    const used: unknown[] = [];
+    const timeout = Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+    let calls = 0;
+    const transport = createDirectHhTransport({
+      fetch: async (_url, init) => {
+        used.push((init as { dispatcher?: unknown }).dispatcher);
+        calls += 1;
+        if (calls === 1) throw timeout;
+        return new Response('page', { status: 200 });
+      },
+      newDispatcher: () => {
+        const next = dispatcher();
+        made.push(next);
+        return next as never;
+      },
+      loopLagMs: () => 0,
+    });
+    expect((await transport('https://hh.ru/vacancy/1')).status).toBe(0);
+    expect((await transport('https://hh.ru/vacancy/2')).status).toBe(200);
+    expect(made).toHaveLength(2);
+    expect(used).toEqual([made[0], made[1]]);
+    expect(made[0]!.destroy).toHaveBeenCalled();
+  });
+
+  it('an answer from hh, even a refusal, keeps the connection', async () => {
+    const made: unknown[] = [];
+    const transport = createDirectHhTransport({
+      fetch: async () => new Response('', { status: 429 }),
+      newDispatcher: () => {
+        const next = dispatcher();
+        made.push(next);
+        return next as never;
+      },
+      loopLagMs: () => 0,
+    });
+    await transport('https://hh.ru/vacancy/1');
+    await transport('https://hh.ru/vacancy/2');
+    expect(made).toHaveLength(1);
   });
 });
 

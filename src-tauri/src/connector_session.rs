@@ -8,10 +8,12 @@
 
 use crate::linkedin_read_guard::{is_detail_page, is_people_search_page, LinkedInReadGuardState};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fs::{create_dir_all, remove_dir_all, symlink_metadata};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
+use tauri::utils::config::BackgroundThrottlingPolicy;
 use tauri::{
     AppHandle, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl,
     WebviewWindowBuilder,
@@ -27,7 +29,7 @@ const PAGE_SETTLE_DELAY: Duration = Duration::from_millis(900);
 /// DOM after ~2 s. Waiting for `complete` timed out every read (23.10.2026).
 const HH_INTERACTIVE_GRACE: Duration = Duration::from_secs(3);
 const EVAL_TIMEOUT: Duration = Duration::from_secs(15);
-const HH_SIGNED_IN_SELECTOR: &str = r#"[data-qa^="mainmenu_applicantProfile"], [data-qa^="mainmenu_profileAndResumes"], [data-qa^="profile-activator"]"#;
+pub(crate) const HH_SIGNED_IN_SELECTOR: &str = r#"[data-qa^="mainmenu_applicantProfile"], [data-qa^="mainmenu_profileAndResumes"], [data-qa^="profile-activator"]"#;
 /// Shared with the live hh.ru evidence gate, so a drifted recogniser cannot
 /// pass in Chromium while failing in the desktop webview (B157).
 const INSPECTION_SCRIPT: &str = include_str!("connector_inspection.js");
@@ -56,8 +58,8 @@ pub struct SessionWindowRequest {
     pub url: String,
     pub layout: Option<SessionLayout>,
     pub session_key: Option<String>,
-    /// A background read: the window opens where it was placed without taking
-    /// focus, so an out-of-sight import never pulls the candidate away.
+    /// A background read: the window is built hidden and never put on screen;
+    /// one a person was already shown is left alone.
     #[serde(default)]
     pub background: bool,
 }
@@ -108,6 +110,46 @@ pub struct PoolSessionCookie {
     pub http_only: bool,
     pub secure: bool,
     pub same_site: Option<String>,
+}
+
+/// Labels of the session windows a person was shown: theirs until the window
+/// is hidden again. `is_visible` would not do, a minimised window or a hidden
+/// application answers `false` while the person is still signing in.
+#[derive(Default)]
+pub struct SessionWindowsOnScreen(Mutex<HashSet<String>>);
+
+impl SessionWindowsOnScreen {
+    fn set(&self, label: &str, shown: bool) {
+        let mut labels = self.0.lock().unwrap_or_else(|poison| poison.into_inner());
+        if shown {
+            labels.insert(label.to_string());
+        } else {
+            labels.remove(label);
+        }
+    }
+
+    fn contains(&self, label: &str) -> bool {
+        self.0
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .contains(label)
+    }
+}
+
+/// Whether a person was shown this window and it was not hidden since.
+fn is_label_on_screen(app: &AppHandle, label: &str) -> bool {
+    app.get_webview(label).is_some() && app.state::<SessionWindowsOnScreen>().contains(label)
+}
+
+/// The same for the candidate's window: an automatic action must not navigate
+/// the page a person is signing in to.
+pub fn is_session_window_on_screen(app: &AppHandle, platform: &str) -> bool {
+    session_window_label(platform).is_some_and(|label| is_label_on_screen(app, label))
+}
+
+/// A background session is built off screen, and without focus.
+fn opens_on_screen(request: &SessionWindowRequest) -> bool {
+    !request.background
 }
 
 /// One long-lived window per platform, so a second click focuses the window the
@@ -423,7 +465,7 @@ fn can_clear_managed_profile(
     store_isolation_available || (!profile_exists && !window_open)
 }
 
-fn create_private_directory(path: &std::path::Path) -> Result<(), String> {
+pub(crate) fn create_private_directory(path: &std::path::Path) -> Result<(), String> {
     create_dir_all(path)
         .map_err(|error| format!("managed_session_data_dir_create_failed: {error}"))?;
     let metadata = symlink_metadata(path)
@@ -570,25 +612,51 @@ pub fn bind_candidate_account(app: &AppHandle, key: Option<String>) -> Result<bo
     if *current != key {
         close_session_window(app, "linkedin");
         close_session_window(app, "hh");
-        *current = key;
+        crate::ats_apply::close_form_window(app);
+        // Employer forms keep no session worth returning to: the signed-out or
+        // deleted candidate leaves none of their cookies on the device (B787).
+        if let Some(previous) = std::mem::replace(&mut *current, key) {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if crate::ats_apply::erase_form_store(&app, &previous)
+                    .await
+                    .is_err()
+                {
+                    let _ =
+                        append_connector_diagnostic(&app, "ats-form", "erase", Some("failed"));
+                }
+            });
+        }
     }
     Ok(current.is_some())
 }
 
-fn candidate_store(app: &AppHandle) -> Result<(PathBuf, [u8; 16]), String> {
-    let key = app
-        .state::<CandidateSessionAccount>()
+pub(crate) fn bound_account_key(app: &AppHandle) -> Result<String, String> {
+    app.state::<CandidateSessionAccount>()
         .0
         .lock()
         .map_err(|_| "account_state_unavailable".to_string())?
         .clone()
-        .ok_or_else(|| "account_not_bound".to_string())?;
-    let identifier = account_store_identifier(&key)?;
+        .ok_or_else(|| "account_not_bound".to_string())
+}
+
+pub(crate) fn candidate_store(app: &AppHandle) -> Result<(PathBuf, [u8; 16]), String> {
+    candidate_store_of(app, &bound_account_key(app)?)
+}
+
+pub(crate) fn candidate_store_of(
+    app: &AppHandle,
+    key: &str,
+) -> Result<(PathBuf, [u8; 16]), String> {
+    if !is_valid_account_key(key) {
+        return Err("account_key_invalid".to_string());
+    }
+    let identifier = account_store_identifier(key)?;
     let app_data_dir = app
         .path()
         .app_data_dir()
         .map_err(|_| "candidate_session_data_dir_unavailable".to_string())?;
-    let directory = candidate_data_directory(&app_data_dir, &key)?;
+    let directory = candidate_data_directory(&app_data_dir, key)?;
     Ok((directory, identifier))
 }
 
@@ -688,6 +756,14 @@ pub async fn open_session_window(
         };
     }
 
+    if request.background && is_label_on_screen(app, &label) {
+        return SessionWindowReport {
+            opened: false,
+            label: label.to_string(),
+            reason: Some("session_window_in_use".to_string()),
+        };
+    }
+
     if let Some(existing) = app.get_webview(&label) {
         if !existing.url().is_ok_and(|current| current == url) {
             if request.platform == "linkedin" && request.session_key.is_none() {
@@ -701,7 +777,8 @@ pub async fn open_session_window(
             request.session_key.as_deref(),
             layout.clone(),
         );
-        if !request.background {
+        if opens_on_screen(request) {
+            app.state::<SessionWindowsOnScreen>().set(&label, true);
             if let Some(window) = app.get_webview_window(&label) {
                 let _ = window.show();
                 let _ = window.set_focus();
@@ -746,7 +823,11 @@ pub async fn open_session_window(
         .title(format!("OpenQareer · {}", platform_name(&request.platform)))
         .position(screen_layout.x, screen_layout.y)
         .inner_size(screen_layout.width, screen_layout.height)
-        .focused(!request.background)
+        .visible(opens_on_screen(request))
+        .focused(opens_on_screen(request))
+        // A hidden WKWebView keeps running the read script and its timers only
+        // with the inactive scheduling policy `none` (macOS 14+, B157).
+        .background_throttling(BackgroundThrottlingPolicy::Disabled)
         .on_navigation(move |next_url| allow_session_navigation(&platform, next_url));
     let (decorations, resizable, skip_taskbar) =
         session_window_chrome(request.session_key.is_some());
@@ -816,6 +897,8 @@ pub async fn open_session_window(
         builder = builder.proxy_url(proxy);
     }
 
+    app.state::<SessionWindowsOnScreen>()
+        .set(&label, opens_on_screen(request));
     match builder.build() {
         Ok(_) => {
             // Reporting "opened" before the window is inspectable is what threw
@@ -883,6 +966,7 @@ pub fn show_session_window(app: &AppHandle, platform: &str) -> bool {
     let Some(window) = app.get_webview_window(label) else {
         return false;
     };
+    app.state::<SessionWindowsOnScreen>().set(label, true);
     window.show().and_then(|()| window.set_focus()).is_ok()
 }
 
@@ -1050,15 +1134,27 @@ async fn open_hidden_session_window(app: &AppHandle, platform: &str, label: &str
     built.is_ok() && await_registered_window(app, label).await
 }
 
-/// Moves the candidate window back out of sight once a person is no longer
-/// needed in it, and hands focus back to the main window: the window stays
-/// shown, since a hidden WKWebView stops running the read script (B157).
-pub fn park_session_window(app: &AppHandle, platform: &str, layout: SessionLayout) -> bool {
-    let moved = resize_session_window(app, platform, layout);
-    if let Some(main) = app.get_webview_window("main") {
-        let _ = main.set_focus();
+/// Hides the candidate window once a person is no longer needed in it; the
+/// main window gets the focus back only if this window held it. The hidden
+/// page keeps running its scripts (see `background_throttling`).
+pub fn park_session_window(app: &AppHandle, platform: &str) -> bool {
+    let Some(label) = session_window_label(platform) else {
+        return false;
+    };
+    let Some(window) = app.get_webview_window(label) else {
+        return false;
+    };
+    let was_focused = window.is_focused().unwrap_or(false);
+    let hidden = window.hide().is_ok();
+    if hidden {
+        app.state::<SessionWindowsOnScreen>().set(label, false);
     }
-    moved
+    if was_focused {
+        if let Some(main) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+            let _ = main.set_focus();
+        }
+    }
+    hidden
 }
 
 pub fn resize_session_window(app: &AppHandle, platform: &str, layout: SessionLayout) -> bool {
@@ -1233,11 +1329,13 @@ fn screen_layout(layout: &SessionLayout, main: &tauri::WebviewWindow) -> Session
 struct DocumentState {
     ready: String,
     href: String,
+    /// `performance.timeOrigin`: tells one document from another.
+    origin: f64,
 }
 
 /// `eval_with_callback` hands the JSON-encoded result to a `Fn` callback; the
 /// oneshot sender has to survive being borrowed, hence the mutex.
-async fn eval_json(window: &Webview, js: &str) -> Result<String, String> {
+pub(crate) async fn eval_json(window: &Webview, js: &str) -> Result<String, String> {
     let (sender, receiver) = tokio::sync::oneshot::channel::<String>();
     let slot = Mutex::new(Some(sender));
     window
@@ -1259,11 +1357,64 @@ async fn eval_json(window: &Webview, js: &str) -> Result<String, String> {
 async fn read_document_state(window: &Webview) -> Result<DocumentState, String> {
     let raw = eval_json(
         window,
-        "(function(){try{return {ready: document.readyState, href: location.href};}\
-catch(e){return {ready: 'error', href: ''};}})()",
+        "(function(){try{return {ready: document.readyState, href: location.href, origin: performance.timeOrigin || 0};}\
+catch(e){return {ready: 'error', href: '', origin: 0};}})()",
     )
     .await?;
     serde_json::from_str::<DocumentState>(&raw).map_err(|error| format!("eval_shape: {error}"))
+}
+
+/// What the hh.ru window showed before a navigation.
+struct PageBefore {
+    /// `performance.timeOrigin`: every document has its own; `None` if it was unreadable.
+    origin: Option<f64>,
+    url: String,
+}
+
+/// The page in the window right before a navigation. A document that is being
+/// torn down drops the script, so the read is tried a few times.
+async fn page_before(window: &Webview) -> PageBefore {
+    let url = window.url().map(|url| url.to_string()).unwrap_or_default();
+    for _ in 0..3 {
+        match read_document_state(window).await {
+            Ok(state) => {
+                return PageBefore {
+                    origin: Some(state.origin),
+                    url: state.href,
+                }
+            }
+            Err(error) if error == "eval_cancelled" => {
+                tokio::time::sleep(PAGE_POLL_INTERVAL).await;
+            }
+            Err(_) => break,
+        }
+    }
+    PageBefore { origin: None, url }
+}
+
+/// B708: after `navigate()` the window still answers from the previous document,
+/// which is `complete`. Without a navigation (`before` is `None`) the window may
+/// already report an address that is only loading. The check is hh.ru only:
+/// LinkedIn rewrites addresses in place (B448).
+fn is_requested_document(
+    platform: &str,
+    before: Option<&PageBefore>,
+    state: &DocumentState,
+    requested: &str,
+) -> bool {
+    if platform != "hh" {
+        return true;
+    }
+    match before {
+        None => same_page(&state.href, requested),
+        Some(PageBefore {
+            origin: Some(origin),
+            ..
+        }) => state.origin != *origin,
+        Some(PageBefore { origin: None, url }) => {
+            state.href != *url && state.href != "about:blank"
+        }
+    }
 }
 
 /// LinkedIn fills sections after load, so it still waits for `complete`.
@@ -1774,7 +1925,7 @@ fn admit_linkedin_read(app: &AppHandle, path: &str) -> Result<Duration, String> 
 
 /// Spaces a sign-in window navigation without spending the read budget; a
 /// poisoned guard only skips the pause, it never blocks the sign-in.
-fn pace_linkedin_navigation(app: &AppHandle) -> Duration {
+pub(crate) fn pace_linkedin_navigation(app: &AppHandle) -> Duration {
     app.state::<LinkedInReadGuardState>()
         .0
         .lock()
@@ -1785,6 +1936,23 @@ fn pace_linkedin_navigation(app: &AppHandle) -> Duration {
 pub async fn read_session_page(
     app: &AppHandle,
     request: &SessionWindowRequest,
+) -> Result<SessionPageReport, String> {
+    read_page(app, request, false).await
+}
+
+/// Like `read_session_page`, but always loads the page anew: no sheet, letter
+/// or script flag of an earlier attempt survives.
+pub(crate) async fn read_fresh_session_page(
+    app: &AppHandle,
+    request: &SessionWindowRequest,
+) -> Result<SessionPageReport, String> {
+    read_page(app, request, true).await
+}
+
+async fn read_page(
+    app: &AppHandle,
+    request: &SessionWindowRequest,
+    fresh: bool,
 ) -> Result<SessionPageReport, String> {
     let (label, url, _) = validate(request)?;
     let scroll_budget = lazy_scroll_budget(url.path());
@@ -1798,10 +1966,15 @@ pub async fn read_session_page(
 
     // LinkedIn rewrites the query and trailing slash of a page it just
     // served; comparing the whole URL navigated again mid-load (B448).
-    let already_there = window
-        .url()
-        .is_ok_and(|current| same_page(current.as_str(), url.as_str()));
+    let already_there = !fresh
+        && window
+            .url()
+            .is_ok_and(|current| same_page(current.as_str(), url.as_str()));
+    let mut before = None;
     if !already_there {
+        if request.platform == "hh" {
+            before = Some(page_before(&window).await);
+        }
         read_diagnostic(
             app,
             request,
@@ -1832,20 +2005,29 @@ pub async fn read_session_page(
             }
             Err(error) => return Err(error),
         };
-        let interactive_for = if state.ready == "interactive" {
+        let requested_document = is_requested_document(
+            &request.platform,
+            before.as_ref(),
+            &state,
+            &requested_url,
+        );
+        let interactive_for = if requested_document && state.ready == "interactive" {
             interactive_since
                 .get_or_insert_with(tokio::time::Instant::now)
                 .elapsed()
         } else {
             Duration::ZERO
         };
-        if !state.href.is_empty()
+        if requested_document
+            && !state.href.is_empty()
             && page_ready_to_read(&request.platform, &state.ready, interactive_for)
         {
             tokio::time::sleep(PAGE_SETTLE_DELAY).await;
             break;
         }
         if tokio::time::Instant::now() >= deadline {
+            let reason = if requested_document { "slow" } else { "old_document" };
+            read_diagnostic(app, request, "load_timeout", Some(reason));
             return Err("page_load_timeout".to_string());
         }
         tokio::time::sleep(PAGE_POLL_INTERVAL).await;
@@ -1913,6 +2095,12 @@ pub async fn read_session_page(
         }
     }
 
+    if request.platform == "hh" && url_is_resume(&requested_url) {
+        if on_resume_page(&window) {
+            await_hh_resume(app, request, &window).await;
+        }
+        expand_hh_resume(&window).await;
+    }
     let body_json = sanitized_page_json(app, request, &window).await?;
     let body = validate_page_body(
         serde_json::from_str::<String>(&body_json)
@@ -1929,6 +2117,95 @@ pub async fn read_session_page(
         url: final_url,
         body,
     })
+}
+
+/// Opens the collapsed experience text of the candidate's own hh.ru resume.
+const HH_RESUME_EXPAND_SCRIPT: &str = include_str!("hh_resume_expand.js");
+const HH_RESUME_EXPAND_DELAY: Duration = Duration::from_millis(400);
+
+fn url_is_resume(raw: &str) -> bool {
+    Url::parse(raw).is_ok_and(|url| url.path().starts_with("/resume/"))
+}
+
+/// Scrolls one screen further and reads counters only; see the script's header.
+const HH_RESUME_READY_SCRIPT: &str = include_str!("hh_resume_ready.js");
+const HH_RESUME_READY_TIMEOUT: Duration = Duration::from_secs(12);
+
+#[derive(Debug, PartialEq, Eq)]
+enum HhResumeReady {
+    Ready,
+    Waiting,
+    /// Not a single resume block so far.
+    Empty,
+}
+
+/// `c2_s5_a1_l0_w920_e1`: experience is drawn and the page is scrolled to its end.
+fn hh_resume_ready(state: &str, previous: Option<&str>) -> HhResumeReady {
+    let field = |key: char| {
+        state
+            .split('_')
+            .find_map(|part| part.strip_prefix(key)?.parse::<u32>().ok())
+            .unwrap_or(0)
+    };
+    let experience = (field('c') > 0 && field('s') > 0) || field('l') > 0;
+    if !experience {
+        return if field('a') > 0 {
+            HhResumeReady::Waiting
+        } else {
+            HhResumeReady::Empty
+        };
+    }
+    // Two equal reads at the end: nothing more is being drawn.
+    if field('e') > 0 && previous == Some(state) {
+        HhResumeReady::Ready
+    } else {
+        HhResumeReady::Waiting
+    }
+}
+
+/// A sign-in redirect or the resume editor has no experience cards to wait for.
+fn on_resume_page(window: &Webview) -> bool {
+    window
+        .url()
+        .is_ok_and(|url| url_is_resume(url.as_str()) && !url.path().starts_with("/resume/edit"))
+}
+
+/// Waits for the experience cards. After the timeout the page is read as it is: the
+/// screen refuses a resume without experience, and a captcha page stays recognisable.
+async fn await_hh_resume(app: &AppHandle, request: &SessionWindowRequest, window: &Webview) {
+    let started = std::time::Instant::now();
+    let mut previous: Option<String> = None;
+    let mut last = HhResumeReady::Empty;
+    loop {
+        if let Ok(raw) = eval_json(window, HH_RESUME_READY_SCRIPT).await {
+            let state = raw.trim().trim_matches('"').to_string();
+            last = hh_resume_ready(&state, previous.as_deref());
+            if last == HhResumeReady::Ready {
+                read_diagnostic(app, request, "resume_state", Some(&state));
+                return;
+            }
+            previous = Some(state);
+        }
+        if started.elapsed() >= HH_RESUME_READY_TIMEOUT {
+            read_diagnostic(app, request, "resume_state", previous.as_deref());
+            let code = match last {
+                HhResumeReady::Empty => "resume_not_rendered",
+                _ => "resume_no_experience",
+            };
+            read_diagnostic(app, request, code, None);
+            return;
+        }
+        tokio::time::sleep(PAGE_POLL_INTERVAL).await;
+    }
+}
+
+/// The page is still readable when nothing opens, so a failure is not an error.
+async fn expand_hh_resume(window: &Webview) {
+    if let Ok(opened) = eval_json(window, HH_RESUME_EXPAND_SCRIPT).await {
+        if opened.trim() != "0" {
+            tokio::time::sleep(HH_RESUME_EXPAND_DELAY).await;
+        }
+    }
 }
 
 /// Reads `true` once the contact-info dialog shows its profile row (B561).
@@ -2015,7 +2292,7 @@ fn first_code(error: &str) -> &str {
 }
 
 /// `eval_cancelled` / `eval_timeout`: the page moved under the script.
-fn is_transient_eval_error(error: &str) -> bool {
+pub(crate) fn is_transient_eval_error(error: &str) -> bool {
     error == "eval_cancelled" || error == "eval_timeout"
 }
 
@@ -2065,16 +2342,22 @@ fn first_path_segment(raw: &str) -> &str {
     }
 }
 
-/// Steps of the candidate's own LinkedIn reads in the local diagnostics log.
+/// Steps of the candidate's own reads in the local diagnostics log.
 fn read_diagnostic(
     app: &AppHandle,
     request: &SessionWindowRequest,
     event: &str,
     detail: Option<&str>,
 ) {
-    if request.platform == "linkedin" && request.session_key.is_none() {
-        let _ = append_connector_diagnostic(app, "linkedin-read", event, detail);
+    if request.session_key.is_some() {
+        return;
     }
+    let scope = match request.platform.as_str() {
+        "linkedin" => "linkedin-read",
+        "hh" => "hh-read",
+        _ => return,
+    };
+    let _ = append_connector_diagnostic(app, scope, event, detail);
 }
 
 /// Kept on this machine only (B448): a sanitized LinkedIn page that yielded
@@ -2201,6 +2484,66 @@ fn diagnostic_line(millis: u128, scope: &str, event: &str, detail: Option<&str>)
     Some(format!("{millis} {scope} {event}{detail}\n"))
 }
 
+/// B787: masked sketch of the hh.ru experience block, overwritten on each unread resume.
+const HH_RESUME_MARKUP_FILE: &str = "hh-resume-markup.txt";
+const HH_RESUME_MARKUP_MAX_CHARS: usize = 16_000;
+
+/// The sketch is masked in the web layer; plain ASCII here means no resume text got through.
+fn valid_markup_sketch(sketch: &str) -> bool {
+    !sketch.is_empty()
+        && sketch.len() <= HH_RESUME_MARKUP_MAX_CHARS
+        && sketch
+            .chars()
+            .all(|c| c == '\n' || (' '..='~').contains(&c))
+}
+
+pub fn write_hh_resume_markup(app: &AppHandle, sketch: &str) -> Result<(), String> {
+    write_markup_sketch(app, HH_RESUME_MARKUP_FILE, sketch)
+}
+
+/// B787: the candidate's own hh.ru resume list (id, title, visibility, update), overwritten on each read.
+const HH_RESUMES_LIST_FILE: &str = "hh-resumes-list.txt";
+
+fn valid_resumes_report(report: &str) -> bool {
+    !report.is_empty()
+        && report.chars().count() <= HH_RESUME_MARKUP_MAX_CHARS
+        && report
+            .chars()
+            .all(|c| c == '\n' || c == '\t' || !c.is_control())
+}
+
+pub fn write_hh_resumes_list(app: &AppHandle, report: &str) -> Result<(), String> {
+    if !valid_resumes_report(report) {
+        return Err("resumes_report_invalid".to_string());
+    }
+    let root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("diagnostics_dir_unavailable: {error}"))?
+        .join(DIAGNOSTICS_DIR);
+    create_private_directory(&root)?;
+    std::fs::write(root.join(HH_RESUMES_LIST_FILE), report)
+        .map_err(|error| format!("diagnostics_write_failed: {error}"))
+}
+
+/// B787: the masked page sketch of a failed hh.ru resume-copy step.
+pub const HH_COPY_MARKUP_FILE: &str = "hh-copy-markup.txt";
+
+/// Overwrites one masked sketch file next to the diagnostics log.
+pub fn write_markup_sketch(app: &AppHandle, file: &str, sketch: &str) -> Result<(), String> {
+    if !valid_markup_sketch(sketch) {
+        return Err("markup_sketch_invalid".to_string());
+    }
+    let root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("diagnostics_dir_unavailable: {error}"))?
+        .join(DIAGNOSTICS_DIR);
+    create_private_directory(&root)?;
+    std::fs::write(root.join(file), sketch)
+        .map_err(|error| format!("diagnostics_write_failed: {error}"))
+}
+
 pub fn append_connector_diagnostic(
     app: &AppHandle,
     scope: &str,
@@ -2234,6 +2577,46 @@ pub fn append_connector_diagnostic(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn markup_sketch_accepts_only_masked_ascii() {
+        assert!(super::valid_markup_sketch(
+            "li[magritte-stepper-step]\n  \"MON_04 2023 - xxx\""
+        ));
+        assert!(!super::valid_markup_sketch(""));
+        assert!(super::valid_resumes_report(
+            "resumes 1\nabc\tIT Директор\tНе видно никому\t-"
+        ));
+        assert!(!super::valid_resumes_report("a\u{0}b"));
+        assert!(!super::valid_markup_sketch("\"Россети\""));
+        assert!(!super::valid_markup_sketch(
+            &"x".repeat(super::HH_RESUME_MARKUP_MAX_CHARS + 1)
+        ));
+    }
+
+    #[test]
+    fn a_background_session_is_never_built_on_screen() {
+        let request = |background| SessionWindowRequest {
+            platform: "hh".into(),
+            url: "https://hh.ru/account/login".into(),
+            layout: None,
+            session_key: None,
+            background,
+        };
+        assert!(!opens_on_screen(&request(true)));
+        assert!(opens_on_screen(&request(false)));
+    }
+
+    #[test]
+    fn a_window_belongs_to_the_person_from_show_until_hide() {
+        let shown = SessionWindowsOnScreen::default();
+        assert!(!shown.contains("connector-hh"));
+        shown.set("connector-hh", true);
+        assert!(shown.contains("connector-hh"));
+        assert!(!shown.contains("connector-linkedin"));
+        shown.set("connector-hh", false);
+        assert!(!shown.contains("connector-hh"));
+    }
+
     #[test]
     fn a_session_window_never_opens_on_a_people_search_page() {
         assert!(search_page_entry_refused(
@@ -2318,6 +2701,58 @@ mod tests {
         };
         assert_eq!(next_quiet_readings(3, &state, 5_000.0, 100), 0);
         assert_eq!(next_quiet_readings(3, &state, 5_000.0, 120), 4);
+    }
+
+    fn document(href: &str, origin: f64) -> DocumentState {
+        DocumentState {
+            ready: "complete".into(),
+            href: href.into(),
+            origin,
+        }
+    }
+
+    fn before(origin: Option<f64>, url: &str) -> PageBefore {
+        PageBefore {
+            origin,
+            url: url.into(),
+        }
+    }
+
+    #[test]
+    fn hh_never_reads_the_document_it_is_leaving() {
+        let wanted = "https://hh.ru/vacancy/77";
+        let home = before(Some(1.5), "https://hh.ru/");
+        let ready = |before: Option<&PageBefore>, href: &str, origin: f64| {
+            is_requested_document("hh", before, &document(href, origin), wanted)
+        };
+        assert!(!ready(Some(&home), "https://hh.ru/", 1.5));
+        assert!(ready(Some(&home), wanted, 2.5));
+        // hh.ru may answer from a regional host or send the visitor to sign in.
+        assert!(ready(Some(&home), "https://spb.hh.ru/vacancy/77", 2.5));
+        assert!(ready(Some(&home), "https://hh.ru/account/login", 2.5));
+        // A reload of the same address is a new document too.
+        let same = before(Some(2.5), wanted);
+        assert!(!ready(Some(&same), wanted, 2.5));
+        assert!(ready(Some(&same), wanted, 3.5));
+        // The previous document could not be read.
+        let unread = before(None, "https://hh.ru/account/login");
+        assert!(!ready(Some(&unread), "https://hh.ru/account/login", 4.0));
+        assert!(!ready(Some(&unread), "about:blank", 4.0));
+        assert!(ready(Some(&unread), wanted, 4.0));
+        // No navigation: the address may belong to a load still under way.
+        assert!(!ready(None, "https://hh.ru/", 1.5));
+        assert!(ready(None, "https://hh.ru/vacancy/77?from=x", 1.5));
+    }
+
+    #[test]
+    fn linkedin_readiness_ignores_the_document_check() {
+        let feed = before(Some(1.0), "https://www.linkedin.com/feed/");
+        assert!(is_requested_document(
+            "linkedin",
+            Some(&feed),
+            &document("https://www.linkedin.com/feed/", 1.0),
+            "https://www.linkedin.com/in/x/",
+        ));
     }
 
     #[test]
@@ -2670,6 +3105,24 @@ https://media.licdn.com/dms/image/c 800w";
         assert!(script
             .contains("const source=onOverlay?(overlay&&visibleText(overlay)>0?overlay:null)"));
         assert!(script.contains("if(!source){return '';}"));
+    }
+
+    #[test]
+    fn an_hh_resume_is_ready_once_experience_is_drawn_and_the_page_is_at_its_end() {
+        use super::{diagnostic_line, hh_resume_ready, HhResumeReady};
+        let done = "c2_s5_a1_l0_w920_e1";
+        assert_eq!(hh_resume_ready(done, None), HhResumeReady::Waiting);
+        assert_eq!(hh_resume_ready(done, Some(done)), HhResumeReady::Ready);
+        let moving = "c2_s5_a1_l0_w920_e0";
+        assert_eq!(hh_resume_ready(moving, Some(moving)), HhResumeReady::Waiting);
+        let legacy = "c0_s0_a0_l1_w920_e1";
+        assert_eq!(hh_resume_ready(legacy, Some(legacy)), HhResumeReady::Ready);
+        let about = "c0_s0_a1_l0_w920_e1";
+        assert_eq!(hh_resume_ready(about, Some(about)), HhResumeReady::Waiting);
+        let empty = "c0_s0_a0_l0_w920_e1";
+        assert_eq!(hh_resume_ready(empty, Some(empty)), HhResumeReady::Empty);
+        assert_eq!(hh_resume_ready("failed", None), HhResumeReady::Empty);
+        assert!(diagnostic_line(1, "hh-read", "resume_state", Some(done)).is_some());
     }
 
     #[test]

@@ -200,4 +200,58 @@ describe('extractTelegramJobHeader', () => {
     expect(header.title).toBe('Senior 3D Character Artist');
     expect(header.company).toBe('4A Games');
   });
+
+  it('reads employer from About the company block when followed by company introduction', () => {
+    const header = extractTelegramJobHeader([
+      'We are looking for a Sales Manager',
+      'About the company',
+      'ICODA is ranked among the world’s top three marketing agencies.',
+    ]);
+    expect(header.title).toBe('We are looking for a Sales Manager');
+    expect(header.company).toBe('ICODA');
+  });
+
+  it('reads employer from dash descriptor pattern in description', () => {
+    const header = extractTelegramJobHeader([
+      'Графический дизайнер / Graphic Designer',
+      'AnyXPay — международная финтех-компания, специализируется на удобных решениях.',
+    ]);
+    expect(header.title).toBe('Графический дизайнер / Graphic Designer');
+    expect(header.company).toBe('AnyXPay');
+  });
+
+  it('reads employer from invitation sentence in description', () => {
+    const header = extractTelegramJobHeader([
+      'Менеджер по коммуникации с клиентами',
+      'Genesis приглашает в команду новых сотрудников для работы с клиентами.',
+    ]);
+    expect(header.title).toBe('Менеджер по коммуникации с клиентами');
+    expect(header.company).toBe('Genesis');
+  });
+
+  it('reads labelled employer with «Клиент:» or «О компании:»', () => {
+    const header = extractTelegramJobHeader([
+      'Frontend Developer',
+      'Клиент: Яндекс Музыка',
+      'Обязанности:',
+    ]);
+    expect(header.title).toBe('Frontend Developer');
+    expect(header.company).toBe('Яндекс Музыка');
+  });
+
+  it('B756 22.11: работодатель в строке «🏢 Компания · 📍 Город» (@it_vakansii_udalenka)', () => {
+    const header = extractTelegramJobHeader([
+      '💼 Технический директор / Tech lead / CTO',
+      '🏢 Медиагруппа РИМ · 📍 Казань, Россия',
+      '💰 от 200 000 ₽',
+      '🎯 Сеньор, Тимлид, Директор, Архитектор · 🏠 удалёнка · 🏢 офис',
+      'Outplan 360 — платформа продуктов для рынка наружной и indoor-рекламы.',
+    ]);
+    expect(header).toEqual({ title: 'Технический директор / Tech lead / CTO', company: 'Медиагруппа РИМ' });
+  });
+
+  it('B756: строка «🏢» только с форматом работы не делает его работодателем', () => {
+    const header = extractTelegramJobHeader(['💼 Product manager', '🏢 офис · 📍 Москва']);
+    expect(header.company).toBe('');
+  });
 });

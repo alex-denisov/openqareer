@@ -195,7 +195,11 @@ describe('candidate interview simulator routes', () => {
     expect(session.questions[0].storyId).toBe('story-release');
     expect(answered.statusCode).toBe(200);
     expect(answered.json().data.session.questions[0].answer.evaluation.points).toBe(8);
-    expect(answered.json().data.session.questions[0].answer.evaluation.feedback).toContain('измерили результат');
+    // B750 3b: ответ сохраняется сразу по локальной оценке, отзыв модели дописывается в фоне.
+    await vi.waitFor(async () => {
+      const read = await app.inject({ method: 'GET', url: `${URL}/${session.id}`, headers: { authorization: ownerAuth } });
+      expect(read.json().data.session.questions[0].answer.evaluation.feedback).toContain('измерили результат');
+    });
     expect(paused.json().data.session.status).toBe('interrupted');
     expect(resumed.json().data.session.currentQuestionIndex).toBe(0);
     expect(foreign.statusCode).toBe(404);
@@ -203,6 +207,66 @@ describe('candidate interview simulator routes', () => {
     expect(createTurn).toHaveBeenCalledOnce();
     expect(createTurn.mock.calls[0]?.[0].phase).toBe('interview');
     expect(createTurn.mock.calls[0]?.[0].stageContext).toContain('mock_interview_feedback');
+  });
+
+  describe('B750 3b: ответ не ждёт модель', () => {
+    async function begin(app: Awaited<ReturnType<typeof setup>>['app'], auth: string, questionTypes: string[]) {
+      const started = await app.inject({
+        method: 'POST',
+        url: URL,
+        headers: { authorization: auth, ...ORIGIN },
+        payload: { mode: 'text', roleTitle: 'Руководитель платформы', questionTypes },
+      });
+      return started.json().data.session as { id: string; version: number; questions: { id: string }[] };
+    }
+
+    it('тренировка i03 (feedback: false) не зовёт модель и сохраняет ответ', async () => {
+      const createTurn = vi.fn<CoachProvider['createTurn']>(async () => providerResult('Отзыв'));
+      const { app, ownerAuth } = await setup({ createTurn });
+      const session = await begin(app, ownerAuth, ['system_design']);
+      const answered = await app.inject({
+        method: 'POST',
+        url: `${URL}/${session.id}/answers`,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+        payload: {
+          expectedVersion: session.version,
+          questionId: session.questions[0]!.id,
+          answer: 'Шлюз API, очередь, сервис платежей и PostgreSQL.',
+          elapsedSeconds: 600,
+          feedback: false,
+        },
+      });
+      expect(answered.statusCode).toBe(200);
+      expect(answered.json().data.session.questions[0].answer.text).toContain('Шлюз API');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(createTurn).not.toHaveBeenCalled();
+    });
+
+    it('модель упала — ответ всё равно сохранён, версия не сдвинулась фоном', async () => {
+      const createTurn = vi.fn<CoachProvider['createTurn']>(async () => {
+        throw new Error('503 upstream');
+      });
+      const { app, ownerAuth, candidateStore, ownerId } = await setup({ createTurn });
+      const session = await begin(app, ownerAuth, ['behavioral']);
+      const answered = await app.inject({
+        method: 'POST',
+        url: `${URL}/${session.id}/answers`,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+        payload: {
+          expectedVersion: session.version,
+          questionId: session.questions[0]!.id,
+          answer: 'Я настроил автотесты, цикл релиза сократился с 14 до 3 дней.',
+          elapsedSeconds: 90,
+        },
+      });
+      expect(answered.statusCode).toBe(200);
+      await vi.waitFor(() => expect(createTurn).toHaveBeenCalledOnce());
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const stored = candidateStore.interviewSimulatorRepo.getCurrent(ownerId);
+      expect(stored?.questions[0]?.answer?.text).toContain('14 до 3 дней');
+      expect(stored?.questions[0]?.answer?.evaluation.feedback).toBeUndefined();
+      expect(stored?.version).toBe(answered.json().data.session.version);
+    });
   });
 
   it('returns the honest empty-story state and does not invent source facts', async () => {

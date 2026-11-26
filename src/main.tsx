@@ -59,7 +59,13 @@ if (!isTauriEnvironment() && ['/login', '/signup'].includes(window.location.path
 
 if (isTauriEnvironment()) {
   // B359: one updater for the window; «Сегодня» shows its strip.
-  void import('./features/appUpdate/useDesktopUpdater').then(({ desktopUpdater }) =>
-    desktopUpdater.start(),
-  );
+  // B722: «Обновлять автоматически» из n06 — настройка этого компьютера, по умолчанию включена.
+  void Promise.all([
+    import('./features/appUpdate/useDesktopUpdater'),
+    import('./features/b640/account/deviceSettingsApi'),
+  ]).then(async ([{ desktopUpdater }, { getDeviceSettings }]) => {
+    const settings = await getDeviceSettings().catch(() => null);
+    desktopUpdater.setAutoInstall(settings?.autoUpdate ?? true);
+    desktopUpdater.start();
+  });
 }

@@ -13,6 +13,8 @@ export interface NativeSourceConnectionView {
   connectedAt: string;
   lastImportedAt: string;
   factCount: number;
+  /** n03: чей это аккаунт — «linkedin.com/in/…» или имя из резюме hh.ru; `null` — не знаем. */
+  account?: string | null;
 }
 
 export interface DisconnectedConnectionView {
@@ -204,4 +206,31 @@ export function mergeImportedSources(
     (summary) => !native.some((connection) => connection.platform === summary.platform),
   );
   return [...native, ...byLabel];
+}
+
+/** «linkedin.com/in/slug» из адреса профиля; чужой или битый адрес — `null`. */
+function linkedinHandle(url: string): string | null {
+  try {
+    const parsed = new URL(url.trim());
+    const host = parsed.hostname.toLowerCase();
+    if (host !== 'linkedin.com' && !host.endsWith('.linkedin.com')) return null;
+    const [section, slug] = parsed.pathname.split('/').filter(Boolean);
+    if (section?.toLowerCase() !== 'in' || !slug) return null;
+    return `linkedin.com/in/${decodeURIComponent(slug)}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * n03 (B774): подпись аккаунта площадки, как в макете. LinkedIn — адрес профиля из
+ * квитанции снимка; hh.ru адреса с именем не даёт, поэтому — имя из резюме кандидата.
+ */
+export function connectionAccount(
+  stored: StoredNativeSourceConnection,
+  resumeName: string | null | undefined,
+): string | null {
+  if (stored.platform === 'linkedin') return linkedinHandle(stored.receipt.sourceUrl);
+  const name = resumeName?.trim().replace(/\s+/gu, ' ');
+  return name ? name.slice(0, 120) : null;
 }

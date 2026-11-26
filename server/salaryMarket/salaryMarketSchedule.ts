@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { schedulePersistedJob } from '../maintenance/persistedJobSchedule';
-import { computeSalaryMarketSnapshots, writeSalaryMarketSnapshots } from './salaryMarketSnapshot';
+import { heavyRead } from '../maintenance/heavyReads/runHeavyRead';
+import { writeSalaryMarketSnapshots } from './salaryMarketSnapshot';
 
 interface SnapshotLog {
   info(details: Record<string, unknown>, message: string): void;
@@ -12,9 +13,10 @@ export function scheduleSalaryMarketSnapshots(
   database: DatabaseSync,
   log: SnapshotLog,
 ): () => void {
-  const run = (): boolean => {
+  // B649-3: 789 s on the loop (12.11); the read now runs in its own thread.
+  const run = async (): Promise<boolean> => {
     try {
-      const snapshots = computeSalaryMarketSnapshots(database, new Date());
+      const snapshots = await heavyRead(database, 'salarySnapshots', { nowMs: Date.now() }, log);
       writeSalaryMarketSnapshots(database, snapshots);
       log.info({ roles: snapshots.length }, 'salary-market-snapshots-written');
       return true;

@@ -114,11 +114,18 @@ export class PlacementBackfill {
    */
   private buildSourceIndex(): { index: LinkageIndex; ids: readonly string[]; builtAt: number } {
     const hasKey = this.database.prepare('SELECT 1 AS hit FROM company_directory WHERE company_key = ?');
-    const boards = new Map<string, string>();
-    for (const row of this.database.prepare(`SELECT company_key AS k, ats_provider AS p, ats_slug AS s FROM company_directory
-        WHERE ats_provider IS NOT NULL AND ats_slug IS NOT NULL`).all() as unknown as { k: string; p: string; s: string }[]) {
-      boards.set(`${row.p}:${row.s.toLowerCase()}`, row.k);
-    }
+    // B649-4 13.11: все доски справочника в Map держали такт до 7 с; теперь точечно по индексу.
+    // Последняя по rowid строка выигрывает, как раньше в Map.
+    const boardOf = this.database.prepare(`SELECT company_key AS k FROM company_directory
+        WHERE ats_provider = ? AND ats_slug = ? COLLATE NOCASE ORDER BY rowid DESC LIMIT 1`);
+    const boards = {
+      get: (key: string): string | undefined => {
+        const at = key.indexOf(':');
+        if (at <= 0) return undefined;
+        const row = boardOf.get(key.slice(0, at), key.slice(at + 1)) as { k: string } | undefined;
+        return row?.k;
+      },
+    };
     const index: LinkageIndex = { byKey: { has: (key) => hasKey.get(key) !== undefined }, byBoard: boards, byName: new Map() };
     const ids = (this.database.prepare('SELECT source_id AS id FROM vacancy_source_state ORDER BY source_id')
       .all() as unknown as { id: string }[]).map(({ id }) => id);

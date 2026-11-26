@@ -8,8 +8,17 @@ import {
 import { createHash } from 'node:crypto';
 import { HygienicRoleNamer } from './hygienicRoleNamer';
 import OpenAI from 'openai';
+import { z } from 'zod';
+import { roleTitleRu } from '../vacancies/roleTitleRu';
 import {
+  QueuedTitleTranslator,
+  TitleRuRetryRoleNamer,
+  type RoleTitleTranslator,
+} from './roleTitleRuRetry';
+import {
+  checkedTitleRu,
   ROLE_NAMING_JSON_SCHEMA,
+  ROLE_TITLE_TRANSLATION_INSTRUCTIONS,
   roleNamingInstructions,
   ROLE_NAMING_PROMPT_VERSION,
   roleNamingSchema,
@@ -20,7 +29,11 @@ import type { NamedRole } from '../../shared/roleProposals';
 import { isMutableModelAlias, modelRegistry, type ProviderId } from './modelRegistry';
 import type { ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
-import { assertOpenRouterModelForPersonalData, isOpenRouterBaseUrl, openRouterRouting } from './openRouterPrivacy';
+import {
+  assertOpenRouterModelForPersonalData,
+  isOpenRouterBaseUrl,
+  openRouterRouting,
+} from './openRouterPrivacy';
 
 /** Весь профиль в этот вызов не едет: роли называются по подтверждённым фактам. */
 const MAX_FACTS = 120;
@@ -30,7 +43,10 @@ const MAX_STATEMENT = 400;
 export interface ChatCompletionClient {
   readonly chat: {
     readonly completions: {
-      create(request: Record<string, unknown>, options?: { signal?: AbortSignal }): Promise<{
+      create(
+        request: Record<string, unknown>,
+        options?: { signal?: AbortSignal },
+      ): Promise<{
         choices: Array<{ message: { content?: string | null } }>;
       }>;
     };
@@ -211,6 +227,46 @@ export class LlmRoleNamer implements RoleNamer {
       return { roles: [], failures: [thrownFailure(this.stage, error, this.apiKey)] };
     }
   }
+
+  /** B748: перевод названий одной пачкой; каждый перевод проходит ту же проверку. */
+  async translateTitles(titles: readonly string[]): Promise<Readonly<Record<string, string>>> {
+    if (titles.length === 0) return {};
+    if (this.openRouter) assertOpenRouterModelForPersonalData(this.model);
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages: [
+        { role: 'system', content: ROLE_TITLE_TRANSLATION_INSTRUCTIONS },
+        { role: 'user', content: JSON.stringify({ titles }) },
+      ],
+      ...openRouterRouting({ personal: this.openRouter, requireParameters: false }),
+    });
+    return parseTranslations(response.choices[0]?.message?.content ?? null, titles);
+  }
+}
+
+const translationSchema = z.object({
+  titles: z.array(z.object({ title: z.string(), titleRu: z.string() })),
+});
+
+function parseTranslations(
+  content: string | null,
+  asked: readonly string[],
+): Readonly<Record<string, string>> {
+  const payload = content ? jsonPayload(content) : null;
+  if (!payload) return {};
+  try {
+    const parsed = translationSchema.safeParse(JSON.parse(payload));
+    if (!parsed.success) return {};
+    const wanted = new Set(asked);
+    return Object.fromEntries(
+      parsed.data.titles.flatMap(({ title, titleRu }) => {
+        const checked = wanted.has(title) ? checkedTitleRu(title, titleRu) : null;
+        return checked ? [[title, checked] as const] : [];
+      }),
+    );
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -253,8 +309,11 @@ function parseRoles(content: string | null): NamedRole[] {
   try {
     const parsed = roleNamingSchema.safeParse(JSON.parse(payload));
     if (!parsed.success) return [];
+    // titleRu уже проверен схемой (checkedTitleRu): без него перевод модели
+    // не доходил до ролей вовсе (B748).
     return parsed.data.roles.map((role) => ({
       title: role.title,
+      ...(role.titleRu ? { titleRu: role.titleRu } : {}),
       reason: role.reason,
       evidenceRefs: role.evidenceRefs,
     }));
@@ -404,6 +463,18 @@ const DURABLE_TTL_MS = 7 * 24 * 60 * 60_000;
  * незачем. Память — быстрый слой, переживает рестарт база: без неё каждый
  * деплой снова звал модель и упирался в исчерпанную квоту (INC-035, B191).
  */
+/**
+ * B748 (переводы v8): сохранённое прежней проверкой название проходит нынешнюю без модели.
+ * Не прошедшее отбрасывается — экран берёт перевод, который фоновый проход записал роли.
+ */
+function recheckedTitleRu(role: NamedRole): NamedRole {
+  if (!role.titleRu) return role;
+  const titleRu = checkedTitleRu(role.title, role.titleRu);
+  if (titleRu === role.titleRu) return role;
+  const { titleRu: _dropped, ...rest } = role;
+  return titleRu ? { ...rest, titleRu } : rest;
+}
+
 export class CachedRoleNamer implements RoleNamer {
   private readonly entries = new Map<string, { at: number; outcome: RoleNamingOutcome }>();
 
@@ -445,7 +516,7 @@ export class CachedRoleNamer implements RoleNamer {
     const stored = this.store?.read(key);
     if (stored && this.now() - stored.at < this.durableTtlMs) {
       const outcome: RoleNamingOutcome = {
-        roles: stored.roles,
+        roles: stored.roles.map(recheckedTitleRu),
         ...(stored.stage ? { stage: stored.stage } : {}),
       };
       this.entries.set(key, { at: this.now(), outcome });
@@ -507,19 +578,30 @@ export class QueuedRoleNamer implements RoleNamer {
   }
 }
 
+/** B748: проверенный перевод названий из собранной цепочки называния; нет — перевода нет. */
+export function roleTitleTranslatorOf(
+  namer: RoleNamer | undefined,
+): RoleTitleTranslator | undefined {
+  const cached = namer instanceof CachedRoleNamer ? namer.inner : namer;
+  const clean = cached instanceof HygienicRoleNamer ? cached.inner : cached;
+  return clean instanceof TitleRuRetryRoleNamer ? clean.translator : undefined;
+}
+
 /** Отчёт об очереди считается по ней самой, а не по отдельному списку (B183). */
 export function describeRoleNamerQueue(namer: RoleNamer | undefined): string[] {
   const cached = namer instanceof CachedRoleNamer ? namer.inner : namer;
   // Между хранилищем и очередью стоит чистка названий (B210): она ступеней не
   // добавляет, поэтому обёртку разворачиваем, а не считаем концом очереди.
-  const queue = cached instanceof HygienicRoleNamer ? cached.inner : cached;
+  const clean = cached instanceof HygienicRoleNamer ? cached.inner : cached;
+  // Вторая попытка перевода (B748) ступеней называния тоже не добавляет.
+  const queue = clean instanceof TitleRuRetryRoleNamer ? clean.inner : clean;
   if (!(queue instanceof QueuedRoleNamer)) return [];
   return [...queue.descriptors];
 }
 
 export interface RoleNamerConfig {
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
-  /** Gemini на Vertex — последняя ступень цепочки называния, когда настроен (B580, 29.10). */
+  /** Vertex: в называние ролей не ставится с 20.11; конфиг остаётся для цепочек, где он есть. */
   readonly vertex?: VertexConfig;
   /** Metered `fetch` of the Vertex stage (04.11): books the call and enforces the daily cap. */
   readonly vertexFetch?: typeof fetch;
@@ -528,7 +610,7 @@ export interface RoleNamerConfig {
 }
 
 /**
- * Цепочка называния (B580, 29.10): deepseek-v4.1-flash → gpt-5.6-luna → Vertex.
+ * Цепочка называния (23.11): deepseek-v4.1-flash дважды → gpt-5.6-luna, без Vertex (выключен 20.11).
  * Gemini AI Studio с кредитом в 402 и бесплатные маршруты из неё ушли.
  */
 export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
@@ -542,15 +624,34 @@ export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
     // Чистка стоит до хранилища: невидимая метка в названии роли не должна
     // пережить рестарт вместе с ним (B210, B191).
     new HygienicRoleNamer({
-      inner: new QueuedRoleNamer(
+      inner: withTitleRuRetry(
         stages.map((stage) =>
-          stage.kind === 'vertex' ? vertexRoleNamer(stage.vertex, config.vertexFetch) : routeRoleNamer(stage.route),
+          stage.kind === 'vertex'
+            ? vertexRoleNamer(stage.vertex, config.vertexFetch)
+            : routeRoleNamer(stage.route),
         ),
         stages.map((stage) => stage.label),
       ),
     }),
     { ...(config.cacheStore ? { store: config.cacheStore } : {}) },
   );
+}
+
+/**
+ * Очередь называния с второй попыткой перевода (B748): переводят те же
+ * chat-completions ступени, по очереди; онтология покрывает своё без вызова.
+ */
+function withTitleRuRetry(namers: readonly RoleNamer[], labels: readonly string[]): RoleNamer {
+  const queue = new QueuedRoleNamer(namers, labels);
+  const translators: RoleTitleTranslator[] = namers.filter(
+    (namer): namer is LlmRoleNamer => namer instanceof LlmRoleNamer,
+  );
+  if (translators.length === 0) return queue;
+  return new TitleRuRetryRoleNamer({
+    inner: queue,
+    translator: new QueuedTitleTranslator(translators),
+    needsTranslation: (title) => roleTitleRu(title) === title,
+  });
 }
 
 function vertexRoleNamer(vertex: VertexConfig, fetchImpl?: typeof fetch): RoleNamer {
@@ -570,15 +671,15 @@ function vertexRoleNamer(vertex: VertexConfig, fetchImpl?: typeof fetch): RoleNa
 /** Ступень называния по маршруту цепочки: все они говорят на chat-completions. */
 function routeRoleNamer(route: ProviderRoute): RoleNamer {
   return new LlmRoleNamer({
-        apiKey: route.apiKey,
-        model: route.model,
-        stage: `${route.provider}:${route.model}`,
-        baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
-        structuredOutput:
-          modelRegistry[route.provider].models.find((item) => item.id === route.model)
-            ?.structuredOutput ?? false,
-        // Условие имеет смысл только у пула: у названной модели OpenRouter
-        // отвечает `404 No endpoints found` (живая проверка 2026-09-03).
-        requireParameters: route.provider === 'openrouter' && isMutableModelAlias(route.model),
-      });
+    apiKey: route.apiKey,
+    model: route.model,
+    stage: `${route.provider}:${route.model}`,
+    baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
+    structuredOutput:
+      modelRegistry[route.provider].models.find((item) => item.id === route.model)
+        ?.structuredOutput ?? false,
+    // Условие имеет смысл только у пула: у названной модели OpenRouter
+    // отвечает `404 No endpoints found` (живая проверка 2026-09-03).
+    requireParameters: route.provider === 'openrouter' && isMutableModelAlias(route.model),
+  });
 }

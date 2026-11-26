@@ -1,0 +1,292 @@
+// @vitest-environment jsdom
+import { act, useState } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { click, mount } from '../../kit/testDom';
+import { getSortedMatchedPage, type ServerMoney } from '../b640Api';
+import { makeItem } from './fixtures';
+import { DEFAULT_LIST_SORT, type SortState } from './sortModel';
+import { firstPortionOf, useServerSortedList, type FirstPortion } from './useServerSortedList';
+
+vi.mock('../b640Api', () => ({ getSortedMatchedPage: vi.fn() }));
+const read = vi.mocked(getSortedMatchedPage);
+const page = (ids: string[], total: number, nextOffset: number | null) => ({
+  rows: ids.map((id) => makeItem({ id })),
+  total,
+  nextOffset,
+});
+
+const OTHER: SortState = { key: 'role', dir: 'asc' };
+
+interface ProbeProps {
+  readonly active: boolean;
+  readonly sort: SortState;
+  readonly first?: FirstPortion;
+}
+
+function Probe({ active, sort: initial, first }: ProbeProps) {
+  const [sort, setSort] = useState(initial);
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
+  const [days, setDays] = useState<number | null>(null);
+  const [money, setMoney] = useState<ServerMoney | null>(null);
+  const list = useServerSortedList(active, sort, ['CTO'], hidden, days, money, first);
+  return (
+    <div>
+      <button id="days" onClick={() => setDays(30)} />
+      <button id="money" onClick={() => setMoney({ from: 350_000, currency: 'RUB' })} />
+      <button id="sort" onClick={() => setSort(OTHER)} />
+      <button id="hide" onClick={() => setHidden(new Set(['a']))} />
+      <button id="unhide" onClick={() => setHidden(new Set())} />
+      <output data-status={list.status} data-total={list.total} data-more={String(list.hasMore)}>
+        {list.rows.map((row) => row.cluster.id).join(',')}
+      </output>
+      <button id="more" onClick={list.loadMore} />
+      <button id="retry" onClick={list.retry} />
+    </div>
+  );
+}
+
+const flush = () => act(async () => {});
+const out = (root: HTMLElement) => root.querySelector('output')!;
+
+beforeEach(() => read.mockReset());
+
+describe('серверная сортировка неполной подборки', () => {
+  it('выключена — ничего не читает', async () => {
+    const view = mount(<Probe active={false} sort={{ key: 'money', dir: 'desc' }} />);
+    await flush();
+    expect(read).not.toHaveBeenCalled();
+    expect(out(view.container).dataset.status).toBe('idle');
+    view.unmount();
+  });
+
+  it('порция пула с теми же ролями — без запроса, продолжение и другой столбец — запросом', async () => {
+    const first = { rows: [makeItem({ id: 'a' }), makeItem({ id: 'b' })], total: 5, roles: ['CTO'] };
+    read.mockResolvedValue(page(['c'], 5, null));
+    const view = mount(<Probe active sort={DEFAULT_LIST_SORT} first={first} />);
+    await flush();
+    expect(read).not.toHaveBeenCalled();
+    expect(out(view.container).textContent).toBe('a,b');
+    expect(out(view.container).dataset.more).toBe('true');
+    click(view.container.querySelector('#more'));
+    await flush();
+    expect(read.mock.calls[0]?.[2]).toBe(2);
+    click(view.container.querySelector('#sort'));
+    await flush();
+    expect(read).toHaveBeenLastCalledWith(OTHER, ['CTO'], 0, expect.anything(), null, null);
+    view.unmount();
+  });
+
+  it('порция пула с датой не подменяет отбор сервера', async () => {
+    read.mockResolvedValue(page(['d'], 1, null));
+    const first = { rows: [makeItem({ id: 'a' })], total: 5, roles: ['CTO'] };
+    const view = mount(<Probe active sort={DEFAULT_LIST_SORT} first={first} />);
+    click(view.container.querySelector('#days'));
+    await flush();
+    expect(out(view.container).textContent).toBe('d');
+    view.unmount();
+  });
+
+  it.each([
+    ['пул ещё читается', null],
+    ['пул прочитан с другими ролями', { rows: [], total: 0, roles: [] }],
+  ])('%s — список ждёт, запроса нет', async (_, first) => {
+    const view = mount(<Probe active sort={DEFAULT_LIST_SORT} first={first} />);
+    await flush();
+    expect(read).not.toHaveBeenCalled();
+    expect(out(view.container).dataset.status).toBe('loading');
+    view.unmount();
+  });
+
+  it('чтение пула упало без ролей — список перестаёт ждать и читает сам', async () => {
+    read.mockResolvedValue(page(['a'], 1, null));
+    const cached = { matched: [makeItem({ id: 'old' })], total: 9, readRoles: undefined };
+    function Failing() {
+      const [reading, setReading] = useState(true);
+      return (
+        <div>
+          <button id="fail" onClick={() => setReading(false)} />
+          <Probe active sort={DEFAULT_LIST_SORT} first={firstPortionOf({ ...cached, reading })} />
+        </div>
+      );
+    }
+    const waiting = mount(<Failing />);
+    await flush();
+    expect(read).not.toHaveBeenCalled();
+    click(waiting.container.querySelector('#fail'));
+    await flush();
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(out(waiting.container).dataset.status).toBe('ready');
+    expect(out(waiting.container).textContent).toBe('a');
+    waiting.unmount();
+  });
+
+  it('первая порция, затем дочитывание со следующего смещения', async () => {
+    read.mockResolvedValueOnce(page(['a', 'b'], 5, 2)).mockResolvedValueOnce(page(['c'], 5, null));
+    const view = mount(<Probe active sort={{ key: 'money', dir: 'desc' }} />);
+    expect(out(view.container).dataset.status).toBe('loading');
+    await flush();
+    expect(read).toHaveBeenCalledWith(
+      { key: 'money', dir: 'desc' },
+      ['CTO'],
+      0,
+      expect.anything(),
+      null,
+      null,
+    );
+    expect(out(view.container).textContent).toBe('a,b');
+    expect(out(view.container).dataset.more).toBe('true');
+    click(view.container.querySelector('#more'));
+    await flush();
+    expect(read).toHaveBeenLastCalledWith(
+      { key: 'money', dir: 'desc' },
+      ['CTO'],
+      2,
+      expect.anything(),
+      null,
+      null,
+    );
+    expect(out(view.container).textContent).toBe('a,b,c');
+    expect(out(view.container).dataset.more).toBe('false');
+    view.unmount();
+  });
+
+  it('смена столбца начинает с первой порции и сразу прячет старые строки', async () => {
+    read.mockResolvedValueOnce(page(['a'], 3, 1)).mockResolvedValueOnce(page(['z'], 3, 1));
+    const view = mount(<Probe active sort={{ key: 'money', dir: 'desc' }} />);
+    await flush();
+    act(() => {
+      view.unmount();
+    });
+    const next = mount(<Probe active sort={{ key: 'role', dir: 'asc' }} />);
+    expect(out(next.container).textContent).toBe('');
+    await flush();
+    expect(read).toHaveBeenLastCalledWith(
+      { key: 'role', dir: 'asc' },
+      ['CTO'],
+      0,
+      expect.anything(),
+      null,
+      null,
+    );
+    expect(out(next.container).textContent).toBe('z');
+    next.unmount();
+  });
+
+  it('сбой и «Повторить» читают ту же порцию', async () => {
+    read.mockRejectedValueOnce(new Error('сеть')).mockResolvedValueOnce(page(['a'], 1, null));
+    const view = mount(<Probe active sort={{ key: 'fit', dir: 'asc' }} />);
+    await flush();
+    expect(out(view.container).dataset.status).toBe('failed');
+    click(view.container.querySelector('#retry'));
+    await flush();
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(read).toHaveBeenLastCalledWith(
+      { key: 'fit', dir: 'asc' },
+      ['CTO'],
+      0,
+      expect.anything(),
+      null,
+      null,
+    );
+    expect(out(view.container).dataset.status).toBe('ready');
+    view.unmount();
+  });
+
+  it('скрытая вакансия сдвигает следующую порцию на строку назад', async () => {
+    read.mockResolvedValueOnce(page(['a', 'b'], 5, 2)).mockResolvedValueOnce(page(['c'], 4, null));
+    const view = mount(<Probe active sort={{ key: 'money', dir: 'desc' }} />);
+    await flush();
+    click(view.container.querySelector('#hide'));
+    expect(out(view.container).dataset.total).toBe('4');
+    click(view.container.querySelector('#more'));
+    await flush();
+    expect(read).toHaveBeenLastCalledWith(
+      { key: 'money', dir: 'desc' },
+      ['CTO'],
+      1,
+      expect.anything(),
+      null,
+      null,
+    );
+    view.unmount();
+  });
+
+  it('возврат в подборку перечитывает список с первой порции', async () => {
+    read
+      .mockResolvedValueOnce(page(['a', 'b'], 5, 2))
+      .mockResolvedValueOnce(page(['a', 'b'], 5, 2))
+      .mockResolvedValueOnce(page(['a', 'b'], 5, 2));
+    const view = mount(<Probe active sort={{ key: 'money', dir: 'desc' }} />);
+    await flush();
+    click(view.container.querySelector('#hide'));
+    click(view.container.querySelector('#unhide'));
+    await flush();
+    expect(read).toHaveBeenLastCalledWith(
+      { key: 'money', dir: 'desc' },
+      ['CTO'],
+      0,
+      expect.anything(),
+      null,
+      null,
+    );
+    expect(out(view.container).dataset.total).toBe('5');
+    view.unmount();
+  });
+
+  it('поздний ответ прежнего столбца не затирает ответ нового', async () => {
+    let resolveOld: (value: ReturnType<typeof page>) => void = () => {};
+    read
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOld = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(page(['new'], 1, null));
+    const view = mount(<Probe active sort={{ key: 'money', dir: 'desc' }} />);
+    click(view.container.querySelector('#sort'));
+    await flush();
+    expect(out(view.container).textContent).toBe('new');
+    await act(async () => resolveOld(page(['old'], 1, null)));
+    expect(out(view.container).textContent).toBe('new');
+    view.unmount();
+  });
+
+  it('B726: «Дата» уходит на сервер и начинает чтение с первой порции', async () => {
+    read.mockResolvedValueOnce(page(['a', 'b'], 9, 2)).mockResolvedValueOnce(page(['c'], 1, null));
+    const view = mount(<Probe active sort={{ key: 'date', dir: 'desc' }} />);
+    await flush();
+    click(view.container.querySelector('#days'));
+    await flush();
+    expect(read).toHaveBeenLastCalledWith(
+      { key: 'date', dir: 'desc' },
+      ['CTO'],
+      0,
+      expect.anything(),
+      30,
+      null,
+    );
+    expect(out(view.container).textContent).toBe('c');
+    expect(out(view.container).dataset.total).toBe('1');
+    view.unmount();
+  });
+
+  it('«Зарплата от» читает подборку заново с первой порции, число — от сервера (B765)', async () => {
+    read.mockResolvedValueOnce(page(['a', 'b'], 9, 2)).mockResolvedValueOnce(page(['c'], 1, null));
+    const view = mount(<Probe active sort={{ key: 'fit', dir: 'desc' }} />);
+    await flush();
+    click(view.container.querySelector('#money'));
+    await flush();
+    expect(read).toHaveBeenLastCalledWith(
+      { key: 'fit', dir: 'desc' },
+      ['CTO'],
+      0,
+      expect.anything(),
+      null,
+      { from: 350_000, currency: 'RUB' },
+    );
+    expect(out(view.container).textContent).toBe('c');
+    expect(out(view.container).dataset.total).toBe('1');
+    view.unmount();
+  });
+});

@@ -27,7 +27,13 @@ import {
   type CandidateAutomationQueueItem,
 } from '../candidate/sqliteCandidateAutomationRepository';
 import type { CandidateIdentity, CandidateSnapshot } from '../data/candidateStore';
+import { sentApplicationFor } from './sentApplicationGuard';
 import type { RouteDeps } from './deps';
+import { snapshotWithDescription } from './applicationVacancyText';
+import { createAutomationPausePort } from '../candidate/automationPausePort';
+import { postRemindersFor } from './linkedinPostReminders';
+import { registerCandidateStatusRoutes } from './candidateStatusRoutes';
+import { registerAccountDeletionRoutes } from './accountDeletionRoutes';
 import {
   authenticateCandidate,
   authenticateSession,
@@ -238,6 +244,8 @@ const pauseAutomation: Handler = async (deps, request, reply) => {
   const runtime = deps.automationRepository.schedulerRepository.setRuntime(candidate.id, {
     status: 'paused', pauseUntil: until, nextSendAt: until,
   });
+  // B695: «Остановить всё» снимает и напоминания очереди LinkedIn.
+  postRemindersFor(deps, request.log)?.pauseAll(candidate.id);
   return reply.send({ data: { settings, runtime } });
 };
 
@@ -248,6 +256,7 @@ const resumeAutomation: Handler = async (deps, request, reply) => {
   const settings = deps.automationRepository.setPause(candidate.id, null);
   deps.candidateActionRepository?.setKillSwitch(`candidate:${candidate.id}`, false, 'manual_pause');
   const runtime = deps.automationRepository.schedulerRepository.setEmergencyPause(candidate.id, false);
+  postRemindersFor(deps, request.log)?.resumeAll(candidate.id);
   return reply.send({ data: { settings, runtime } });
 };
 
@@ -530,6 +539,8 @@ function ensureSavedApplication(
   cluster: VacancyCluster,
   platform: CandidateAutomationPlatform,
 ): string | null {
+  // B801: отклик на эту вакансию уже отправлен — второй в автоочередь не встаёт.
+  if (sentApplicationFor(deps, candidateId, cluster.id, cluster)) return null;
   if (applicationId) {
     const existing = deps.candidateStore.getApplication(candidateId, applicationId);
     return existing?.clusterId === cluster.id && existing.stage === 'saved' ? existing.id : null;
@@ -538,14 +549,15 @@ function ensureSavedApplication(
     const application = deps.candidateStore.createApplication(candidateId, {
       clusterId: cluster.id,
       stage: 'saved',
-      manualVacancy: {
+      draft: true,
+      manualVacancy: snapshotWithDescription(deps.multiSourceEngine, cluster.id, {
         title: cluster.canonicalTitle,
         company: cluster.canonicalCompany,
         url: cluster.primaryUrl,
         source: platform === 'hh' ? 'hh.ru' : 'LinkedIn',
-      },
+      }),
     });
-    return application.id;
+    return application.stage === 'saved' ? application.id : null;
   } catch (error) {
     request.log.warn({ event: 'automation-application-create-failed', candidateId, failureType: failureType(error) }, 'candidate-automation-queue');
     return null;
@@ -751,6 +763,30 @@ export function registerCandidateAutomationRoutes(app: FastifyInstance, deps: Ro
   app.delete('/api/v1/candidate/automation/stop-companies', withDeps(bound, removeStopCompany));
   app.post('/api/v1/candidate/automation/stop-companies/import-rejections', { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } }, withDeps(bound, importRejectedCompanies));
   registerCandidateAutomationScheduleRoutes(app, bound);
+  // B665: статус кандидата ставит ту же паузу; свои маршруты закрыты флагом B640.
+  const automationPause = createAutomationPausePort(automationRepository, deps.candidateActionRepository);
+  // B689: удаление аккаунта ставит ту же паузу и снимает её при возврате.
+  registerAccountDeletionRoutes(app, { ...deps, automationPause });
+  registerCandidateStatusRoutes(app, {
+    ...deps,
+    automationPause,
+    // B691: сигналы «Сегодня» отличают свои отклики кандидата от автооткликов.
+    autoAppliedApplicationIds: (candidateId) => autoAppliedApplicationIds(automationRepository, candidateId),
+  });
+}
+
+const AUTO_APPLIED_STATUSES: ReadonlySet<string> = new Set(['approved', 'sent', 'attempted', 'failed']);
+
+/** Отклики, которые прошли через очередь автооткликов (последние 500 строк очереди). */
+function autoAppliedApplicationIds(
+  repository: SqliteCandidateAutomationRepository,
+  candidateId: string,
+): ReadonlySet<string> {
+  const ids = repository
+    .listQueue(candidateId, { limit: 500 })
+    .filter((item) => AUTO_APPLIED_STATUSES.has(item.status))
+    .flatMap((item) => (item.applicationId ? [item.applicationId] : []));
+  return new Set(ids);
 }
 
 const getStopCompanies: Handler = async (deps, request, reply) => {

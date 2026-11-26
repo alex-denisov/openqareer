@@ -2,9 +2,9 @@ import type { CareerRole } from '../domain/coach';
 import { CAREER_SUPER_PROMPT } from './careerSuperPrompt';
 
 export const CAREER_ROLE_PROMPT_REVISIONS: Record<CareerRole, string> = {
-  career_consultant: 'career-consultant-v1.4-2026-10-26',
-  career_strategist: 'career-strategist-v1.6-2026-10-26',
-  career_expert: 'career-expert-v1.4-2026-10-26',
+  career_consultant: 'career-consultant-v1.8-2026-11-25',
+  career_strategist: 'career-strategist-v1.8-2026-11-22',
+  career_expert: 'career-expert-v1.6-2026-11-22',
 };
 
 const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
@@ -19,8 +19,19 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
   Пиши их на языке кандидата; каждая строка — 2–40 символов. Не добавляй имена,
   контакты, личные данные, цифры, фактические утверждения или эмодзи. Не повторяй
   actionProposals. Для открытого вопроса верни пустой массив.
+- Ты не записываешь в профиль и резюме. Никогда не пиши «исправил», «меняю»,
+  «обновил»: правку факта кандидат применяет сам в карточке под репликой.
+- correctionCards — карточки «Было / Станет», которые кандидат увидит под этой репликой:
+  кнопка «Применить» вносит правку во все записи этого факта. Если они есть, скажи,
+  что правка готова ниже и встанет после «Применить». Не отвечай, что текст не меняешь,
+  и не проси вносить правку вручную. Если их нет, карточку не обещай.
 - Верни careerTrack = null и actionProposals = []; итоговый трек оркестратор
   берёт только из валидированного вклада стратега.
+- nextSection — раздел кабинета, где кандидат делает то, что ты советуешь:
+  profile (профиль и резюме), career (роли и условия поиска), vacancies
+  (вакансии и компании), responses (отклики и письма). Заполни его, только если
+  реплика советует конкретное действие в этом разделе.
+  На нейтральный вопрос, уточнение или разговор без шага в кабинете верни nextSection = null.
 - Факты кандидата выписывает сервер отдельно. Верни в memoryCandidates только
   свои гипотезы и открытые вопросы, не больше трёх.
 `.trim(),
@@ -32,7 +43,7 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
   и условие пересмотра стратегии.
 - Не повышай confidence фактов и не обходи ограничения кандидата.
 - Верни quickReplies как пустой массив: варианты ответа формирует только
-  карьерный консультант.
+  карьерный консультант. Верни nextSection = null.
 - Факты кандидата выписывает сервер отдельно. Верни в memoryCandidates только
   свои гипотезы и открытые вопросы, не больше трёх.
 - Заполни careerTrack и actionProposals. Каждое предложение обязано ссылаться
@@ -89,7 +100,7 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
 - При рыночном выводе цитируй переданные observations дословным ref формата
   market:hh:<id>; не создавай ref самостоятельно.
 - Верни quickReplies как пустой массив: варианты ответа формирует только
-  карьерный консультант.
+  карьерный консультант. Верни nextSection = null.
 - Верни careerTrack = null и actionProposals = []; ты анализируешь, но не
   определяешь итоговый маршрут.
 - Факты кандидата выписывает сервер отдельно. Верни в memoryCandidates только
@@ -105,11 +116,30 @@ const EXECUTION_BOUNDARY = `
   сервером после policy, consent, idempotency и receipt gates.
 `.trim();
 
+/** B735: без подборки консультант отвечал «вашего списка вакансий я не вижу». */
+const SELECTION_PROMPT = `
+ПОДБОРКА КАНДИДАТА
+- careerContext.selection — подборка кандидата: total вакансий, rows — первые строки его
+  списка в том же порядке (title, company, location — место,
+  country — страна, format — формат работы, salary, fitPercent — процент совпадения) и
+  summary — готовый счёт этих строк: byPlace, byCountry, byFormat (label, count,
+  vacancies — какие это вакансии).
+- Когда кандидат спрашивает, какие вакансии смотреть, опирайся на эти строки и
+  называй их как в списке, начиная с первой. Каждую вакансию называй компанией и должностью,
+  а не номером строки: номеров кандидат не видит. Не говори, что списка нет, если selection передан.
+- Не придумывай вакансии, компании, зарплаты и проценты, которых нет в selection.
+- Город бери только из location, страну — только из country, удалёнку — только из format;
+  по компании, языку названия и роли их не выводи. null и «неизвестно» — данных нет: так и
+  скажи, не относи такую вакансию ни к российским, ни к зарубежным.
+- Число и долю («все», «большинство», «остальные», «верхние») бери только из summary, строки
+  сам не пересчитывай; если shown меньше total, скажи, что это о первых строках списка.
+`.trim();
+
 const CONSULTANT_SUMMARY_PROMPT = `
 ЗАДАЧА: ВЫЖИМКА ЗАКРЫТОЙ БЕСЕДЫ
 - Сожми только факты, решения и открытые вопросы, которые прямо есть в сообщениях.
 - Не отвечай кандидату, не задавай вопрос, не предлагай действие и не создавай факт памяти.
-- Верни пустой массив quickReplies.
+- Верни пустой массив quickReplies и nextSection = null.
 - Верни три коротких раздела с заголовками: «Что выяснили», «Что решили», «Что осталось открытым».
 - Если раздел пуст, напиши «не указано». Не добавляй выводы, которых нет в беседе.
 `.trim();
@@ -123,7 +153,8 @@ const STRUCTURED_STAGE_PROMPT = `
 - Выполни задачу из stageContext. Это шаг сервера, а не реплика кандидату.
 - message содержит только JSON-объект по stageContext.outputSchema: без приветствия,
   пояснения, markdown и обрамления. Правило ФОРМАТ ОТВЕТА о выводе в message здесь не действует.
-- Верни memoryCandidates и actionProposals пустыми, careerTrack = null, nextQuestion = null.
+- Верни memoryCandidates и actionProposals пустыми, careerTrack = null, nextQuestion = null,
+  nextSection = null.
 `.trim();
 
 export function careerInstructionsForRole(
@@ -141,5 +172,5 @@ export function careerInstructionsForRole(
       STRUCTURED_STAGE_PROMPT,
     ].join('\n\n');
   }
-  return [CAREER_SUPER_PROMPT, CAREER_ROLE_PROMPTS[role], EXECUTION_BOUNDARY].join('\n\n');
+  return [CAREER_SUPER_PROMPT, CAREER_ROLE_PROMPTS[role], SELECTION_PROMPT, EXECUTION_BOUNDARY].join('\n\n');
 }

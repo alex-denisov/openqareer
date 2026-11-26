@@ -9,6 +9,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import { buildLinkageIndex, type DirectoryRow, type LinkageIndex } from './placementLinkage';
 import { linkAggregatorRow } from './aggregatorLinkage';
 import { PLACEMENT_TABLES } from './placementSchema';
+import { recordCompanyPlacements } from './placementWriter';
+import { resolveCompanyFromAggregator, updateCompanySiteFromAggregator } from './aggregatorCompanyResolve';
+import { nameKey } from '../freehire/freehireImport';
 
 export interface AggregatorBackfillReport {
   readonly done: boolean;
@@ -25,22 +28,31 @@ const DEFAULT_CHUNK = 200;
 export const AGGREGATOR_TICK_BUDGET_MS = 300;
 export const AGGREGATOR_PASS_PAUSE_MS = 6 * 60 * 60_000;
 
-interface PoolRow { id: string; source_id: string; company: string | null; person: number | null }
+interface PoolRow { id: string; source_id: string; company: string | null; person: number | null; employer: string | number | null; site: string | null }
+
+export interface AggregatorBackfillOptions {
+  chunk?: number;
+  now?: () => number;
+  autoResolve?: boolean;
+}
 
 export class AggregatorCompanyBackfill {
   private directory: DirectoryRow[] = [];
   private directoryCursor: string | undefined = '';
   private index: LinkageIndex | undefined;
   private names = new Map<string, string>();
+  private hhEmployers = new Map<string, string>();
   private cursor = '';
   private linkedTotal = 0;
   private changedTotal = 0;
   private readonly chunk: number;
   private readonly now: () => number;
+  private readonly autoResolve: boolean;
 
-  constructor(private readonly db: DatabaseSync, options: { chunk?: number; now?: () => number } = {}) {
+  constructor(private readonly db: DatabaseSync, options: AggregatorBackfillOptions = {}) {
     this.chunk = options.chunk ?? DEFAULT_CHUNK;
     this.now = options.now ?? Date.now;
+    this.autoResolve = options.autoResolve ?? (process.env.OPENQAREER_AGGREGATOR_AUTO_RESOLVE === '1');
     db.exec(PLACEMENT_TABLES);
   }
 
@@ -51,7 +63,9 @@ export class AggregatorCompanyBackfill {
     const rows = this.db
       .prepare(
         `SELECT i.id, i.source_id, json_extract(c.cluster_json,'$.company') AS company,
-                json_extract(c.cluster_json,'$.employerIsPerson') AS person
+                json_extract(c.cluster_json,'$.employerIsPerson') AS person,
+                json_extract(c.cluster_json,'$.employerId') AS employer,
+                json_extract(c.cluster_json,'$.employerSite') AS site
            FROM vacancy_pool_index i JOIN vacancy_cluster_input c ON c.id = i.id
           WHERE i.id > ? AND i.expired = 0 ORDER BY i.id LIMIT ?`,
       )
@@ -77,9 +91,69 @@ export class AggregatorCompanyBackfill {
     if (page.length < DIRECTORY_PAGE) {
       this.index = buildLinkageIndex(this.directory);
       this.names = new Map(this.directory.map((row) => [row.companyKey, row.companyName]));
+      this.hhEmployers = this.readHhEmployers();
       this.directory = [];
     }
     return { done: false, processed: 0, linked: 0, unlinked: 0, linkedTotal: this.linkedTotal, changedTotal: this.changedTotal, ms: this.now() - startedAt };
+  }
+
+  /** B643: hh employer id → company, from links on company sites (`hh:<id>` placements). */
+  private readHhEmployers(): Map<string, string> {
+    const rows = this.db
+      .prepare(`SELECT substr(placement_id, 4) AS employerId, company_key AS companyKey FROM company_placement
+                 WHERE placement_id LIKE 'hh:%' AND company_key IS NOT NULL`)
+      .all() as unknown as { employerId: string; companyKey: string }[];
+    return new Map(rows.map((row) => [row.employerId, row.companyKey]));
+  }
+
+  private handleLinkedRow(
+    row: PoolRow,
+    link: { companyKey: string; how: import('./aggregatorLinkage').LinkHow },
+    nowMs: number,
+  ): void {
+    if (row.site && link.how === 'exact_name') {
+      if (this.autoResolve) {
+        updateCompanySiteFromAggregator(this.db, link.companyKey, row.site, nowMs);
+      } else {
+        recordCompanyPlacements(this.db, link.companyKey, { boards: [], siteUrl: row.site, discoveredBy: 'aggregator_site' }, nowMs);
+      }
+    }
+    if (row.employer !== null && row.employer !== undefined && this.autoResolve) {
+      recordCompanyPlacements(this.db, link.companyKey, {
+        boards: [],
+        hhEmployerIds: [String(row.employer)],
+        discoveredBy: 'aggregator_site',
+      }, nowMs);
+      this.hhEmployers.set(String(row.employer), link.companyKey);
+    }
+  }
+
+  private handleUnlinkedRow(
+    row: PoolRow,
+    index: LinkageIndex,
+    nowMs: number,
+  ): import('./aggregatorCompanyResolve').AutoResolvedCompany | null {
+    if (!this.autoResolve) return null;
+    const auto = resolveCompanyFromAggregator(
+      this.db,
+      {
+        company: row.company ?? '',
+        site: row.site,
+        employerId: row.employer,
+        sourceId: row.source_id,
+        sampleVacancyId: row.id,
+        employerIsPerson: row.person === 1,
+      },
+      nowMs,
+    );
+    if (!auto) return null;
+    this.names.set(auto.companyKey, row.company!);
+    (index.byKey as Set<string>).add(auto.companyKey);
+    (index.byName as Map<string, string | null>).set(nameKey(row.company!), auto.companyKey);
+    if (row.employer !== null && row.employer !== undefined) {
+      this.hhEmployers.set(String(row.employer), auto.companyKey);
+    }
+    return auto;
   }
 
   private write(rows: readonly PoolRow[]): { linked: number; unlinked: number } {
@@ -96,10 +170,22 @@ export class AggregatorCompanyBackfill {
     this.db.exec('BEGIN IMMEDIATE');
     try {
       for (const row of rows) {
-        const link = linkAggregatorRow({ sourceId: row.source_id, company: row.company, employerIsPerson: row.person === 1 }, index, (key) => this.names.get(key));
+        const employerCompanyKey = row.employer === null ? undefined : this.hhEmployers.get(String(row.employer));
+        const link = linkAggregatorRow(
+          { sourceId: row.source_id, company: row.company, employerIsPerson: row.person === 1, employerCompanyKey },
+          index,
+          (key) => this.names.get(key),
+        );
         if (link.status === 'linked') {
           linked += 1;
           this.changedTotal += Number(upsert.run(row.id, link.companyKey, link.how, nowMs).changes);
+          this.handleLinkedRow(row, link, nowMs);
+          continue;
+        }
+        const auto = this.handleUnlinkedRow(row, index, nowMs);
+        if (auto) {
+          linked += 1;
+          this.changedTotal += Number(upsert.run(row.id, auto.companyKey, auto.how, nowMs).changes);
         } else {
           unlinked += 1;
           this.changedTotal += Number(drop.run(row.id).changes);
@@ -120,6 +206,7 @@ export class AggregatorCompanyBackfill {
     this.directoryCursor = '';
     this.index = undefined;
     this.names = new Map();
+    this.hhEmployers = new Map();
     this.linkedTotal = 0;
     this.changedTotal = 0;
   }

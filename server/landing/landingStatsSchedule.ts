@@ -4,21 +4,14 @@
  * - Web server: read that one row every 5 minutes into the in-memory cache.
  */
 import { DatabaseSync } from 'node:sqlite';
+import { labelledTimer } from '../observability/backgroundSteps';
+import { nextTurn } from '../data/chunkedRows';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import { schedulePersistedJob } from '../maintenance/persistedJobSchedule';
 import { setLandingStats } from './landingStatsCache';
-import {
-  computeCatalogSources,
-  readCatalogSources,
-  setCatalogSources,
-  writeCatalogSources,
-} from '../vacancies/catalogSources';
-import {
-  computeCatalogSalaryStats,
-  writeCatalogSalaryStats,
-} from '../vacancies/catalogSalaryStatsStore';
-import { computeCatalogChips, writeCatalogChips } from '../vacancies/catalogChipStore';
-import { computeLandingStats, readLandingStats, writeLandingStats } from './landingStatsJob';
+import { heavyRead } from '../maintenance/heavyReads/runHeavyRead';
+import { readCatalogSources, setCatalogSources } from '../vacancies/catalogSources';
+import { readLandingStats } from './landingStatsJob';
 
 interface StatsLog {
   info(details: Record<string, unknown>, message: string): void;
@@ -35,18 +28,23 @@ function errorName(error: unknown): string {
 
 /** Maintenance process only: the counts scan the whole pool index. */
 export function scheduleLandingStatsJob(database: DatabaseSync, log: StatsLog): () => void {
-  const run = (): boolean => {
+  // B649-3: the counts read in their own thread (117–160 s on the loop, 12.11).
+  const run = async (): Promise<boolean> => {
     const started = Date.now();
     try {
-      const now = new Date();
-      const stats = computeLandingStats(database, now);
-      writeLandingStats(database, stats, now);
-      writeCatalogSources(database, computeCatalogSources(database), now);
-      writeCatalogSalaryStats(database, computeCatalogSalaryStats(database), now);
-      const chips = writeCatalogChips(database, computeCatalogChips(database, now.getTime()), now);
-      log.info({ ...chips }, 'catalog-chips-written');
+      // B649-5: поток сам пишет итоги порциями; в главный поток — только сводка.
+      const summary = await heavyRead(database, 'landingWrite', { nowMs: Date.now() }, log);
+      log.info({ ...summary.chips }, 'catalog-chips-written');
       log.info(
-        { ms: Date.now() - started, active: stats.activeCount, rows: stats.vacancies.length },
+        {
+          ms: Date.now() - started,
+          active: summary.active,
+          rows: summary.rows,
+          sourcesRows: summary.sources.written,
+          sourcesTransactions: summary.sources.transactions,
+          salaryRows: summary.salaryStats.written,
+          salaryTransactions: summary.salaryStats.transactions,
+        },
         'landing-stats-written',
       );
       return true;
@@ -63,22 +61,31 @@ export function scheduleLandingStatsJob(database: DatabaseSync, log: StatsLog): 
   });
 }
 
-/** Web server: a primary-key read of one row, then the cache is replaced. */
+/** Web server: one row and the sources list (57 thousand rows, B776: read in portions). */
 export function scheduleLandingStatsRefresh(databasePath: string, log: StatsLog): () => void {
-  const refresh = () => {
+  let running = false;
+  const read = async () => {
+    if (running) return;
+    running = true;
     let database: DatabaseSync | undefined;
     try {
+      await nextTurn();
       database = new DatabaseSync(databasePath, { readOnly: true });
       applySqliteBusyTimeout(database);
       const stats = readLandingStats(database);
       if (stats) setLandingStats(stats);
-      setCatalogSources(readCatalogSources(database));
+      await nextTurn();
+      setCatalogSources(await readCatalogSources(database));
     } catch (error: unknown) {
       log.error({ errorName: errorName(error) }, 'landing-stats-refresh-failed');
     } finally {
       database?.close();
+      running = false;
     }
   };
+  const refresh = labelledTimer('web:landing-refresh', read, (error) =>
+    log.error({ errorName: errorName(error) }, 'landing-stats-refresh-failed'),
+  );
   refresh();
   const every = setInterval(refresh, REFRESH_INTERVAL_MS);
   every.unref();

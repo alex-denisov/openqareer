@@ -20,6 +20,10 @@ import { describe, expect, it } from 'vitest';
 const SRC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 const KNOWN_UNDEFINED: Readonly<Record<string, readonly string[]>> = {
+  // B649: макет B640 называет два необязательных токена с запасным значением
+  // (`var(--x, запасное)`); файлы перенесены из макета скриптом как есть.
+  'features/b640/styles/base-06.css': ['--career-topbar-height-m'],
+  'features/b640/styles/base-08.css': ['--career-warn'],
   'features/applications/responses-mobile.css': ['--career-focus-ring'],
   'features/career-map/careerScreen.css': ['--career-text-muted'],
   'features/interview/mock-interview-flow.css': ['--career-text-2xl'],

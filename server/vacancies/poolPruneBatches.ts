@@ -9,7 +9,26 @@ export interface PruneLimits {
   readonly chunkRows: number;
   /** Работы на транзакцию: дольше неё другой процесс ждёт запись. */
   readonly budgetMs: number;
+  /** Кластеров ключей на одно чтение при поиске сирот (B759); по умолчанию KEY_WINDOW_ROWS. */
+  readonly keyWindowRows?: number;
 }
+
+/**
+ * B759: старые кластеры ищутся по индексу vacancy_clusters_freshness
+ * (updated_at DESC, id) порциями, а не чтением всей таблицы: окна по rowid
+ * (B649-3) читали на проде все 919 000 строк за проход, ~160 с.
+ */
+export const STALE_CLUSTERS_SQL = `SELECT rowid AS key FROM vacancy_clusters
+  WHERE updated_at < ? ORDER BY updated_at LIMIT ?`;
+
+/** Порций за проход: дальше — следующий запуск. 50 000 кластеров за проход. */
+const MAX_CLUSTER_PORTIONS = 50;
+
+/**
+ * B759: ключи без кластера искались одним LEFT JOIN по всем ключам (47 с на
+ * проде). Теперь окна по индексу vacancy_cluster_keys_by_cluster с курсором.
+ */
+const KEY_WINDOW_ROWS = 5_000;
 
 export interface PruneReport {
   readonly scope: 'pool' | 'clusters';
@@ -19,14 +38,27 @@ export interface PruneReport {
   /** Поиск строк: идёт без блокировки записи и в удержание не входит. */
   readonly readMs: number;
   readonly totalMs: number;
+  /** Чистка неизвестных источников пропущена: реестр неполон. */
+  readonly unknownSkipped?: { readonly known: number; readonly stateSources: number };
 }
 
 type RowKey = string | number;
 
+/** Шаги чистки: каждый `yield` — граница, на которой можно отпустить цикл событий. */
+type PruneSteps<T = void> = Generator<void, T, void>;
+
+/**
+ * Список источников идёт одним параметром-JSON: с 12.11 их больше предела
+ * SQLite в 32 766 переменных, и `IN (?, ?, …)` ронял старт обслуживания.
+ */
+const SOURCE_SET = '(SELECT value FROM json_each(?))';
+
 interface PrunePass {
   find(sql: string, ...params: SQLInputValue[]): RowKey[];
-  remove(sql: string, keys: readonly RowKey[], ...params: SQLInputValue[]): number;
+  /** Уступает после каждой транзакции: между ними цикл событий свободен (B649-2). */
+  remove(sql: string, keys: readonly RowKey[], ...params: SQLInputValue[]): PruneSteps<number>;
   report(): PruneReport;
+  skipUnknown(known: number, stateSources: number): void;
 }
 
 /** Удаляет, пока есть строки и не вышло время; возвращает, сколько держал запись. */
@@ -64,14 +96,18 @@ function startPass(
   let transactions = 0;
   let maxTransactionMs = 0;
   let readMs = 0;
+  let unknownSkipped: PruneReport['unknownSkipped'];
   return {
+    skipUnknown(known, stateSources) {
+      unknownSkipped = { known, stateSources };
+    },
     find(sql, ...params) {
       const readAt = performance.now();
       const rows = database.prepare(sql).all(...params) as Array<{ key: RowKey }>;
       readMs += performance.now() - readAt;
       return rows.map((row) => row.key);
     },
-    remove(sql, keys, ...params) {
+    *remove(sql, keys, ...params) {
       const statement = database.prepare(sql);
       let changed = 0;
       let next = 0;
@@ -84,6 +120,7 @@ function startPass(
         });
         transactions += 1;
         maxTransactionMs = Math.max(maxTransactionMs, done);
+        yield;
       }
       removed += changed;
       return changed;
@@ -95,11 +132,12 @@ function startPass(
       maxTransactionMs,
       readMs,
       totalMs: performance.now() - startedAt,
+      ...(unknownSkipped ? { unknownSkipped } : {}),
     }),
   };
 }
 
-function pruneStaleVacancies(pass: PrunePass, oldestPublishedAt: string): void {
+function* pruneStaleVacancies(pass: PrunePass, oldestPublishedAt: string): PruneSteps {
   const oldestMs = Date.parse(oldestPublishedAt);
   if (!Number.isFinite(oldestMs)) return;
   const stale = pass.find(
@@ -111,7 +149,8 @@ function pruneStaleVacancies(pass: PrunePass, oldestPublishedAt: string): void {
       LIMIT ${PRUNE_PORTION_ROWS}`,
     oldestMs,
   );
-  pass.remove(
+  yield;
+  yield* pass.remove(
     `DELETE FROM vacancy_pool WHERE id = ?
        AND EXISTS (
          SELECT 1 FROM vacancy_pool_index i
@@ -135,23 +174,23 @@ const FULL_READ_AFTER_SEEN = `EXISTS (SELECT 1 FROM company_placement p
  * B642: запись доски работодателя живёт, пока её видно; невиденная
  * `NOT_SEEN_PRUNE_DAYS` дней (источник перестал читаться) снимается.
  */
-function pruneNotSeenVacancies(pass: PrunePass, knownSourceIds: readonly string[]): void {
+function* pruneNotSeenVacancies(pass: PrunePass, knownSourceIds: readonly string[]): PruneSteps {
   const confirming = knownSourceIds.filter(confirmsLiveness);
   if (confirming.length === 0) return;
   const cutoffMs = Date.now() - NOT_SEEN_PRUNE_DAYS * 24 * 60 * 60 * 1000;
   const unreadCutoffMs = Date.now() - NOT_SEEN_UNREAD_PRUNE_DAYS * 24 * 60 * 60 * 1000;
-  const placeholders = confirming.map(() => '?').join(', ');
   const stale = pass.find(
     `SELECT i.id AS key
        FROM vacancy_pool_index i INDEXED BY vacancy_pool_index_source
-      WHERE i.expired = 0 AND i.source_id IN (${placeholders}) AND i.observed_ms < ?
+      WHERE i.expired = 0 AND i.source_id IN ${SOURCE_SET} AND i.observed_ms < ?
         AND (i.observed_ms < ? OR ${FULL_READ_AFTER_SEEN})
       LIMIT ${PRUNE_PORTION_ROWS}`,
-    ...confirming,
+    JSON.stringify(confirming),
     cutoffMs,
     unreadCutoffMs,
   );
-  pass.remove(
+  yield;
+  yield* pass.remove(
     `DELETE FROM vacancy_pool WHERE id = ?
        AND EXISTS (
          SELECT 1 FROM vacancy_pool_index i
@@ -164,14 +203,15 @@ function pruneNotSeenVacancies(pass: PrunePass, knownSourceIds: readonly string[
   );
 }
 
-function pruneOrphanIndexes(pass: PrunePass): void {
+function* pruneOrphanIndexes(pass: PrunePass): PruneSteps {
   // Индекс следует за таблицей: строка без записи — это не запись.
   const orphanIndex = pass.find(
     `SELECT i.rowid AS key FROM vacancy_pool_index i
        LEFT JOIN vacancy_pool p ON p.id = i.id
       WHERE p.id IS NULL LIMIT ${PRUNE_PORTION_ROWS}`,
   );
-  pass.remove(
+  yield;
+  yield* pass.remove(
     `DELETE FROM vacancy_pool_index WHERE rowid = ?
        AND NOT EXISTS (SELECT 1 FROM vacancy_pool p WHERE p.id = vacancy_pool_index.id)`,
     orphanIndex,
@@ -181,7 +221,8 @@ function pruneOrphanIndexes(pass: PrunePass): void {
        LEFT JOIN vacancy_pool_index i ON i.id = c.id
       WHERE i.id IS NULL LIMIT ${PRUNE_PORTION_ROWS}`,
   );
-  pass.remove(
+  yield;
+  yield* pass.remove(
     `DELETE FROM vacancy_cluster_input WHERE rowid = ?
        AND NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = vacancy_cluster_input.id)`,
     orphanInput,
@@ -192,11 +233,107 @@ function pruneOrphanIndexes(pass: PrunePass): void {
        LEFT JOIN vacancy_pool_index i ON i.id = c.vacancy_id
       WHERE i.id IS NULL LIMIT ${PRUNE_PORTION_ROWS}`,
   );
-  pass.remove(
+  yield;
+  yield* pass.remove(
     `DELETE FROM vacancy_company WHERE rowid = ?
        AND NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = vacancy_company.vacancy_id)`,
     orphanCompany,
   );
+}
+
+/** Доля источников, которой реестру позволено не хватать до полного. */
+const UNKNOWN_PRUNE_TOLERANCE = 0.02;
+
+/**
+ * Удалять «чужие» источники можно, только если реестр полон: источники
+ * справочника регистрируются после старта, и неполный список стёр бы живые
+ * доски необратимо. Мерило полноты — источники, которые пул уже знает.
+ */
+function registryLooksComplete(database: DatabaseSync, known: number): number | null {
+  const row = database
+    .prepare('SELECT count(DISTINCT source_id) AS n FROM vacancy_source_state')
+    .get() as { n: number };
+  const stateSources = Number(row.n);
+  if (known === 0) return stateSources;
+  return known >= stateSources * (1 - UNKNOWN_PRUNE_TOLERANCE) ? null : stateSources;
+}
+
+function* pruneUnknownSources(pass: PrunePass, known: string): PruneSteps {
+  const unknown = pass.find(
+    `SELECT rowid AS key FROM vacancy_pool
+      WHERE source_id NOT IN ${SOURCE_SET} LIMIT ${PRUNE_PORTION_ROWS}`,
+    known,
+  );
+  yield;
+  yield* pass.remove(
+    `DELETE FROM vacancy_pool WHERE rowid = ? AND source_id NOT IN ${SOURCE_SET}`,
+    unknown,
+    known,
+  );
+  const lostStates = pass.find(
+    `SELECT source_id AS key FROM vacancy_source_state WHERE source_id NOT IN ${SOURCE_SET}`,
+    known,
+  );
+  yield;
+  yield* pass.remove(
+    `DELETE FROM vacancy_source_state WHERE source_id = ? AND source_id NOT IN ${SOURCE_SET}`,
+    lostStates,
+    known,
+  );
+}
+
+function* poolPruneSteps(
+  database: DatabaseSync,
+  knownSourceIds: readonly string[],
+  oldestPublishedAt: string,
+  limits: PruneLimits,
+): PruneSteps<PruneReport> {
+  const pass = startPass(database, limits, 'pool');
+  yield* pruneStaleVacancies(pass, oldestPublishedAt);
+  yield* pruneNotSeenVacancies(pass, knownSourceIds);
+  const incomplete = registryLooksComplete(database, knownSourceIds.length);
+  if (incomplete === null) yield* pruneUnknownSources(pass, JSON.stringify(knownSourceIds));
+  else pass.skipUnknown(knownSourceIds.length, incomplete);
+  yield* pruneOrphanIndexes(pass);
+  return pass.report();
+}
+
+function drain<T>(steps: PruneSteps<T>): T {
+  for (;;) {
+    const next = steps.next();
+    if (next.done) return next.value;
+  }
+}
+
+/** Как идёт чистка после готовности (B759): пауза между шагами и остановка процесса. */
+export interface PruneControl {
+  /** Пауза между шагами, мс: фоновая чистка не держит диск подряд. 0 — только уступка. */
+  readonly pauseMs?: number;
+  readonly shouldStop?: () => boolean;
+}
+
+/** Чистку прервала остановка процесса; удалённое до неё уже записано. */
+export class PrunePassStopped extends Error {
+  constructor() {
+    super('prune pass stopped');
+    this.name = 'PrunePassStopped';
+  }
+}
+
+/** Отпускает цикл событий на каждой границе шага: для чистки после готовности. */
+async function drainYielding<T>(steps: PruneSteps<T>, control: PruneControl = {}): Promise<T> {
+  const pauseMs = Math.max(0, control.pauseMs ?? 0);
+  for (;;) {
+    if (control.shouldStop?.()) {
+      steps.return(undefined as T);
+      throw new PrunePassStopped();
+    }
+    const next = steps.next();
+    if (next.done) return next.value;
+    await new Promise((resolve) =>
+      pauseMs > 0 ? setTimeout(resolve, pauseMs) : setImmediate(resolve),
+    );
+  }
 }
 
 export function prunePoolInBatches(
@@ -205,58 +342,90 @@ export function prunePoolInBatches(
   oldestPublishedAt: string,
   limits: PruneLimits,
 ): PruneReport {
-  const pass = startPass(database, limits, 'pool');
-  const placeholders = knownSourceIds.map(() => '?').join(', ');
-  pruneStaleVacancies(pass, oldestPublishedAt);
-  pruneNotSeenVacancies(pass, knownSourceIds);
-  const unknown = pass.find(
-    `SELECT rowid AS key FROM vacancy_pool
-      WHERE source_id NOT IN (${placeholders}) LIMIT ${PRUNE_PORTION_ROWS}`,
-    ...knownSourceIds,
+  return drain(poolPruneSteps(database, knownSourceIds, oldestPublishedAt, limits));
+}
+
+export function prunePoolInBatchesAsync(
+  database: DatabaseSync,
+  knownSourceIds: readonly string[],
+  oldestPublishedAt: string,
+  limits: PruneLimits,
+  control?: PruneControl,
+): Promise<PruneReport> {
+  return drainYielding(
+    poolPruneSteps(database, knownSourceIds, oldestPublishedAt, limits),
+    control,
   );
-  pass.remove(
-    `DELETE FROM vacancy_pool WHERE rowid = ? AND source_id NOT IN (${placeholders})`,
-    unknown,
-    ...knownSourceIds,
-  );
-  pruneOrphanIndexes(pass);
-  const lostStates = pass.find(
-    `SELECT source_id AS key FROM vacancy_source_state WHERE source_id NOT IN (${placeholders})`,
-    ...knownSourceIds,
-  );
-  pass.remove(
-    `DELETE FROM vacancy_source_state WHERE source_id = ? AND source_id NOT IN (${placeholders})`,
-    lostStates,
-    ...knownSourceIds,
-  );
-  return pass.report();
+}
+
+interface ClusterPruneResult {
+  readonly clusters: number;
+  readonly report: PruneReport;
 }
 
 export function pruneClustersInBatches(
   database: DatabaseSync,
   cutoffMs: number,
   limits: PruneLimits,
-): { readonly clusters: number; readonly report: PruneReport } {
+): ClusterPruneResult {
+  return drain(clusterPruneSteps(database, cutoffMs, limits));
+}
+
+export function pruneClustersInBatchesAsync(
+  database: DatabaseSync,
+  cutoffMs: number,
+  limits: PruneLimits,
+  control?: PruneControl,
+): Promise<ClusterPruneResult> {
+  return drainYielding(clusterPruneSteps(database, cutoffMs, limits), control);
+}
+
+
+function* clusterPruneSteps(
+  database: DatabaseSync,
+  cutoffMs: number,
+  limits: PruneLimits,
+): PruneSteps<ClusterPruneResult> {
   const pass = startPass(database, limits, 'clusters');
-  const stale = pass.find(
-    `SELECT rowid AS key FROM vacancy_clusters WHERE updated_at < ? LIMIT ${PRUNE_PORTION_ROWS}`,
-    cutoffMs,
-  );
-  const clusters = pass.remove(
-    'DELETE FROM vacancy_clusters WHERE rowid = ? AND updated_at < ?',
-    stale,
-    cutoffMs,
-  );
-  // Ключи без кластера — не соседи; чистятся той же порцией (B230).
-  const lostKeys = pass.find(
-    `SELECT k.cluster_id AS key FROM vacancy_cluster_keys k
-       LEFT JOIN vacancy_clusters c ON c.id = k.cluster_id
-      WHERE c.id IS NULL LIMIT ${PRUNE_PORTION_ROWS}`,
-  );
-  pass.remove(
-    `DELETE FROM vacancy_cluster_keys WHERE cluster_id = ?1
-       AND NOT EXISTS (SELECT 1 FROM vacancy_clusters c WHERE c.id = ?1)`,
-    Array.from(new Set(lostKeys)),
-  );
+  let clusters = 0;
+  for (let portion = 0; portion < MAX_CLUSTER_PORTIONS; portion += 1) {
+    const stale = pass.find(STALE_CLUSTERS_SQL, cutoffMs, PRUNE_PORTION_ROWS);
+    yield;
+    clusters += yield* pass.remove(
+      'DELETE FROM vacancy_clusters WHERE rowid = ? AND updated_at < ?',
+      stale,
+      cutoffMs,
+    );
+    if (stale.length < PRUNE_PORTION_ROWS) break;
+  }
+  yield* removeOrphanKeys(pass, limits);
   return { clusters, report: pass.report() };
+}
+
+/** Ключи без кластера — не соседи (B230): окнами по cluster_id, без чтения всех ключей. */
+function* removeOrphanKeys(pass: PrunePass, limits: PruneLimits): PruneSteps<void> {
+  const window = Math.max(1, limits.keyWindowRows ?? KEY_WINDOW_ROWS);
+  let after = '';
+  for (;;) {
+    const ids = pass.find(
+      `SELECT DISTINCT cluster_id AS key FROM vacancy_cluster_keys
+        WHERE cluster_id > ? ORDER BY cluster_id LIMIT ?`,
+      after,
+      window,
+    );
+    if (ids.length === 0) return;
+    after = String(ids.at(-1));
+    const lost = pass.find(
+      `SELECT value AS key FROM json_each(?)
+        WHERE NOT EXISTS (SELECT 1 FROM vacancy_clusters c WHERE c.id = json_each.value)`,
+      JSON.stringify(ids),
+    );
+    yield;
+    yield* pass.remove(
+      `DELETE FROM vacancy_cluster_keys WHERE cluster_id = ?1
+         AND NOT EXISTS (SELECT 1 FROM vacancy_clusters c WHERE c.id = ?1)`,
+      lost,
+    );
+    if (ids.length < window) return;
+  }
 }

@@ -31,6 +31,38 @@ describe('duties apart from requirements', () => {
   it.each(['The mandate', 'Your first priorities:', 'As our VP Sales, EMEA you will:', 'In your first year, you will focus on:', 'How you will contribute'])('reads «%s» as a list of duties', (heading) => {
     expect(vacancyDutyIds(`${heading}\n- Own the budget`, [line('a', 'Own the budget')]).size).toBe(1);
   });
+  it.each([
+    'Ключевые цели:', 'Предстоит:', 'Тебе предстоит:', 'Что предстоит', 'Что нужно делать:', 'Ваши обязанности:',
+    'Должностные обязанности:', 'Чем ты будешь заниматься', 'Какие задачи нужно будет решать', "WHAT YOU’LL DRIVE:", 'What impact you’ll make:',
+    'Primary responsibilities', 'Essential functions',
+  ])('B794: «%s» тоже открывает обязанности', (heading) => {
+    expect(vacancyDutyIds(`${heading}\n- Провести глубокий анализ бизнеса`, [line('a', 'Провести глубокий анализ бизнеса')]).size).toBe(1);
+  });
+  it.each(['Наши цели:', 'Цели компании:', 'Основные цели компании:'])('B794: «%s» — не обязанности, после списка тоже', (heading) => {
+    const text = `${heading}\n- Выйти на рынок ОАЭ`;
+    expect(vacancyDutyIds(text, [line('a', 'Выйти на рынок ОАЭ')]).size).toBe(0);
+    expect(vacancyDutyIds(`Обязанности:\n- Вести учёт\n${text}`, [line('a', 'Выйти на рынок ОАЭ')]).size).toBe(0);
+  });
+  it('B794: подраздел обязанностей не закрывает их, раздел качеств закрывает', () => {
+    const text = 'Responsibilities\n- Own the budget\nTeam Leadership\n- Lead the managers\nLeadership skills\n- Budget models in Excel';
+    const ids = vacancyDutyIds(text, [line('a', 'Own the budget'), line('b', 'Lead the managers'), line('c', 'Budget models in Excel')]);
+    expect([...ids]).toEqual(['a', 'b']);
+  });
+  it('B794: «Требования:», приклеенные к пункту, закрывают обязанности', () => {
+    const text = 'Обязанности:\n- Вести учёт\n- Отчётность Требования:\n- Управление цехом';
+    expect([...vacancyDutyIds(text, [line('a', 'Вести учёт'), line('b', 'Управление цехом')])]).toEqual(['a']);
+  });
+  it('B794: «Leadership:» перед качествами не делает их обязанностями', () => {
+    const text = 'Responsibilities\n- Own the budget\nLeadership:\n- Calm under pressure\n- Inspires others';
+    expect([...vacancyDutyIds(text, [line('a', 'Own the budget'), line('b', 'Calm under pressure'), line('c', 'Inspires others')])]).toEqual(['a']);
+  });
+  it('B794: «Leadership:» без раздела обязанностей ничего не меняет', () => {
+    expect(vacancyDutyIds('Leadership:\n- Inspires others', [line('a', 'Inspires others')]).size).toBe(0);
+  });
+  it.each(['- Salary requirements:', '- Visa requirements:'])('B794: «%s» не раздел требований', (heading) => {
+    const text = `Responsibilities\n- Own the budget\n${heading}\n- Run the meetings`;
+    expect([...vacancyDutyIds(text, [line('a', 'Own the budget'), line('b', 'Run the meetings')])]).toEqual(['a', 'b']);
+  });
   it('a condition is never a duty', () => {
     expect(vacancyDutyIds(TEXT, [line('a', 'Lead a team of 12+ partners', { kind: 'workFormat', skill: false })]).size).toBe(0);
   });

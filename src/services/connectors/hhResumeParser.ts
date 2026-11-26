@@ -5,6 +5,7 @@ import type {
   ParsedResumeLanguage,
 } from '../../features/workspace/resumeParser';
 import type { CefrLevel } from '../../features/resume/resumeTypes';
+import { hhResumeAboutCard, hhResumeExperienceCards } from './hhResumeCards';
 import { extractAllTagContents, extractTagContent, plainText } from './hhMarkup';
 
 // One parser, one document shape: splitting it would scatter the field map.
@@ -33,6 +34,7 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
     undefined;
 
   const about =
+    hhResumeAboutCard(html) ??
     extractTagContent(
       html,
       /data-qa=["']resume-block-about["'][^>]*>([\s\S]*?)<\/div>/iu,
@@ -41,7 +43,8 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
       html,
       /data-qa=["']resume-block-skills-content["'][^>]*>([\s\S]*?)<\/div>/iu,
     ) ??
-    undefined;
+    // Пусто только у раздела без содержимого: вложенная разметка — раздел не прочитан.
+    (/data-qa=["']resume-block-(?:about|skills-content)["'][^>]*>\s*<\/div>/iu.test(html) ? '' : undefined);
 
   // hh.ru's Magritte profile renders every skill as `skill-tag-<id>` grouped
   // under a level heading; the old `bloko-tag__text` / `skills-element` hooks
@@ -71,8 +74,8 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
   );
 
   // Extract Experience items
-  const experience: ParsedResumeExperience[] = [];
-  const expItems = html.split(/class=["'][^"']*resume-block-item-gap[^"']*["']/giu);
+  const experience: ParsedResumeExperience[] = hhResumeExperienceCards(html);
+  const expItems = experience.length > 0 ? [] : html.split(/class=["'][^"']*resume-block-item-gap[^"']*["']/giu);
   if (expItems.length > 1) {
     for (let i = 1; i < expItems.length; i += 1) {
       const itemHtml = expItems[i];
@@ -215,7 +218,7 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
     fullName,
     targetRole,
     about,
-    salary && salary !== about ? salary : '',
+    salary,
     positionTerms.join('\n'),
     contact.location,
     contact.email,
@@ -241,7 +244,7 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
   return {
     fullName,
     targetRole,
-    about: about ?? salary,
+    about,
     contact,
     experience,
     skills,
@@ -314,7 +317,32 @@ function resumeCardTitle(linkHtml: string): string {
   return name || text;
 }
 
-export function parseHhResumesList(html: string): Array<{
+const RESUME_CARD_MAX = 20_000;
+
+/** Карточка резюме — от его ссылки до ссылки на другое резюме. */
+function resumeCardHtml(html: string, start: number, resumeId: string): string {
+  const rest = html.slice(start, start + RESUME_CARD_MAX);
+  for (const link of rest.matchAll(/<a\b[^>]*?\shref=["']([^"']+)["']/giu)) {
+    const id = resumeIdFromHref(link[1]);
+    if (id && id !== resumeId) return rest.slice(0, link.index);
+  }
+  return rest;
+}
+
+const RESUME_UPDATED =
+  /Обновлено\s+(?:(сегодня|вчера)|(\d{1,2})\s+([а-яё]{3,8})(?:\s+(\d{4}))?)/iu;
+
+/** Как в a01b: в этом году — день и месяц, в прошлых — год. Нет даты на карточке — нет и подписи. */
+function resumeUpdatedLabel(cardHtml: string, now: Date): string | undefined {
+  const match = RESUME_UPDATED.exec(plainText(cardHtml));
+  if (!match) return undefined;
+  const [, relative, day, month, year] = match;
+  if (relative) return `обновлено ${relative.toLowerCase()}`;
+  if (year && Number(year) !== now.getFullYear()) return `обновлено в ${year}`;
+  return `обновлено ${day} ${month}`;
+}
+
+export function parseHhResumesList(html: string, now = new Date()): Array<{
   id: string;
   title: string;
   url: string;
@@ -344,16 +372,19 @@ export function parseHhResumesList(html: string): Array<{
     const resumeId = href ? resumeIdFromHref(href) : undefined;
     if (!resumeId) continue;
     const title = resumeCardTitle(match[2]);
+    const cardHtml = resumeCardHtml(html, match.index, resumeId);
+    const updatedLabel = resumeUpdatedLabel(cardHtml, now);
     const existing = resumes.find((resume) => resume.id === resumeId);
     if (!existing) {
       resumes.push({
         id: resumeId,
         title: title || 'Резюме hh.ru',
         url: `https://hh.ru/resume/${resumeId}`,
-        updatedLabel: 'Готово к импорту',
+        ...(updatedLabel ? { updatedLabel } : {}),
       });
       continue;
     }
+    if (!existing.updatedLabel && updatedLabel) existing.updatedLabel = updatedLabel;
     // One card links the same resume more than once — from its title and from
     // an icon with no text. Keep the label a human can recognise.
     if (title.length > existing.title.length || existing.title === 'Резюме hh.ru') {

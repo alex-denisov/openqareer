@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CoachApiError } from '../coach/apiClient';
 import type {
   ApprovedVacancyLetterResult,
   CandidateWorkplaceForLetter,
@@ -52,6 +53,16 @@ export interface ApprovalState {
   readonly resumeFailure: ResumeSnapshotFailure | null;
   readonly prepareResume: () => Promise<void>;
   readonly attachGeneralResume: () => Promise<void>;
+  /** Факты профиля опровергли число письма: до новой сборки и одобрения письмо не уходит. */
+  readonly stale?: boolean;
+  /** Черновик готовится, а в поле остаётся текст кандидата. */
+  readonly keepsText?: boolean;
+  /** Собрать письмо заново по текущим фактам. */
+  readonly rebuild?: () => void;
+  /** Вернуть одобренный текст вместо правки; нет — возвращать нечего. */
+  readonly revert?: () => void;
+  /** Правка не сохранилась на сервере: повторить. */
+  readonly retryDraftSave?: () => void;
 }
 
 export interface LetterScreenState {
@@ -64,6 +75,10 @@ export interface LetterScreenState {
   readonly draft: LetterDraftState;
   readonly approval: ApprovalState;
 }
+
+/** Вакансия открыта по id, в подборке её нет: знакомых по ней просто нет. */
+const hasNoCircles = (reason: unknown): boolean =>
+  reason instanceof CoachApiError && reason.code === 'vacancy_not_in_candidate_selection';
 
 function useConnectionCircles(vacancyId: string): ConnectionCirclesState {
   const [data, setData] = useState<Awaited<ReturnType<typeof getVacancyConnectionCircles>> | null>(
@@ -81,7 +96,9 @@ function useConnectionCircles(vacancyId: string): ConnectionCirclesState {
         if (active) setData(result);
       })
       .catch((reason: unknown) => {
-        if (active)
+        if (!active) return;
+        if (hasNoCircles(reason)) setData(null);
+        else
           setError(reason instanceof Error ? reason.message : 'Не удалось загрузить пути.');
       })
       .finally(() => {
@@ -287,10 +304,17 @@ function useLetterDraft({
   return { ...pitchState, workplaces };
 }
 
+export interface LetterControllerOptions {
+  /** Черновик не просить: письмо уже одобрено, его текст придёт из одобрения. */
+  readonly holdDraft?: boolean;
+}
+
 export function useVacancyLetterController(
   vacancyId: string,
   initialCircle?: ConnectionCircleNumber,
+  options: LetterControllerOptions = {},
 ): LetterScreenState {
+  const held = options.holdDraft === true;
   const circles = useConnectionCircles(vacancyId);
   const circle = useCircleSelection(circles.data?.circles ?? [], initialCircle);
   const [tone, setTone] = useState<PitchTone>('executive');
@@ -302,12 +326,12 @@ export function useVacancyLetterController(
     tone,
     language,
     enabled:
-      Boolean(circles.data) &&
+      !held &&
+      // Работодателю напрямую письмо пишется и без знакомых.
       !circles.loading &&
-      !circles.error &&
       (circle.circle === 3 || Boolean(circle.selectedPath)),
     resetWhenDisabled:
-      Boolean(circles.data) &&
+      !held &&
       !circles.loading &&
       !circles.error &&
       circle.circle !== 3 &&

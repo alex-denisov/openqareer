@@ -92,11 +92,26 @@ export const candidateWorkspaceSchema = z
         careerRoles: z
           .array(
             z
-              .object({ id: z.string().min(1).max(300), title: z.string().trim().min(1).max(200) })
+              .object({
+                id: z.string().min(1).max(300),
+                title: z.string().trim().min(1).max(200),
+                /** B748: проверенный перевод названия, придуманного моделью, — только для показа. */
+                titleRu: z.string().trim().min(1).max(80).optional(),
+              })
               .strict(),
           )
           .max(20)
           .optional(),
+        /**
+         * B748: проверенный русский перевод ролей поиска, сохранённых до него;
+         * значение, равное ключу, — перевод отвергнут, второй раз не спрашиваем.
+         */
+        roleTitlesRu: z
+          .record(z.string().min(1).max(200), z.string().trim().min(1).max(200))
+          .refine((value) => Object.keys(value).length <= 60)
+          .optional(),
+        /** B748: версия перевода, которой проверены `roleTitlesRu` и `careerRoles[].titleRu`. */
+        titlesRuVersion: z.number().int().min(1).optional(),
       })
       .strict()
       .optional(),

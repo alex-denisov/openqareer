@@ -1,3 +1,4 @@
+import { employmentKindLabel } from '../../../shared/vacancyEmploymentKind';
 import { vacancyRemoteLabel } from './vacancyRemoteLabel';
 import { VacancyFitEvidenceForItem } from './VacancyFitEvidence';
 import { useState, type FormEvent } from 'react';
@@ -7,7 +8,7 @@ import type { ApplicationView } from '../applications/applicationsApi';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { vacancyAge } from './vacancyFilters';
-import { formatCompensationCompact } from './vacancyCompensation';
+import { formatStatedCompensation } from './vacancyCompensation';
 import type { VacancyApplications } from './useVacancyApplications';
 import { VacancyPitchModal } from './VacancyPitchModal';
 import { VacancyInfoModal } from './VacancyInfoModal';
@@ -193,7 +194,12 @@ function VacancyDetailHeader({
           <span>{trust.reasons.join(' · ')}</span>
         </div>
       ) : null}
-      <VacancyDetailMetaRow explanation={explanation} age={age} source={source} />
+      <VacancyDetailMetaRow
+        explanation={explanation}
+        age={age}
+        source={source}
+        employment={employmentKindLabel(cluster.employmentKind)}
+      />
     </>
   );
 }
@@ -240,7 +246,7 @@ function VacancyProfileEvidence({
 
       <div className="vacancies-detail-description vacancies-req-block">
         <h4>Вилка</h4>
-        <p className="vacancies-comp-note">{formatCompensationCompact(cluster.salary)}</p>
+        <p className="vacancies-comp-note">{formatStatedCompensation(cluster.salary)}</p>
       </div>
     </>
   );
@@ -302,14 +308,17 @@ function VacancyDetailMetaRow({
   explanation,
   age,
   source,
+  employment,
 }: {
   readonly explanation: MatchedVacancyItem['explanation'];
   readonly age: ReturnType<typeof vacancyAge>;
   readonly source?: string;
+  readonly employment?: string;
 }) {
   return (
     <div className="vacancies-detail-meta-row">
       <VacancyLevelChip match={explanation.levelMatch} />
+      {employment ? <span className="vacancies-chip">Занятость: {employment}</span> : null}
       <span className="vacancies-chip vacancies-chip-success">
         {age.days === 0 ? 'Сегодня в базе' : `${age.label} в базе`}
       </span>

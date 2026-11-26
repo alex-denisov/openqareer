@@ -107,3 +107,64 @@ describe('вилка роли по зарплатам в валюте (28.10)', 
     });
   });
 });
+
+describe('B767: два варианта одной роли словаря — одна строка', () => {
+  const twoVariants = [
+    {
+      title: 'Head of Technical Support',
+      reason: 'руководил поддержкой',
+      evidenceRefs: ['memory:1', 'memory:2'],
+    },
+    {
+      title: 'Customer Support Director',
+      reason: 'руководил поддержкой',
+      evidenceRefs: ['memory:1', 'memory:2'],
+    },
+  ];
+  const pool = [
+    ...Array.from({ length: 6 }, () => matchedVacancy('Head of Technical Support', ['SLA'])),
+    ...Array.from({ length: 4 }, () => matchedVacancy('Customer Support Director', ['SLA'])),
+    ...Array.from({ length: 3 }, () => matchedVacancy('VP of Customer Support', ['SLA'])),
+  ];
+
+  it('сводит их в одну роль: вакансии объединены без двойного счёта, второе название — псевдоним', () => {
+    const roles = buildRoleProposals({
+      matched: pool,
+      named: twoVariants,
+      candidateSkills: ['SLA'],
+    });
+    const support = roles.filter((role) => role.origin === 'model');
+    expect(support).toHaveLength(1);
+    expect(support[0]!.title).toBe('Head of Technical Support');
+    expect(support[0]!.aliases).toEqual(
+      expect.arrayContaining(['Head of Technical Support', 'Customer Support Director']),
+    );
+    const conf = support[0]!.confirmation;
+    expect(conf.state === 'observed' && conf.sampleSize).toBe(10);
+  });
+
+  it('второе название остаётся псевдонимом, даже если вакансий с ним нет: проверки и отметки идут за ним', () => {
+    const roles = buildRoleProposals({
+      matched: pool.filter((item) => item.cluster.canonicalTitle !== 'Customer Support Director'),
+      named: twoVariants,
+      candidateSkills: ['SLA'],
+    });
+    const [support] = roles.filter((role) => role.origin === 'model');
+    expect(support!.aliases).toContain('Customer Support Director');
+  });
+
+  it('вице-президент поддержки — другая роль словаря и в строку не входит', () => {
+    const roles = buildRoleProposals({
+      matched: pool,
+      named: [
+        ...twoVariants,
+        { title: 'VP of Customer Support', reason: 'r', evidenceRefs: ['memory:1', 'memory:2'] },
+      ],
+      candidateSkills: ['SLA'],
+    });
+    expect(roles.filter((role) => role.origin === 'model').map((role) => role.title)).toEqual(
+      expect.arrayContaining(['Head of Technical Support', 'VP of Customer Support']),
+    );
+    expect(roles.filter((role) => role.origin === 'model')).toHaveLength(2);
+  });
+});

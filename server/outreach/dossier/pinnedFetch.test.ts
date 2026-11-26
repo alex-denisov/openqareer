@@ -36,6 +36,12 @@ describe('pinnedLookup', () => {
 });
 
 describe('privateAddress', () => {
+  it('B676: NAT64, 6to4, site-local, IPv4-compatible, бенчмарк и служебные IPv4 — не публичные', () => {
+    for (const address of ['64:ff9b::7f00:1', '2002:7f00:1::1', 'fec0::1', '::7f00:1', '198.18.0.1', '198.19.255.255', '192.0.0.8']) {
+      expect(privateAddress(address), address).toBe(true);
+    }
+    for (const address of ['93.184.216.34', '2a00:1450:4001::200e', '198.20.0.1']) expect(privateAddress(address), address).toBe(false);
+  });
   it('reads IPv4-mapped IPv6 in hex form', () => {
     expect(privateAddress('::ffff:7f00:1')).toBe(true);
     expect(privateAddress('::ffff:a00:5')).toBe(true);

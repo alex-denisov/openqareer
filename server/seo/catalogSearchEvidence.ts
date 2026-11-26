@@ -11,7 +11,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
-import { parseListingPath } from '../../shared/vacancyCatalogRoutes';
+import { parseListingPath, parseVacancyPath } from '../../shared/vacancyCatalogRoutes';
+import { recordArchiveImpressions } from './catalogArchive';
 import { VertexTokenProvider } from '../providers/vertexAi';
 import { CATALOG_LISTING_SEARCH_EVIDENCE_TABLE_SQL } from './catalogListingHistory';
 import { parseServiceAccount } from './googleIndexing';
@@ -79,6 +80,29 @@ function listingKeys(rows: Awaited<ReturnType<typeof readPages>>) {
   return [...listings.values()];
 }
 
+/** 11.11: card pages Google showed keep an archive page once the vacancy closes. */
+function cardPaths(rows: Awaited<ReturnType<typeof readPages>>): string[] {
+  return rows
+    .filter((row) => row.impressions > 0)
+    .map((row) => new URL(row.keys[0] ?? '', SITE_ORIGIN).pathname)
+    .filter((path) => parseVacancyPath(path) !== null);
+}
+
+/** The card copy is its own step: a failure there keeps the listing evidence. */
+function recordCards(
+  database: DatabaseSync,
+  rows: Awaited<ReturnType<typeof readPages>>,
+  log: SearchEvidenceLog,
+  now: Date,
+): number {
+  try {
+    return recordArchiveImpressions(database, cardPaths(rows), now);
+  } catch (error: unknown) {
+    log.error({ reason: failureReason(error) }, 'catalog-archive-impressions-failed');
+    return 0;
+  }
+}
+
 function writeEvidence(
   database: DatabaseSync,
   listings: ReadonlyArray<{ place: string; role: string }>,
@@ -118,7 +142,11 @@ export async function refreshCatalogSearchEvidence(
     const rows = await readPages(tokens, fetcher, now);
     const listings = listingKeys(rows);
     writeEvidence(database, listings, now);
-    log.info({ pages: rows.length, listings: listings.length }, 'catalog-search-evidence-written');
+    const cards = recordCards(database, rows, log, now);
+    log.info(
+      { pages: rows.length, listings: listings.length, cards },
+      'catalog-search-evidence-written',
+    );
   } catch (error: unknown) {
     log.error({ reason: failureReason(error) }, 'catalog-search-evidence-failed');
   }

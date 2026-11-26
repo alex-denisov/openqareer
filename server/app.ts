@@ -1,15 +1,18 @@
 import { profilePhotoReader } from './routes/authorRoutes';
 import { queuePrecomputedSelectionFit } from './routes/precomputedSelectionFit';
+import { warmRoleSnapshots } from './routes/roleSnapshotWarm';
 import { warmMatchedList } from './routes/matchedListWarm';
 import { rebuildCampaignRoles } from './vacancies/rebuildCampaignRoles';
+import { backfillRoleTitlesRu } from './routes/careerRoleTitleRuBackfill';
 import { registerEventLoopWatch } from './observability/eventLoopWatch';
 import { redactRequestUrlForLogs } from './observability/redactRequestUrl';
 import { registerReportedSeoBotObservability } from './observability/reportedSeoBots';
-import { SqliteMarketSalaryEstimateStore } from './vacancies/marketSalary/sqliteMarketSalaryEstimateStore';
+import { SqliteSalaryEstimateReader } from './vacancies/openqareerSalary/salaryEstimateReader';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, {
   type FastifyInstance,
+  type FastifyReply,
   type FastifyRequest,
   type FastifyServerOptions,
 } from 'fastify';
@@ -26,9 +29,9 @@ import { CareerCommandDispatcher } from './orchestration/careerCommandDispatcher
 import type { ConnectorExecutor } from './connectors/connectorHarness';
 import type { CoachProvider } from './providers/coachProvider';
 import type { ResumeStructurer } from './providers/resumeStructurer';
-import type { RoleNamer } from './providers/roleNamer';
+import { roleTitleTranslatorOf, type RoleNamer } from './providers/roleNamer';
 import { RoleNamingFailureLog } from './providers/roleNamingFailureLog';
-import type { CoverLetterWriter } from './providers/coverLetterWriter';
+import { COVER_LETTER_VERTEX_TIMEOUT_MS, type CoverLetterWriter } from './providers/coverLetterWriter';
 import type { SessionAuth } from './auth/authService';
 import type { VacancySample } from './domain/vacancy';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
@@ -52,6 +55,7 @@ import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContact
 import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReputationRepository';
 import { SqliteSearchConsentRepository } from './data/sqliteSearchConsentRepository';
 import { SqliteCapabilityConsentStore } from './auth/capabilityConsentStore';
+import { SqliteAccountDeletionStore } from './auth/accountDeletionStore';
 import { SqliteNetworkIndexRepository } from './data/sqliteNetworkIndexRepository';
 import { SqliteCompanyDirectoryRepository } from './data/sqliteCompanyDirectoryRepository';
 import { registerReputationAuditRoutes } from './routes/reputationAuditRoutes';
@@ -65,11 +69,17 @@ import {
   registerCandidateDraftRoutes,
   type CandidateDraftRouteDeps,
 } from './routes/candidateDraftRoutes';
+import { registerB640LinkedinJournalRoutes } from './routes/b640LinkedinJournalRoutes';
+import { registerB640LinkedinQueueRoutes } from './routes/b640LinkedinQueueRoutes';
+import { registerB640LinkedinProfileRoutes } from './routes/b640LinkedinProfileRoutes';
+import { registerB640FeedPostRoutes } from './routes/b640FeedPostRoutes';
+import { registerB640LinkedinDraftVariantRoutes } from './routes/b640LinkedinDraftVariantRoutes';
 import { SqliteCandidateDraftRepository } from './candidate/sqliteCandidateDraftRepository';
 import {
   buildLinkedinDraftWriter,
   type LinkedinDraftWriter,
 } from './providers/linkedinDraftWriter';
+import { buildAdaptationStepsWriter, type AdaptationStepsWriter } from './providers/adaptationStepsWriter';
 import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseStore';
 import { SqliteCandidateCompanyWantsRepository } from './data/sqliteCandidateCompanyWantsRepository';
 import { registerCandidateCompanyRoutes } from './routes/candidateCompanyRoutes';
@@ -84,6 +94,8 @@ import { runDueBillingRenewals } from './billing/renewalRunner';
 import { sendBillingRenewalReminder } from './billing/billingReminderEmail';
 
 import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
+import { buildGoalTaskSuggester } from './providers/goalTaskSuggester';
+import { buildKpiExtractor } from './providers/kpiExtractor';
 import { meteredVertexFetchFor } from './providers/meteredVertexFetch';
 import { currentVacancyFitProfileValidator } from './domain/vacancyFitProfileStamp';
 import { VacancyMechanicsRuntime } from './domain/vacancyMechanicsRuntime';
@@ -111,14 +123,28 @@ interface BuildAppOptions {
   hhCrawlSettings?: import('./vacancies/hhCrawlSettings').HhCrawlSettingsStore;
   /** Память и пауза опросов — админский маршрут, сторож памяти (B220). */
   runtimeMemory?: RouteDeps['runtimeMemory'];
+  /** B732: обновления SMM-чата с общего вебхука бота. */
+  smmTelegram?: RouteDeps['smmTelegram'];
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
   experienceFactRewriter?: RouteDeps['experienceFactRewriter'];
+  kpiExtractor?: RouteDeps['kpiExtractor'];
+  goalTaskSuggester?: RouteDeps['goalTaskSuggester'];
   roleNamer?: RoleNamer;
   campaignRoleModel?: RouteDeps['campaignRoleModel'];
   /** Вопросы квиза по навыку профиля (блок A, пакет 3); нет ключей — квиза нет. */
   skillQuizModel?: RouteDeps['skillQuizModel'];
+  /** B734: русские названия навыков проверки роли. */
+  skillNameTranslator?: RouteDeps['skillNameTranslator'];
   coverLetterWriter?: CoverLetterWriter;
+  /** B753: сообщение знакомому и рекрутёру — своя цепочка (GLM первым). */
+  contactMessageWriter?: CoverLetterWriter;
+  /** B642: Whisper для записей собеседований; без подстановки — OpenRouter. */
+  recordingTranscriber?: RouteDeps['recordingTranscriber'];
+  /** B751: разбор интервью; без подстановки — цепочка письма. */
+  interviewDebriefWriter?: RouteDeps['interviewDebriefWriter'];
+  interviewAnswerJudge?: RouteDeps['interviewAnswerJudge'];
+  adaptationStepsWriter?: AdaptationStepsWriter;
   linkedinDraftWriter?: LinkedinDraftWriter;
   candidateDraftRepository?: SqliteCandidateDraftRepository;
   /** Инъекция нужна тестам; в runtime стор открывает общую базу пула. */
@@ -127,6 +153,7 @@ interface BuildAppOptions {
   candidateReputationRepo?: SqliteCandidateReputationRepository;
   searchConsentRepo?: SqliteSearchConsentRepository;
   capabilityConsentStore?: SqliteCapabilityConsentStore;
+  accountDeletionStore?: SqliteAccountDeletionStore;
   candidateCompanyWantsRepo?: SqliteCandidateCompanyWantsRepository;
   networkIndexRepo?: SqliteNetworkIndexRepository;
   companyDirectoryRepo?: SqliteCompanyDirectoryRepository;
@@ -239,6 +266,13 @@ async function registerRateLimits(
   await app.register(rateLimit, { global: false, keyGenerator: (request) => request.ip });
 }
 
+/** B755: «Войти в приложение» нельзя вставить в чужую рамку и подсунуть нажатие «Войти». */
+function denyFramingOfAppSignIn(url: string, reply: FastifyReply): void {
+  if (url !== '/app-sign-in' && !url.startsWith('/app-sign-in?')) return;
+  reply.header('X-Frame-Options', 'DENY');
+  reply.header('Content-Security-Policy', "frame-ancestors 'none'");
+}
+
 async function createFastifyBase(
   config: ServerConfig,
   isSignedIn: (request: FastifyRequest) => boolean,
@@ -267,7 +301,7 @@ async function createFastifyBase(
       reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
       reply.header(
         'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, Accept, X-Requested-With, X-OpenQareer-Device-Id',
+        'Content-Type, Authorization, Accept, X-Requested-With, X-OpenQareer-Device-Id, X-Recording-Token',
       );
     }
     if (request.method === 'OPTIONS') {
@@ -283,6 +317,7 @@ async function createFastifyBase(
     if (request.url.startsWith('/api/') && !request.url.startsWith('/api/v1/candidate/media/')) {
       reply.header('Cache-Control', 'no-store');
     }
+    denyFramingOfAppSignIn(request.url, reply);
   });
 
   app.get('/health', async (_request, reply) => {
@@ -333,6 +368,11 @@ async function registerApiRoutes(
   registerCapabilityConsentRoutes(app, deps);
   registerCandidateActionRoutes(app, deps);
   registerCandidateDraftRoutes(app, deps);
+  registerB640LinkedinQueueRoutes(app, deps);
+  registerB640LinkedinProfileRoutes(app, deps);
+  registerB640LinkedinJournalRoutes(app, deps);
+  registerB640FeedPostRoutes(app, deps);
+  registerB640LinkedinDraftVariantRoutes(app, deps);
   registerBillingRoutes(app, deps);
   registerQuotaRoutes(app, deps);
 }
@@ -376,6 +416,9 @@ function createCandidateRepositories(options: BuildAppOptions) {
     capabilityConsentStore:
       options.capabilityConsentStore ??
       new SqliteCapabilityConsentStore({ databasePath: config.databasePath }),
+    accountDeletionStore:
+      options.accountDeletionStore ??
+      new SqliteAccountDeletionStore({ databasePath: config.databasePath }),
     networkIndexRepo:
       options.networkIndexRepo ??
       new SqliteNetworkIndexRepository({ databasePath: config.databasePath }),
@@ -430,7 +473,8 @@ function assembleRouteDeps(
     resumeStructurer,
     roleNamer,
     campaignRoleModel,
-    coverLetterWriter,
+    // d01: шаги плана адаптации — та же цепочка моделей, что у письма.
+    coverLetterWriter, contactMessageWriter: options.contactMessageWriter, recordingTranscriber: options.recordingTranscriber, interviewDebriefWriter: options.interviewDebriefWriter, interviewAnswerJudge: options.interviewAnswerJudge, adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
     ...createCandidateRepositories(options),
     ...createCandidateDraftDeps(options),
     ...(options.candidateActionExecutor
@@ -446,7 +490,7 @@ function assembleRouteDeps(
     ...(hhCrawlSettings ? { hhCrawlSettings } : {}),
     ...(runtimeMemory ? { runtimeMemory } : {}),
     ...(matchedPoolPrecompute ? { matchedPoolPrecompute } : {}),
-    ...(options.vacancyDemand ? { vacancyDemand: options.vacancyDemand } : {}),
+    ...(options.vacancyDemand ? { vacancyDemand: options.vacancyDemand } : {}), ...(options.smmTelegram ? { smmTelegram: options.smmTelegram } : {}), ...(options.skillNameTranslator ? { skillNameTranslator: options.skillNameTranslator } : {}),
     ...services,
   };
 }
@@ -456,12 +500,20 @@ function withPrecomputedFit<T extends RouteDeps>(deps: T): T {
   deps.matchedPoolPrecompute?.setFitRequester?.((candidateId, snapshot) =>
     queuePrecomputedSelectionFit(deps, candidateId, snapshot),
   );
-  deps.matchedPoolPrecompute?.setCampaignRoleRefresher?.((candidateId, log) =>
-    rebuildCampaignRoles(deps, candidateId, { log }),
-  );
-  deps.matchedPoolPrecompute?.setListWarmer?.((candidateId, log) =>
-    warmMatchedList(deps, candidateId, log),
-  );
+  const translator = roleTitleTranslatorOf(deps.roleNamer);
+  deps.matchedPoolPrecompute?.setCampaignRoleRefresher?.(async (candidateId, log) => {
+    await rebuildCampaignRoles(deps, candidateId, { log });
+    // B748: старые роли поиска без русского названия — тот же проход, раз за запуск.
+    if (!translator) return;
+    const written = await backfillRoleTitlesRu({ candidateStore: deps.candidateStore, translator }, candidateId);
+    if (written > 0) log({ written }, 'role-titles-ru-backfill');
+  });
+  deps.matchedPoolPrecompute?.setListWarmer?.(async (candidateId, log) => {
+    // List first (B702, prod 24.11): the roles took 97 s of the 2 min before the switch, and the first
+    // list opened the stored results itself. «Карьера» has its own stored snapshots since 19.11.
+    await warmMatchedList(deps, candidateId, log);
+    await warmRoleSnapshots(deps, candidateId, log);
+  });
   return deps;
 }
 
@@ -520,16 +572,45 @@ function registerBillingRenewalScheduler(
   return () => { if (timer) clearInterval(timer); };
 }
 
+/** d01: шаги плана из «Что от вас ждут» на цепочке и таймауте Vertex письма. */
+function createAdaptationStepsWriter(config: BuildAppOptions['config']): AdaptationStepsWriter {
+  return buildAdaptationStepsWriter({
+    providerCredentials: config.providerCredentials,
+    vertex: config.vertex,
+    vertexFetch: meteredVertexFetchFor(
+      config.vertex,
+      config.databasePath,
+      'adaptationSteps',
+      COVER_LETTER_VERTEX_TIMEOUT_MS,
+    ),
+  });
+}
+
 function createCandidateDraftDeps(
   options: BuildAppOptions,
 ): Pick<
   CandidateDraftRouteDeps,
-  'candidateDraftRepository' | 'linkedinDraftWriter' | 'skillQuizModel' | 'experienceFactRewriter'
+  | 'candidateDraftRepository'
+  | 'linkedinDraftWriter'
+  | 'skillQuizModel'
+  | 'experienceFactRewriter'
+  | 'kpiExtractor'
+  | 'goalTaskSuggester'
 > {
   const { config } = options;
   return {
     skillQuizModel: options.skillQuizModel,
     experienceFactRewriter: options.experienceFactRewriter,
+    kpiExtractor:
+      options.kpiExtractor ??
+      buildKpiExtractor({
+        providerCredentials: config.providerCredentials,
+        vertex: config.vertex,
+        vertexFetch: meteredVertexFetchFor(config.vertex, config.databasePath, 'kpiImport'),
+      }),
+    goalTaskSuggester:
+      options.goalTaskSuggester ??
+      buildGoalTaskSuggester({ providerCredentials: config.providerCredentials }),
     candidateDraftRepository:
       options.candidateDraftRepository ??
       new SqliteCandidateDraftRepository({ databasePath: config.databasePath }),
@@ -547,10 +628,10 @@ function createCandidateDraftDeps(
 function attachMarketSalaryStore(
   deps: { marketSalaryEstimates?: RouteDeps['marketSalaryEstimates'] },
   options: BuildAppOptions,
-): SqliteMarketSalaryEstimateStore | undefined {
+): SqliteSalaryEstimateReader | undefined {
   const owned = options.marketSalaryEstimates
     ? undefined
-    : new SqliteMarketSalaryEstimateStore({ databasePath: options.config.databasePath });
+    : new SqliteSalaryEstimateReader(options.config.databasePath);
   deps.marketSalaryEstimates = options.marketSalaryEstimates ?? owned;
   return owned;
 }
@@ -559,16 +640,17 @@ function attachMarketSalaryStore(
 function closeOwnedCandidateRepos(
   options: Pick<
     BuildAppOptions,
-    'candidateCompanyWantsRepo' | 'networkIndexRepo' | 'companyDirectoryRepo'
+    'candidateCompanyWantsRepo' | 'networkIndexRepo' | 'companyDirectoryRepo' | 'accountDeletionStore'
   >,
   deps: Pick<
     RouteDeps,
-    'candidateCompanyWantsRepo' | 'networkIndexRepo' | 'companyDirectoryRepo'
+    'candidateCompanyWantsRepo' | 'networkIndexRepo' | 'companyDirectoryRepo' | 'accountDeletionStore'
   >,
 ): void {
   if (!options.candidateCompanyWantsRepo) deps.candidateCompanyWantsRepo?.close();
   if (!options.networkIndexRepo) deps.networkIndexRepo?.close();
   if (!options.companyDirectoryRepo) deps.companyDirectoryRepo?.close();
+  if (!options.accountDeletionStore) deps.accountDeletionStore?.close();
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {

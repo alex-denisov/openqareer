@@ -1,0 +1,242 @@
+import type {
+  CandidateStatusId,
+  TodayStatusModule,
+  TodayStatusModuleKey,
+} from '../../../../shared/candidateStatus';
+import { pluralRu } from '../../../../shared/pluralRu';
+import type { MatchedVacancyItem } from '../../coach/cabinetTypes';
+import type { RoleSkillDemand } from '../../skills/roleSkillDemandApi';
+import type { TodayFunnelCounts, TodayNextInterview, TodayQueueItem } from '../../today/todayApi';
+import { queueActionTitle, queueDesktopSubtitle } from '../../today/todayFormat';
+import { formatStatedCompensation } from '../../vacancies/vacancyCompensation';
+import type { IconName } from '../kit';
+import { buildNodePath } from '../routes';
+
+/** Адрес ближайшего интервью: раздел сам находит отклик (см. README основы). */
+const NEXT_INTERVIEW_PATH = '/app/responses/next/interview';
+
+export interface TodayAction {
+  readonly title: string;
+  readonly sub: string;
+  readonly label: string;
+  /** Подпись кнопки в строке на 390. */
+  readonly shortLabel: string;
+  readonly icon: IconName;
+  readonly path: string;
+}
+
+interface DayQueue {
+  readonly queue: readonly TodayQueueItem[];
+  readonly queueTotal?: number;
+}
+
+type ActionFace = Pick<TodayAction, 'label' | 'shortLabel' | 'icon' | 'path'>;
+
+function responsePath(applicationId: string | undefined): string {
+  return applicationId
+    ? buildNodePath('o01c', { responseId: applicationId })
+    : buildNodePath('o01');
+}
+
+function actionFace(item: TodayQueueItem): ActionFace {
+  if (item.kind === 'interview') {
+    const path = item.applicationId
+      ? buildNodePath('i01', { responseId: item.applicationId })
+      : NEXT_INTERVIEW_PATH;
+    return { label: 'Подготовиться', shortLabel: 'Готовиться', icon: 'play', path };
+  }
+  if (item.kind === 'linkedin_post') {
+    // Id черновика в адресе: a03b открывает этот пост, а не первый (B645 s03).
+    const path = item.draftId
+      ? `${buildNodePath('a03b')}?post=${encodeURIComponent(item.draftId)}`
+      : buildNodePath('a03b');
+    return { label: 'Открыть пост', shortLabel: 'Открыть', icon: 'linkedin', path };
+  }
+  if (item.kind === 'new_vacancy' || item.kind === 'shortlist') {
+    const path = item.clusterId
+      ? buildNodePath('v04', { vacancyId: item.clusterId })
+      : buildNodePath('s07');
+    return { label: 'Открыть вакансию', shortLabel: 'Открыть', icon: 'vacancies', path };
+  }
+  if (item.material === 'letter_draft' && item.applicationId) {
+    const path = buildNodePath('o02', { responseId: item.applicationId });
+    return { label: 'Проверить письмо', shortLabel: 'Проверить', icon: 'file', path };
+  }
+  if (item.material === 'cover_letter' && item.applicationId) {
+    const path = buildNodePath('o02', { responseId: item.applicationId });
+    // Письмо одобрено (B717): кнопка ведёт к шагу отправки на странице письма.
+    return { label: 'Отправить', shortLabel: 'Отправить', icon: 'send', path };
+  }
+  return {
+    label: 'Открыть отклик',
+    shortLabel: 'Открыть',
+    icon: 'send',
+    path: responsePath(item.applicationId),
+  };
+}
+
+/**
+ * Подпись строки. У поста — площадка и готовность черновика, как в макете;
+ * служебную приписку очереди («сам не опубликуется») кандидату не показываем.
+ */
+function actionSub(item: TodayQueueItem): string {
+  return item.kind === 'linkedin_post' ? 'LinkedIn · черновик готов' : queueDesktopSubtitle(item);
+}
+
+/** День без дел по откликам, которые уже стоят в «Событиях откликов»: одна вакансия — одна строка. */
+export function withoutEvents<T extends DayQueue>(day: T, shown: ReadonlySet<string>): T {
+  const queue = day.queue.filter((item) => !item.applicationId || !shown.has(item.applicationId));
+  const removed = day.queue.length - queue.length;
+  if (removed === 0) return day;
+  return {
+    ...day,
+    queue,
+    ...(day.queueTotal === undefined ? {} : { queueTotal: day.queueTotal - removed }),
+  };
+}
+
+/** Заголовок модуля остальных дел: «Ещё 3 дела». */
+export function moreTitle(count: number): string {
+  return `Ещё ${pluralRu(count, ['дело', 'дела', 'дел'])}`;
+}
+
+/**
+ * Подробность главного дела (p.lead-text макета): вакансия, место и деньги.
+ * У поста подробности нет — тема уже в заголовке.
+ */
+export function leadText(item: TodayQueueItem): string | null {
+  if (item.kind === 'linkedin_post') return null;
+  const salary = item.salary ? formatStatedCompensation(item.salary) : null;
+  // Вакансия уже в заголовке («Ваш ход: …», «Новая вакансия: …») — второй раз её не пишем.
+  const title = queueActionTitle(item).includes(item.title) ? null : item.title.trim();
+  const parts = [title, item.location?.trim(), salary === 'не указана' ? null : salary];
+  const text = parts.filter(Boolean).join(' · ');
+  return text || null;
+}
+
+/** Строка очереди дня: что сделать и куда ведёт кнопка в новом кабинете. */
+export function queueAction(item: TodayQueueItem): TodayAction {
+  return { title: queueActionTitle(item), sub: actionSub(item), ...actionFace(item) };
+}
+
+export interface SkillFit {
+  readonly title: string;
+  readonly role: string;
+  readonly have: readonly string[];
+  readonly lack: readonly string[];
+  /** Текст ⓘ: откуда взяты требования. */
+  readonly source: string;
+}
+
+const DAY_MONTH = new Intl.DateTimeFormat('ru-RU', {
+  day: '2-digit',
+  month: '2-digit',
+  timeZone: 'UTC',
+});
+
+/** Частые требования роли: что уже есть в профиле и чего не хватает. */
+export function skillFit(demand: RoleSkillDemand | undefined): SkillFit | null {
+  if (!demand || demand.skills.length === 0) return null;
+  const have = demand.skills.filter((skill) => skill.inProfile).map((skill) => skill.name);
+  const lack = demand.skills.filter((skill) => !skill.inProfile).map((skill) => skill.name);
+  const total = demand.skills.length;
+  const observed = new Date(demand.observedAt);
+  const date = Number.isNaN(observed.getTime()) ? '' : `, на ${DAY_MONTH.format(observed)}`;
+  const sample = pluralRu(demand.sampleSize, ['вакансии', 'вакансий', 'вакансий']);
+  return {
+    title: `${have.length} из ${pluralRu(total, ['частого требования', 'частых требований', 'частых требований'])} у вас уже есть`,
+    role: demand.roleTitle,
+    have,
+    lack,
+    source: `Частые требования — из ${sample} по роли «${demand.roleTitle}»${date}.`,
+  };
+}
+
+export interface ApplicationsSummary {
+  readonly title: string;
+  readonly text: string | null;
+}
+
+function interviewMoment(at: string, timeZone: string): string | null {
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return null;
+  const day = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', timeZone }).format(
+    date,
+  );
+  const time = new Intl.DateTimeFormat('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone,
+  }).format(date);
+  return `${day}, ${time}`;
+}
+
+/** Модуль «Отклики» вне поиска: сколько откликов идёт и что ближайшее. */
+export function applicationsSummary(
+  funnel: TodayFunnelCounts | undefined,
+  nextInterview: TodayNextInterview | null,
+  timeZone: string,
+): ApplicationsSummary | null {
+  if (!funnel?.applied) return null;
+  const moment = nextInterview ? interviewMoment(nextInterview.at, timeZone) : null;
+  const place = nextInterview?.company ?? nextInterview?.title;
+  return {
+    title: `Ваши отклики: ${funnel.applied}`,
+    text: moment && place ? `Ближайшее: ${place}, интервью ${moment}.` : null,
+  };
+}
+
+export interface VacancyRow {
+  readonly id: string;
+  readonly title: string;
+  readonly sub: string;
+  readonly salary: string;
+  /** Совпадение с профилем, %; `null` — оценки ещё нет. */
+  readonly fit: number | null;
+  readonly path: string;
+}
+
+export function vacancyRow(item: MatchedVacancyItem): VacancyRow {
+  const { cluster, explanation } = item;
+  const percent = explanation.fitView?.result?.coveragePercent;
+  return {
+    id: cluster.id,
+    title: cluster.canonicalTitle,
+    sub: [cluster.canonicalCompany, cluster.canonicalLocation].filter(Boolean).join(' · '),
+    salary: formatStatedCompensation(cluster.salary),
+    fit: typeof percent === 'number' ? Math.round(percent) : null,
+    path: buildNodePath('v04', { vacancyId: cluster.id }),
+  };
+}
+
+/**
+ * Модули без данных на сервере не показываем: причина смены профессии,
+ * ближайшая встреча и запись результата в профиль (отклонения B650).
+ */
+const HIDDEN_MODULES: ReadonlySet<TodayStatusModuleKey> = new Set([
+  'profession_reason',
+  'next_meeting',
+  'record_result',
+]);
+
+export interface ModuleLayout {
+  readonly main: readonly TodayStatusModule[];
+  readonly side: readonly TodayStatusModule[];
+}
+
+function isSideModule(status: CandidateStatusId, key: TodayStatusModuleKey): boolean {
+  if (status === 'job_search') return key === 'profile_question';
+  return key === 'applications_summary';
+}
+
+/** Левая колонка — главное дня, правая — контекст (как в макетах s03 и s05b). */
+export function moduleLayout(
+  status: CandidateStatusId,
+  modules: readonly TodayStatusModule[],
+): ModuleLayout {
+  const shown = modules.filter((module) => !HIDDEN_MODULES.has(module.key));
+  return {
+    main: shown.filter((module) => !isSideModule(status, module.key)),
+    side: shown.filter((module) => isSideModule(status, module.key)),
+  };
+}

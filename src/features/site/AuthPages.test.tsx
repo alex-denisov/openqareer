@@ -23,7 +23,7 @@ describe('AuthPages', () => {
     expect(html).toContain('Забыли пароль?');
     expect(html).toContain('name="username"');
     expect(html).toContain('name="password"');
-    expect(html).toContain('autoComplete="username"');
+    expect(html).toContain('autoComplete="username webauthn"');
     expect(html).toContain('autoComplete="current-password"');
   });
 
@@ -61,7 +61,7 @@ describe('AuthPages', () => {
   it('uses one valid autocomplete purpose per identity field', () => {
     const login = renderToStaticMarkup(<LoginPage onNavigate={vi.fn()} />);
     const signup = renderToStaticMarkup(<SignupPage onNavigate={vi.fn()} />);
-    expect(login).toMatch(/<input[^>]*id="login-identifier"[^>]*autoComplete="username"/u);
+    expect(login).toMatch(/<input[^>]*id="login-identifier"[^>]*autoComplete="username webauthn"/u);
     expect(signup).toMatch(/<input[^>]*id="signup-email"[^>]*autoComplete="email"/u);
     expect(signup).toMatch(/<input[^>]*id="signup-name"[^>]*autoComplete="name"/u);
     expect(login).not.toContain('autoComplete="username email"');

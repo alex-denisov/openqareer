@@ -405,3 +405,33 @@ describe('owner Telegram alerts config (B266)', () => {
     expect(config.telegramOwnerChatId).toBe('987654321');
   });
 });
+
+describe('cabinet B640 flag configuration', () => {
+  const read = (value?: string) =>
+    readServerConfig(
+      value === undefined
+        ? validEnvironment
+        : { ...validEnvironment, OPENQAREER_CABINET_B640_USERNAMES: value },
+      import.meta.url,
+    ).cabinetB640Usernames;
+
+  it('is empty by default and for a blank value', () => {
+    expect(read()).toEqual([]);
+    expect(read('')).toEqual([]);
+    expect(read('  ')).toEqual([]);
+  });
+
+  it('reads sign-in names split by commas, trimmed and lower-cased', () => {
+    expect(read(' First.Test , second_test,, ')).toEqual(['first.test', 'second_test']);
+  });
+
+  it('accepts the wildcard for everyone', () => {
+    expect(read('*')).toEqual(['*']);
+  });
+
+  it('rejects a value that is not a sign-in name', () => {
+    expect(() => read('first.test;second.test')).toThrow();
+    expect(() => read('ab')).toThrow();
+    expect(() => read('first.test,*.test')).toThrow();
+  });
+});

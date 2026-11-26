@@ -9,14 +9,16 @@ User=openqareer-deploy
 Group=openqareer-deploy
 Environment=NODE_ENV=production
 Environment=OPENQAREER_DATABASE_PATH=/var/lib/openqareer/openqareer.db
-# Куча вдвое-втрое меньше, чем у HTTP: волна опросов обязана жить в партиях,
-# а не в целом пуле. Превышение — это ошибка кода, и юнит её показывает.
-Environment=NODE_OPTIONS=--max-old-space-size=640
+# Волна опросов обязана жить в партиях, а не в целом пуле. B649-6 (15.11):
+# при пуле ~1,69 млн 640 МБ давали heap OOM ~4 раза в сутки (11 за 48 ч),
+# GC у потолка — часть стоянок цикла. 1536 — в пределах MemoryMax=5G.
+Environment=NODE_OPTIONS=--max-old-space-size=1536
 # B313: Chromium для исполнителя пула LinkedIn ставится openqareer-browser-install.
 Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/openqareer/browser/ms-playwright
 Environment=OPENQAREER_PLAYWRIGHT_MODULE=/opt/openqareer/browser/node_modules/playwright-core/index.mjs
 EnvironmentFile=/etc/openqareer/openqareer.env
-ExecStart=/opt/openqareer/node-v24.14.1-linux-x64/bin/node /srv/openqareer/current/maintenance.mjs
+# B759: своя ссылка на релиз; openqareer-activate двигает её только при другом отпечатке кода.
+ExecStart=/opt/openqareer/node-v24.14.1-linux-x64/bin/node /srv/openqareer/maintenance/maintenance.mjs
 Restart=on-failure
 RestartSec=30s
 # SIGTERM ждёт restore/текущую волну (журнал: maintenance-shutdown-started →

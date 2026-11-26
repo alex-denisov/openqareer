@@ -77,6 +77,31 @@ describe('SQLite candidate notification repository', () => {
     expect(repository.list('candidate-a', { limit: 10, now: NOW }).items).toEqual([]);
   });
 
+  it('B671: a digest that grows becomes unread again, an unchanged one stays read', () => {
+    const repository = createRepository();
+    const digest = {
+      idempotencyKey: 'new-vacancies:2026-10-11:role',
+      kind: 'new_vacancies_by_role',
+      sourceType: 'matched_vacancy_day',
+      sourceId: '',
+      createdAt: '2026-10-11T08:00:00.000Z',
+    } as const;
+    const grow = (extra: string) => (stored: string) =>
+      stored.split(',').includes(extra) ? stored : [stored, extra].filter(Boolean).join(',');
+    repository.recordOrMergeEvent('candidate-a', digest, grow('a'));
+    const [item] = repository.list('candidate-a', { limit: 10, now: NOW }).items;
+    expect(repository.markRead('candidate-a', item!.id, NOW)).toBe(true);
+
+    repository.recordOrMergeEvent('candidate-a', { ...digest, createdAt: '2026-10-11T09:00:00.000Z' }, grow('a'));
+    expect(repository.list('candidate-a', { limit: 10, now: NOW }).unreadCount).toBe(0);
+
+    repository.recordOrMergeEvent('candidate-a', { ...digest, createdAt: '2026-10-11T10:00:00.000Z' }, grow('b'));
+    const page = repository.list('candidate-a', { limit: 10, now: NOW });
+    expect(page.unreadCount).toBe(1);
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]!.id).toBe(item!.id);
+  });
+
   it('applies event preferences and physically deletes notifications after 90 days', () => {
     const repository = createRepository();
     const stale = repository.recordEvent(
@@ -103,7 +128,7 @@ describe('SQLite candidate notification repository', () => {
     const kinds: readonly NotificationEventKind[] = [
       'email_approval', 'post_approval', 'interview_reminder', 'new_vacancies_by_role',
       'employer_opened_letter', 'consultant_edits', 'footprint_findings', 'import_completed',
-      'employer_reply', 'delivery_error',
+      'employer_reply', 'delivery_error', 'post_reminder',
     ];
     const items = kinds.map((kind) => repository.recordEvent('candidate-a', {
       idempotencyKey: `action:${kind}`,
@@ -113,12 +138,39 @@ describe('SQLite candidate notification repository', () => {
       createdAt: NOW,
     })!);
 
-    expect(items).toHaveLength(10);
+    expect(items).toHaveLength(kinds.length);
     for (const item of items) {
       expect(item.title.length).toBeGreaterThan(0);
-      expect(item.action.href).toMatch(/^\/app\?/u);
+      expect(item.action.href).toMatch(/^\/app[/?]/u);
       expect(item.action.href).not.toMatch(/^https?:/u);
     }
+  });
+
+  it('B695: напоминание о посте не видно до своего времени, а Telegram ждёт того же часа', () => {
+    const database = new DatabaseSync(':memory:');
+    database.exec('CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;');
+    database.prepare('INSERT INTO candidates (id) VALUES (?)').run('candidate-a');
+    const repository = new SqliteNotificationRepository(database, new SealedText(Buffer.alloc(32, 4)));
+    databases.push(database);
+    repositories.push(repository);
+    repository.linkTelegramChat('candidate-a', '100', NOW);
+    const at = '2026-10-12T07:00:00.000Z';
+    const item = repository.recordEvent('candidate-a', {
+      kind: 'post_reminder', sourceType: 'linkedin_queue', sourceId: 'q-1',
+      idempotencyKey: `post-reminder:q-1:${at}`, createdAt: at, deliverAt: at,
+    }, NOW);
+
+    expect(item?.title).toBe('Пора опубликовать пост');
+    expect(item?.action.label).toBe('Открыть пост');
+    expect(repository.list('candidate-a', { limit: 10, now: NOW })).toMatchObject({ items: [], unreadCount: 0 });
+    expect(repository.listForFeed('candidate-a', { max: 10, now: NOW })).toEqual({ rows: [], unreadCount: 0 });
+    expect(repository.markAllRead('candidate-a', NOW)).toBe(0);
+    expect(repository.claimDueDeliveries(NOW, 10)).toEqual([]);
+
+    const later = '2026-10-12T07:00:01.000Z';
+    expect(repository.list('candidate-a', { limit: 10, now: later })).toMatchObject({ items: [{ kind: 'post_reminder' }], unreadCount: 1 });
+    expect(repository.listForFeed('candidate-a', { max: 10, now: later }).rows).toMatchObject([{ kind: 'post_reminder' }]);
+    expect(repository.claimDueDeliveries(later, 10)).toMatchObject([{ channel: 'telegram' }]);
   });
 
   it('queues selected email and Telegram once while hiding app-disabled events', () => {

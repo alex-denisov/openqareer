@@ -354,6 +354,23 @@ export class SqliteCandidateAutomationScheduleRepository {
     return row.count;
   }
 
+  /** B738 · 8: весь журнал кандидата для выгрузки, старые первыми; экран читает `listJournal` за 30 дней. */
+  exportJournal(candidateId: string): CandidateAutomationJournalEntry[] {
+    const rows = this.database
+      .prepare(
+        'SELECT * FROM candidate_auto_apply_journal WHERE candidate_id = ? ORDER BY occurred_at, id',
+      )
+      .all(candidateId) as unknown as JournalRow[];
+    // Повреждённая строка пропускается: выгрузка отдаёт остальное, а не падает целиком.
+    return rows.flatMap((row) => {
+      try {
+        return [journalFromRow(row, this.sealedText)];
+      } catch {
+        return [];
+      }
+    });
+  }
+
   deliveryStats(
     candidateId: string,
     localDate: string,

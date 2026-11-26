@@ -129,9 +129,27 @@ export const fetchWorkdayDetail: WorkdayDetailFetch = async (url, format) => {
   return { status: res.status, payload: format === 'json' ? await res.json() : await res.text() };
 };
 
+interface SourceAt {
+  readonly sourceId: string;
+  readonly position: number;
+}
+
 type Outcome = 'loaded' | 'gone' | 'failed' | 'throttled';
 
 const DEFAULT_THROTTLE_PAUSE_MS = 15 * 60_000;
+/**
+ * B761 25.11, прод: 12,7 из 13,7 тыс. площадок без единой записи на дочитку стоили 87 с
+ * чтения пула за проход, а проход шёл каждые 20 с. Пустая площадка ждёт час или нового
+ * принятого чтения (`wake`).
+ */
+const IDLE_PAUSE_MS = 60 * 60_000;
+/** Разброс паузы: без него пустые площадки снова смотрелись бы все разом раз в час. */
+const IDLE_PAUSE_JITTER = 0.2;
+/**
+ * Время обхода площадок без известной работы за такт (10 с). Предел в 200 площадок на холодной
+ * базе занимал 38 с первой минуты (прод 25.11, 07:30Z): обход большой площадки — десятки мс.
+ */
+const PROBE_BUDGET_MS = 2_000;
 const EMPTY_REPORT: WorkdayDescriptionReport = {
   requested: 0,
   loaded: 0,
@@ -150,13 +168,18 @@ export class WorkdayDescriptionBackfill {
   private readonly delayMs: number;
   private readonly now: () => number;
   private readonly random: () => number;
+  private readonly elapsed: () => number;
   /** Темп источника без своего `intervalMs`; 0 — каждый такт. */
   private readonly defaultIntervalMs: number;
   /** Когда источник снова можно спрашивать (темп и пауза после 429). */
   private readonly nextDueAt = new Map<string, number>();
+  /** Площадки, где дочитывать было нечего. */
+  private readonly idle = new Set<string>();
   /** Неудачи по id: после `maxAttempts` запись больше не запрашивается до перезапуска. */
   private readonly attempts = new Map<string, number>();
   private running = false;
+  /** С какого места списка площадок продолжается обход без известной работы. */
+  private probeCursor = 0;
 
   constructor(options: {
     pool: WorkdayDescriptionPool;
@@ -168,6 +191,8 @@ export class WorkdayDescriptionBackfill {
     delayMs?: number;
     now?: () => number;
     random?: () => number;
+    /** Часы бюджета обхода, мс. */
+    elapsed?: () => number;
     defaultIntervalMs?: number;
   }) {
     this.pool = options.pool;
@@ -179,6 +204,7 @@ export class WorkdayDescriptionBackfill {
     this.delayMs = options.delayMs ?? DEFAULT_DELAY_MS;
     this.now = options.now ?? Date.now;
     this.random = options.random ?? Math.random;
+    this.elapsed = options.elapsed ?? (() => performance.now());
     this.defaultIntervalMs = options.defaultIntervalMs ?? 0;
   }
 
@@ -188,15 +214,22 @@ export class WorkdayDescriptionBackfill {
     this.running = true;
     try {
       const startedAt = this.now();
-      const sources = this.sourceIds()
-        .filter(isDetailTextSource)
-        .filter((sourceId) => (this.nextDueAt.get(sourceId) ?? 0) <= startedAt);
+      const { working, probes } = this.dueSources(startedAt);
       // B641 10.11: выборка площадки без текста — до 100 мс; 147 площадок подряд
       // держали цикл событий до 8 с. Каждая площадка начинается в своём обороте.
       const started: Promise<Outcome[]>[] = [];
-      for (const sourceId of sources) {
+      let probesFrom: number | undefined;
+      for (const [index, { sourceId, position }] of [...working, ...probes].entries()) {
         await new Promise<void>((resolve) => setImmediate(resolve));
-        started.push(this.stepSource(sourceId));
+        if (index >= working.length) {
+          // Время по часам: в него входит и работа, идущая между площадками.
+          probesFrom ??= this.elapsed();
+          if (this.elapsed() - probesFrom >= PROBE_BUDGET_MS) break;
+          this.probeCursor = position + 1;
+        }
+        // B756 22.11: обработчик — сразу. Площадка, упавшая, пока цикл ещё ждёт оборота,
+        // давала отказ без обработчика и роняла процесс (exit 1 на «database is locked»).
+        started.push(this.stepSource(sourceId).catch((): Outcome[] => ['failed']));
       }
       const outcomes = await Promise.all(started);
       const flat = outcomes.flat();
@@ -210,6 +243,34 @@ export class WorkdayDescriptionBackfill {
     } finally {
       this.running = false;
     }
+  }
+
+  /** Площадки с работой — все; новые, разбуженные и пустые — в пределах бюджета такта. */
+  private dueSources(nowMs: number): { working: SourceAt[]; probes: SourceAt[] } {
+    const due = this.sourceIds()
+      .map((sourceId, position) => ({ sourceId, position }))
+      .filter(({ sourceId }) => isDetailTextSource(sourceId))
+      .filter(({ sourceId }) => (this.nextDueAt.get(sourceId) ?? 0) <= nowMs);
+    const isProbe = ({ sourceId }: SourceAt) =>
+      this.idle.has(sourceId) || !this.nextDueAt.has(sourceId);
+    const probes = due.filter(isProbe);
+    return {
+      working: due.filter((source) => !isProbe(source)),
+      // Продолжение с места остановки: разбуженные в начале списка не отодвигают хвост.
+      probes: [
+        ...probes.filter(({ position }) => position >= this.probeCursor),
+        ...probes.filter(({ position }) => position < this.probeCursor),
+      ],
+    };
+  }
+
+  private idlePauseMs(): number {
+    return Math.round(IDLE_PAUSE_MS * (1 + IDLE_PAUSE_JITTER * (2 * this.random() - 1)));
+  }
+
+  /** Принято новое чтение: пустая площадка смотрится на ближайшем такте. Паузу 429 не снимает. */
+  wake(sourceId: string): void {
+    if (this.idle.delete(sourceId)) this.nextDueAt.delete(sourceId);
   }
 
   private exhaustedIds(): string[] {
@@ -228,6 +289,12 @@ export class WorkdayDescriptionBackfill {
       paced ? 1 : this.perSource,
       this.exhaustedIds(),
     );
+    if (batch.length === 0) {
+      this.idle.add(sourceId);
+      this.nextDueAt.set(sourceId, this.now() + this.idlePauseMs());
+      return [];
+    }
+    this.idle.delete(sourceId);
     const outcomes: Outcome[] = [];
     for (let index = 0; index < batch.length; index += 1) {
       if (index > 0) await this.sleep(this.delayMs);
@@ -254,15 +321,34 @@ export class WorkdayDescriptionBackfill {
     }
     if (response.status === 429) return 'throttled';
     if (response.status === 404 || response.status === 410) {
-      this.pool.markExpired([vacancy.id], new Date().toISOString());
+      if (!this.write(() => this.pool.markExpired([vacancy.id], new Date().toISOString()))) {
+        return 'failed';
+      }
       this.attempts.delete(vacancy.id);
       return 'gone';
     }
     const fullText = response.status === 200 ? source.readText(response.payload) : '';
     if (!fullText) return this.fail(vacancy.id);
-    this.pool.mergeSourceSlice(sourceId, [withWorkdayText(vacancy, fullText)]);
+    if (
+      !this.write(() => this.pool.mergeSourceSlice(sourceId, [withWorkdayText(vacancy, fullText)]))
+    ) {
+      return 'failed';
+    }
     this.attempts.delete(vacancy.id);
     return 'loaded';
+  }
+
+  /**
+   * Запись в пул. База занята дольше busy_timeout — не вина площадки: попытка не
+   * считается, запись повторится на следующем такте.
+   */
+  private write(operation: () => unknown): boolean {
+    try {
+      operation();
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private fail(id: string, by = 1): Outcome {

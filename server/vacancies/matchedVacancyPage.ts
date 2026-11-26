@@ -1,3 +1,4 @@
+import { detectVacancyEmploymentKind } from '../../shared/vacancyEmploymentKind';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import type { VacancyCompanyFeatures, VacancyCluster } from '../domain/unifiedVacancy';
 import { normalizeCityLabel } from '../../shared/cityLabel';
@@ -141,7 +142,12 @@ function resolveCompanyFeatures(cluster: VacancyCluster): VacancyCompanyFeatures
   };
 }
 
-function trim(item: MatchedVacancyItem): MatchedVacancyItem {
+function employmentKindOf(cluster: MatchedVacancyItem['cluster']) {
+  const kind = detectVacancyEmploymentKind({ title: cluster.canonicalTitle, summary: cluster.descriptionSummary });
+  return kind ? { employmentKind: kind } : {};
+}
+
+export function trim(item: MatchedVacancyItem): MatchedVacancyItem {
   const companyFeatures = item.cluster.companyFeatures ?? resolveCompanyFeatures(item.cluster);
   return {
     cluster: {
@@ -152,6 +158,7 @@ function trim(item: MatchedVacancyItem): MatchedVacancyItem {
         summary: item.cluster.descriptionSummary,
         isRemote: item.cluster.isRemote,
       }),
+      ...employmentKindOf(item.cluster),
       descriptionSummary: '',
       skills: [],
       ...(companyFeatures ? { companyFeatures } : {}),

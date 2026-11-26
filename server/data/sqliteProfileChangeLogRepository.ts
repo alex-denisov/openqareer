@@ -113,17 +113,26 @@ export class SqliteProfileChangeLogRepository {
     candidateId: string,
     page: number,
     pageSize: number,
+    actor?: ProfileChangeActor,
   ): { entries: ProfileChangeEntry[]; total: number } {
     const rows = this.database
       .prepare(
         `SELECT ${SELECT_COLUMNS} FROM profile_change_log
-         WHERE candidate_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?`,
+         WHERE candidate_id = ? AND (? IS NULL OR actor = ?)
+         ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?`,
       )
-      .all(candidateId, pageSize, page * pageSize) as unknown as ChangeRow[];
+      .all(candidateId, actor ?? null, actor ?? null, pageSize, page * pageSize) as unknown as ChangeRow[];
+    return { entries: rows.map((row) => this.mapRow(row)), total: this.count(candidateId, actor) };
+  }
+
+  count(candidateId: string, actor?: ProfileChangeActor): number {
     const { total } = this.database
-      .prepare('SELECT COUNT(*) AS total FROM profile_change_log WHERE candidate_id = ?')
-      .get(candidateId) as { total: number };
-    return { entries: rows.map((row) => this.mapRow(row)), total };
+      .prepare(
+        `SELECT COUNT(*) AS total FROM profile_change_log
+         WHERE candidate_id = ? AND (? IS NULL OR actor = ?)`,
+      )
+      .get(candidateId, actor ?? null, actor ?? null) as { total: number };
+    return total;
   }
 
   get(candidateId: string, id: string): ProfileChangeEntry | null {
@@ -150,6 +159,17 @@ export class SqliteProfileChangeLogRepository {
          WHERE candidate_id = ? AND id = ? AND reverted_at IS NULL`,
       )
       .run(revertedAt, candidateId, id);
+  }
+
+  /** B673: отменённая правка применена снова — отметка отмены снимается. */
+  markReapplied(candidateId: string, id: string): boolean {
+    const result = this.database
+      .prepare(
+        `UPDATE profile_change_log SET reverted_at = NULL
+         WHERE candidate_id = ? AND id = ? AND reverted_at IS NOT NULL`,
+      )
+      .run(candidateId, id);
+    return Number(result.changes) > 0;
   }
 
   /** Current trust of live facts; deleted or unknown ids are skipped. */

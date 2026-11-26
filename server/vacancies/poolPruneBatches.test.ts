@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
+import { PrunePassStopped, pruneClustersInBatchesAsync } from './poolPruneBatches';
 import { SqliteVacancyPoolStore, type PoolWriteEvent } from './sqliteVacancyPoolStore';
+import { STALE_CLUSTERS_SQL } from './poolPruneBatches';
 
 const directories: string[] = [];
 const stores: SqliteVacancyPoolStore[] = [];
@@ -166,12 +168,219 @@ describe('pool prune at worker start (PRB-041: one transaction held the write lo
 describe('B643 side tables follow the pool', () => {
   it('removes vacancy_company rows whose vacancy left the index', () => {
     const { store, seed } = openStore();
-    seed.prepare(`INSERT INTO vacancy_company (vacancy_id, company_key, match_how, linked_at) VALUES ('gone', 'stripe', 'name_exact', 1)`).run();
-    seed.prepare(`INSERT INTO vacancy_company (vacancy_id, company_key, match_how, linked_at) VALUES ('kept', 'stripe', 'name_exact', 1)`).run();
-    seed.prepare(`INSERT INTO vacancy_pool_index (id, source_id, published_ms, is_active, url, search_text, expired) VALUES ('kept', 'board', ?, 1, '', '', 0)`).run(Date.now());
+    seed
+      .prepare(
+        `INSERT INTO vacancy_company (vacancy_id, company_key, match_how, linked_at) VALUES ('gone', 'stripe', 'name_exact', 1)`,
+      )
+      .run();
+    seed
+      .prepare(
+        `INSERT INTO vacancy_company (vacancy_id, company_key, match_how, linked_at) VALUES ('kept', 'stripe', 'name_exact', 1)`,
+      )
+      .run();
+    seed
+      .prepare(
+        `INSERT INTO vacancy_pool_index (id, source_id, published_ms, is_active, url, search_text, expired) VALUES ('kept', 'board', ?, 1, '', '', 0)`,
+      )
+      .run(Date.now());
     seedPool(seed, 'board', 1, 'kept');
     seed.prepare(`UPDATE vacancy_pool SET id='kept' WHERE id='kept0'`).run();
     store.prune(['board'], '2026-08-01T00:00:00.000Z');
-    expect(seed.prepare('SELECT vacancy_id FROM vacancy_company').all()).toEqual([{ vacancy_id: 'kept' }]);
+    expect(seed.prepare('SELECT vacancy_id FROM vacancy_company').all()).toEqual([
+      { vacancy_id: 'kept' },
+    ]);
+  });
+});
+
+describe('prune with more known sources than SQLite variables (prod 12.11: too many SQL variables)', () => {
+  const manySources = (extra: readonly string[]) => [
+    ...Array.from({ length: 40_000 }, (_, index) => `ats:company-${index}`),
+    ...extra,
+  ];
+
+  it('prunes unknown sources and keeps every known one', () => {
+    const { store, seed } = openStore();
+    seedPool(seed, 'ats:company-39999', 2, 'k');
+    seedPool(seed, 'board', 2, 'b');
+    seedPool(seed, 'gone', 3, 'g');
+    store.prune(manySources(['board']), '2026-01-01T00:00:00.000Z');
+    const left = seed
+      .prepare('SELECT source_id AS s, count(*) AS n FROM vacancy_pool GROUP BY s ORDER BY s')
+      .all();
+    expect(left).toEqual([
+      { s: 'ats:company-39999', n: 2 },
+      { s: 'board', n: 2 },
+    ]);
+  });
+
+  it('removes nothing when the known list is empty', () => {
+    const { store, seed } = openStore();
+    seedPool(seed, 'board', 2, 'b');
+    store.prune([], '2026-01-01T00:00:00.000Z');
+    expect(countOf(seed, 'vacancy_pool')).toBe(2);
+  });
+
+  it('skips unknown-source removal when the registry is half loaded', () => {
+    const { store, seed, events } = openStore();
+    const ids = Array.from({ length: 10 }, (_, index) => `s${index}`);
+    const state = seed.prepare('INSERT INTO vacancy_source_state (source_id) VALUES (?)');
+    ids.forEach((id) => {
+      state.run(id);
+      seedPool(seed, id, 1, `${id}-`);
+    });
+    store.prune(ids.slice(0, 5), '2026-01-01T00:00:00.000Z');
+    expect(countOf(seed, 'vacancy_pool')).toBe(10);
+    expect(countOf(seed, 'vacancy_source_state')).toBe(10);
+    expect(pruneReports(events).at(-1)?.unknownSkipped).toEqual({ known: 5, stateSources: 10 });
+    store.prune(ids, '2026-01-01T00:00:00.000Z');
+    expect(countOf(seed, 'vacancy_pool')).toBe(10);
+  });
+
+  it('reads unseen links for that many sources', () => {
+    const { store } = openStore();
+    expect(store.loadUnseenLinks(manySources([]), Date.now(), 10)).toEqual([]);
+  });
+});
+
+describe('prune after readiness yields between transactions (B649-2)', () => {
+  it('removes the same rows as the sync pass and lets timers run in between', async () => {
+    const { store, events, seed } = openStore({ writeChunkSize: 10 });
+    seedPool(seed, 'gone', 25, 'g');
+    const turns: number[] = [];
+    const pending = store.pruneAsync(['board'], '2026-08-01T00:00:00.000Z');
+    // Отдельные макрозадачи между транзакциями: цикл событий получает ход.
+    for (let n = 0; n < 3; n += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+      turns.push(countOf(seed, 'vacancy_pool'));
+    }
+    await pending;
+    expect(countOf(seed, 'vacancy_pool')).toBe(0);
+    expect(turns[0]).toBeGreaterThan(0);
+    expect(pruneReports(events)).toEqual([
+      expect.objectContaining({ scope: 'pool', removed: 25, transactions: 3 }),
+    ]);
+  });
+
+  it('pauses between transactions when asked (B759: prune in the background)', async () => {
+    const { store, seed } = openStore({ writeChunkSize: 10 });
+    seedPool(seed, 'gone', 25, 'g');
+    const startedAt = performance.now();
+    await store.pruneAsync(['board'], '2026-08-01T00:00:00.000Z', { pauseMs: 25 });
+    expect(countOf(seed, 'vacancy_pool')).toBe(0);
+    // Three transactions, a pause after each step boundary: at least two pauses.
+    expect(performance.now() - startedAt).toBeGreaterThanOrEqual(45);
+  });
+
+  it('stops between transactions when the process stops (B759)', async () => {
+    const { store, seed } = openStore({ writeChunkSize: 10 });
+    seedPool(seed, 'gone', 25, 'g');
+    let steps = 0;
+    const pending = store.pruneAsync(['board'], '2026-08-01T00:00:00.000Z', {
+      shouldStop: () => {
+        steps += 1;
+        return steps > 1;
+      },
+    });
+    await expect(pending).rejects.toBeInstanceOf(PrunePassStopped);
+    expect(countOf(seed, 'vacancy_pool')).toBeGreaterThan(0);
+  });
+
+  it('keeps the half-loaded registry guard', async () => {
+    const { store, seed, events } = openStore();
+    const ids = Array.from({ length: 10 }, (_, index) => `s${index}`);
+    const state = seed.prepare('INSERT INTO vacancy_source_state (source_id) VALUES (?)');
+    ids.forEach((id) => {
+      state.run(id);
+      seedPool(seed, id, 1, `${id}-`);
+    });
+    await store.pruneAsync(ids.slice(0, 5), '2026-01-01T00:00:00.000Z');
+    expect(countOf(seed, 'vacancy_pool')).toBe(10);
+    expect(pruneReports(events).at(-1)?.unknownSkipped).toEqual({ known: 5, stateSources: 10 });
+  });
+
+  it('prunes clusters the same way', async () => {
+    const { store, seed } = openStore();
+    seed
+      .prepare(
+        `INSERT INTO vacancy_clusters (id, fingerprint, title, company, cluster_json, items_count, updated_at)
+         VALUES ('old', 'old', 't', 'c', '{}', 1, 0)`,
+      )
+      .run();
+    expect(await store.pruneClustersBeforeAsync('2026-01-01T00:00:00.000Z')).toBe(1);
+  });
+});
+
+describe('cluster prune reads stale clusters by the freshness index (B759: 919 000 clusters read 160 s a pass)', () => {
+  function seedClusters(seed: DatabaseSync, stale: number, fresh: number): void {
+    const insert = seed.prepare(
+      `INSERT INTO vacancy_clusters (id, fingerprint, title, company, cluster_json, items_count, updated_at)
+       VALUES (?, ?, 't', 'c', '{}', 1, ?)`,
+    );
+    for (let index = 0; index < fresh; index += 1) insert.run(`f${index}`, `f${index}`, Date.now());
+    for (let index = 0; index < stale; index += 1) insert.run(`s${index}`, `s${index}`, index);
+  }
+
+  it('finds stale clusters through vacancy_clusters_freshness, not a scan of the table', () => {
+    const { seed } = openStore();
+    const plan = seed
+      .prepare(`EXPLAIN QUERY PLAN ${STALE_CLUSTERS_SQL}`)
+      .all(Date.parse('2026-01-01'), 1000)
+      .map((row) => String((row as { detail: string }).detail));
+    expect(plan.join(' ')).toMatch(/USING (COVERING )?INDEX vacancy_clusters_freshness/);
+    expect(plan.join(' ')).not.toMatch(/SCAN vacancy_clusters/);
+  });
+
+  it('removes every stale cluster portion by portion and leaves fresh ones', async () => {
+    const { seed } = openStore();
+    seedClusters(seed, 2_500, 40);
+    const { clusters } = await pruneClustersInBatchesAsync(seed, Date.parse('2026-01-01'), {
+      chunkRows: 500,
+      budgetMs: 1000,
+    });
+    expect(clusters).toBe(2_500);
+    expect(countOf(seed, 'vacancy_clusters')).toBe(40);
+  });
+
+  it('drops keys of removed clusters and orphan keys window by window, never one read of all keys', async () => {
+    const { seed } = openStore();
+    seedClusters(seed, 3, 5);
+    const key = seed.prepare(
+      'INSERT INTO vacancy_cluster_keys (kind, key, cluster_id) VALUES (?, ?, ?)',
+    );
+    for (const id of ['s0', 's1', 's2', 'f0', 'f1', 'f2', 'f3', 'f4'])
+      key.run('title', `k-${id}`, id);
+    for (let index = 0; index < 25; index += 1) key.run('title', `lost-${index}`, `gone-${index}`);
+    const reads: string[] = [];
+    const prepare = seed.prepare.bind(seed);
+    seed.prepare = ((sql: string) => {
+      if (/vacancy_cluster_keys/.test(sql) && /^\s*SELECT/i.test(sql)) reads.push(sql);
+      return prepare(sql);
+    }) as DatabaseSync['prepare'];
+    await pruneClustersInBatchesAsync(seed, Date.parse('2026-01-01'), {
+      chunkRows: 100,
+      budgetMs: 1000,
+      keyWindowRows: 4,
+    });
+    seed.prepare = prepare;
+    const left = seed
+      .prepare('SELECT cluster_id AS id FROM vacancy_cluster_keys ORDER BY cluster_id')
+      .all()
+      .map((row) => (row as { id: string }).id);
+    expect(left).toEqual(['f0', 'f1', 'f2', 'f3', 'f4']);
+    // 33 key rows in windows of 4 distinct clusters: many bounded reads, no LEFT JOIN over all keys.
+    expect(reads.length).toBeGreaterThan(5);
+    expect(reads.some((sql) => /LEFT JOIN/i.test(sql))).toBe(false);
+  });
+
+  it('nothing stale — one indexed read and no transaction', async () => {
+    const { seed } = openStore();
+    seedClusters(seed, 0, 30);
+    const { clusters, report } = await pruneClustersInBatchesAsync(seed, Date.parse('2026-01-01'), {
+      chunkRows: 100,
+      budgetMs: 1000,
+    });
+    expect(clusters).toBe(0);
+    expect(report.transactions).toBe(0);
+    expect(countOf(seed, 'vacancy_clusters')).toBe(30);
   });
 });

@@ -46,6 +46,9 @@ const ATS_PROVIDERS: readonly string[] = [
   'icims',
   'jobvite',
   'oracle',
+  'paylocity',
+  'join',
+  'paycom',
 ];
 
 export type SourceKind =

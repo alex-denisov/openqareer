@@ -1,4 +1,7 @@
 import { registerInterviewDiaryRoutes } from './interviewDiaryRoutes';
+import { registerB640InterviewTrainingRoutes } from './b640InterviewTrainingRoutes';
+import { storedOrRuleTask, taskQuestion } from './b640SystemDesignTaskSource';
+import { judgedEvaluation } from './interviewAnswerJudging';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -6,6 +9,7 @@ import { isResumeEvidenceEligible } from '../domain/resumeEvidenceEligibility';
 import {
   createInterviewSession,
   INTERVIEW_QUESTION_COUNT,
+  MAX_ANSWER_SECONDS,
   recordInterviewAnswer,
   scoreInterviewAnswer,
   summarizeInterviewTopics,
@@ -51,8 +55,11 @@ const answerSchema = z.object({
   expectedVersion: z.number().int().positive(),
   questionId: z.string().trim().min(1).max(80),
   answer: z.string().trim().min(1).max(4_000),
-  elapsedSeconds: z.number().int().min(0).max(3_600),
+  // B647: часы тренировки не останавливаются — долгий ответ принимаем, время обрезаем.
+  elapsedSeconds: z.number().int().min(0).transform((value) => Math.min(value, MAX_ANSWER_SECONDS)),
   replaceAnswer: z.boolean().default(false),
+  // «Тренировка» (i03) отзыв модели не показывает: не просить его — не платить (B750 3b).
+  feedback: z.boolean().default(true),
 }).strict();
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -141,6 +148,18 @@ function createAndPersistStartedSession(
   verifiedSkills: string[],
 ): InterviewSession | null {
   const now = new Date().toISOString();
+  // B647: тренировка i03 показывает задачу отклика — вопрос сессии тот же, по нему судят ответ.
+  const isPractice = input.questionTypes.every((type) => type === 'system_design');
+  const systemDesignPrompt =
+    application && isPractice
+      ? taskQuestion(
+          storedOrRuleTask(deps, candidateId, {
+            applicationId: application.id,
+            roleTitle,
+            vacancyTitle: application.vacancy?.title ?? null,
+          }),
+        )
+      : null;
   const session = createInterviewSession({
     id: randomUUID(),
     mode: input.mode,
@@ -151,6 +170,7 @@ function createAndPersistStartedSession(
     stressMode: input.stressMode,
     stories,
     verifiedSkills,
+    ...(systemDesignPrompt ? { systemDesignPrompt } : {}),
     questionIds: Array.from({ length: INTERVIEW_QUESTION_COUNT }, () => randomUUID()),
     now,
   });
@@ -241,13 +261,12 @@ function coachInput(
 async function requestInterviewFeedback(
   deps: RouteDeps,
   request: FastifyRequest,
-  reply: FastifyReply,
   candidate: CandidateIdentity,
   session: InterviewSession,
   questionId: string,
   answer: string,
   sourceFacts: readonly StoredMemory[],
-): Promise<{ feedback: string } | { error: unknown }> {
+): Promise<string | null> {
   try {
     const requestContext = coachInput(
       candidate.id, candidate.dataClass, candidate.locale,
@@ -256,8 +275,7 @@ async function requestInterviewFeedback(
       answer,
       sourceFacts,
     );
-    const feedback = (await deps.coachProvider.createTurn(requestContext.input, randomUUID())).result.message;
-    return { feedback };
+    return (await deps.coachProvider.createTurn(requestContext.input, randomUUID())).result.message;
   } catch (error) {
     request.log.error({
       code: 'interview_feedback_failed',
@@ -267,8 +285,55 @@ async function requestInterviewFeedback(
       sessionId: session.id,
       questionId,
     }, 'interview-feedback-failed');
-    return { error: sendError(reply, request, 503, 'interview_feedback_unavailable', 'Оценка ответа временно недоступна. Попробуйте ещё раз.', false) };
+    return null;
   }
+}
+
+const FEEDBACK_WRITE_ATTEMPTS = 3;
+
+/** Отзыв ложится только на тот же ответ: заменённый ответ чужой отзыв не получает. */
+function withAnswerFeedback(
+  session: InterviewSession,
+  questionId: string,
+  answer: string,
+  feedback: string,
+): InterviewSession | null {
+  const target = session.questions.find((question) => question.id === questionId);
+  if (!target?.answer || target.answer.text !== answer || target.answer.evaluation.feedback) return null;
+  return {
+    ...session,
+    questions: session.questions.map((question) =>
+      question === target && question.answer
+        ? { ...question, answer: { ...question.answer, evaluation: { ...question.answer.evaluation, feedback } } }
+        : question,
+    ),
+  };
+}
+
+/**
+ * B750 3b: отзыв модели в фоне. Ответ уже сохранён по локальной оценке; отзыв
+ * дописывается без сдвига версии, а сбой модели ответ не теряет.
+ */
+async function fillAnswerFeedback(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  candidate: CandidateIdentity,
+  saved: InterviewSession,
+  questionId: string,
+  sourceFacts: readonly StoredMemory[],
+): Promise<void> {
+  const answer = saved.questions.find((question) => question.id === questionId)?.answer?.text;
+  if (!answer) return;
+  const feedback = await requestInterviewFeedback(deps, request, candidate, saved, questionId, answer, sourceFacts);
+  if (!feedback) return;
+  const repo = deps.candidateStore.interviewSimulatorRepo;
+  for (let attempt = 0; attempt < FEEDBACK_WRITE_ATTEMPTS; attempt += 1) {
+    const current = repo.get(candidate.id, saved.id);
+    const next = current ? withAnswerFeedback(current, questionId, answer, feedback) : null;
+    if (!current || !next) return;
+    if (repo.replaceBodyAtVersion(candidate.id, current.id, current.version, next)) return;
+  }
+  request.log.warn({ code: 'interview_feedback_not_saved', sessionId: saved.id, questionId }, 'interview-feedback-not-saved');
 }
 
 function persistInterviewAnswer(
@@ -310,16 +375,23 @@ const handleSubmitAnswer: Handler = async (deps, request, reply) => {
     return sendConflict(reply, request, 'interview_question_changed', 'Откройте текущий вопрос.');
   }
   if (currentQuestion.answer && !parsed.data.replaceAnswer) return sendConflict(reply, request, 'interview_answer_exists', 'Ответ уже записан. Выберите «Ответить ещё раз», чтобы заменить его.');
-  const sourceFacts = deps.candidateStore.getSnapshot(candidate.id).memory.filter(isResumeEvidenceEligible);
-  const feedback = await requestInterviewFeedback(
-    deps, request, reply, candidate, session, currentQuestion.id, parsed.data.answer, sourceFacts,
+  // B780: критерии оценивает модель (одна оценка на ответ — она сохраняется), правила — запасной путь.
+  const evaluation = await judgedEvaluation(
+    deps,
+    request.log,
+    { type: currentQuestion.type, question: currentQuestion.prompt, answer: parsed.data.answer },
+    scoreInterviewAnswer(parsed.data.answer, currentQuestion.type),
   );
-  if ('error' in feedback) return feedback.error;
-  const evaluation = { ...scoreInterviewAnswer(parsed.data.answer, currentQuestion.type), feedback: feedback.feedback };
   const saved = persistInterviewAnswer(
     deps, candidate.id, session, parsed.data.answer, parsed.data.elapsedSeconds, evaluation,
   );
   if (!saved) return sendConflict(reply, request, 'interview_version_conflict', 'Тренировка уже изменилась. Обновите экран.');
+  if (parsed.data.feedback) {
+    const sourceFacts = deps.candidateStore.getSnapshot(candidate.id).memory.filter(isResumeEvidenceEligible);
+    fillAnswerFeedback(deps, request, candidate, saved, currentQuestion.id, sourceFacts).catch((error: unknown) => {
+      request.log.error({ code: 'interview_feedback_failed', sessionId: saved.id, failureType: error instanceof Error ? error.name : 'UnknownError' }, 'interview-feedback-failed');
+    });
+  }
   return { data: { session: sessionView(saved) }, meta: { requestId: request.id } };
 };
 
@@ -366,6 +438,7 @@ const handleDeleteSession: Handler = async (deps, request, reply) => {
 
 export function registerInterviewSimulatorRoutes(app: FastifyInstance, deps: RouteDeps): void {
   registerInterviewDiaryRoutes(app, deps);
+  registerB640InterviewTrainingRoutes(app, deps);
   app.get(`${URL}/current`, withDeps(deps, handleGetCurrent));
   app.get(`${URL}/:id`, withDeps(deps, handleGetSession));
   app.post(

@@ -1,0 +1,23 @@
+@layer b640.sections {
+  .b640 .v4-fd-l li.is-unk > .ico,
+  .b640 .v4-fd-l li.is-no > .ico { color: var(--career-text-soft); }
+  .b640 .v4-fd-l li.is-no .v4-fd-ev { color: var(--career-text-dim); }
+
+  .b640 .vt-txt { gap: var(--career-space-5); }
+  .b640 .vt-txt > div { display: grid; gap: var(--career-space-2); }
+  .b640 .vt-txt h4 { margin: 0; font-size: var(--career-text-sm); font-weight: 600; }
+  .b640 .vt-txt :is(p, ul) { margin: 0; font-size: var(--career-text-sm); line-height: 1.5; overflow-wrap: anywhere; }
+  .b640 .vt-txt ul { padding-inline-start: 1.1em; list-style: disc; }
+  .b640 .vt-txt .miss { color: var(--career-warning); white-space: nowrap; }
+  .b640 .vt-txt.is-skel { gap: var(--career-space-2); }
+  .b640 .vt-txt.is-skel > span { block-size: calc(var(--career-text-sm) * 1.25); border-radius: var(--career-radius-sm); background: var(--career-line); }
+  .b640 .vt-txt.is-skel > span:nth-child(even) { inline-size: 75%; }
+  .b640 .vt-src { justify-self: start; }
+  @media (max-width: 767px) {
+    .b640 .page.v4 .v4-head2 { order: 1; }
+    .b640 .page.v4 :is(.vt-txt, .vt-src) { order: 2; }
+    .b640 .page.v4 .v4-money { order: 3; }
+    .b640 .page.v4 .v4-fold.v4-about-co { order: 4; }
+    .b640 .page.v4 section[aria-label='Как откликнуться'] { order: 5; }
+  }
+}

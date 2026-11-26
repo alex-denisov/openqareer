@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS, VACANCY_FIT_ALGORITHM_VERSION, type VacancyFitResult } from '../../shared/vacancyFit';
-import { evaluateVacancyFit, vacancyFitFingerprint, type VacancyFitFactScope, type VacancyFitInput } from '../domain/vacancyFit';
+import { OWN_VACANCY_ID_PREFIX } from '../../shared/b640OwnVacancy';
+import { evaluateVacancyFit, isVacancyFitEvidence, sourcedRequirements, vacancyFitFingerprint, type VacancyFitFactScope, type VacancyFitInput } from '../domain/vacancyFit';
+import { syncSection } from '../observability/syncSections';
 import { SealedText } from './sealedText';
 import { addLateColumns } from './sqliteLateColumn';
+import { VacancyFitSeals } from './vacancyFitSeals';
 import { MECHANICS_REQUEUE_REVISION } from './sqliteVacancyRequirementsStore';
 
 export interface VacancyFitJob {
@@ -25,6 +28,7 @@ const ORPHANED_REQUIREMENTS_SINCE = '2026-11-01T21:00:00.000Z';
 const MAX_REKEYS_PER_CLAIM = 50;
 /** Rows one worker-start requeue write touches: each holds the write lock a few ms per row. */
 const REQUEUE_BATCH = 20;
+const SUPERSEDED = "status='failed' AND last_error='profile_changed'";
 const RETRY_BASE_MS = 30_000;
 const LATE_COLUMNS = [
   ['requested_at', 'TEXT'],
@@ -37,6 +41,26 @@ const LATE_CACHE_COLUMNS = [['answered_by', 'TEXT'], ['fallback_recount_at', 'TE
 
 const VERIFIED_FIELDS = ['gates', 'assessments', 'status', 'dataState', 'coveragePercent', 'coverage', 'conditionCoverage', 'requiredCoverage', 'reason'] as const;
 interface JobRow { cache_key: string; input_cipher: string; lease_token: string; lease_until: string; attempts: number }
+
+/**
+ * A quote moved with its text (a place added above shifts the ids) is cited where it stands now; a
+ * quote the profile no longer holds is left as it was, and the evaluation drops it.
+ */
+function recited(input: VacancyFitInput, stored: VacancyFitResult): VacancyFitResult['assessments'] {
+  const facts = input.facts.filter((fact) => fact.candidateId === input.candidateId && isVacancyFitEvidence(fact));
+  const byId = new Map(facts.map((fact) => [fact.id, fact]));
+  return stored.assessments.map((item) => ({
+    ...item,
+    evidence: item.evidence.map((entry) => {
+      if (!entry.quote.trim() || byId.get(entry.factId)?.statement.includes(entry.quote)) return entry;
+      const kind = factSection(entry.factId);
+      const moved = facts.find((fact) => factSection(fact.id) === kind && fact.statement.includes(entry.quote));
+      return moved ? { ...entry, factId: moved.id } : entry;
+    }),
+  }));
+}
+/** `profile:experience:0` → `profile:experience`: a quote never moves from a job to a bare skill tag. */
+const factSection = (id: string) => (id.startsWith('profile:') ? id.split(':').slice(0, 2).join(':') : 'memory');
 
 /** Candidate facts/results are encrypted; all tenant correlation indexes use keyed HMAC. */
 /** `backgroundRank` — position in the background sweep; absent for work a candidate is looking at. */
@@ -54,8 +78,21 @@ function requestedAtFor(now: string, options: FitEnqueueOptions): string {
   return new Date(BACKGROUND_BASE_MS - Math.max(0, Math.floor(options.backgroundRank))).toISOString();
 }
 
+/** Rows past the sealed ids a new process opens one by one; more than this and the ids are sealed again. */
+const IDS_SEAL_STEP = 200;
+const IDS_STAMP = 'ids-v1';
+const VIEWS_MAX_AGE_MS = 24 * 60 * 60_000;
+
+interface KnownIds { readonly ids: ReadonlySet<string>; readonly count: number; readonly last: number }
+
+/** B757: the fit request is larger than one model call may cost; it is settled for good. */
+export const FIT_INPUT_TOO_LARGE = 'assessment_input_too_large';
+
 export class SqliteVacancyFitStore {
-  private readonly cachedIdsMemo = new Map<string, { readonly ids: ReadonlySet<string>; readonly count: number; readonly last: number }>();
+  private readonly cachedIdsMemo = new Map<string, KnownIds>();
+  /** Rows the sealed ids hold; absent until this process has looked for the seal. */
+  private readonly sealedIdsCount = new Map<string, number>();
+  private readonly seals: VacancyFitSeals;
 
   constructor(private readonly database: DatabaseSync, private readonly sealedText: SealedText) {
     database.exec(`CREATE TABLE IF NOT EXISTS vacancy_fit_cache (
@@ -75,7 +112,13 @@ export class SqliteVacancyFitStore {
       latest_key TEXT PRIMARY KEY, candidate_key TEXT NOT NULL,
       result_cipher TEXT NOT NULL, updated_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS vacancy_fit_latest_candidate ON vacancy_fit_latest(candidate_key);`);
+    CREATE INDEX IF NOT EXISTS vacancy_fit_latest_candidate ON vacancy_fit_latest(candidate_key);
+    CREATE TABLE IF NOT EXISTS vacancy_fit_own_rows (
+      cache_key TEXT PRIMARY KEY, candidate_key TEXT NOT NULL, vacancy_key TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS vacancy_fit_own_rows_vacancy ON vacancy_fit_own_rows(vacancy_key);
+    CREATE INDEX IF NOT EXISTS vacancy_fit_own_rows_candidate ON vacancy_fit_own_rows(candidate_key);`);
+    this.seals = new VacancyFitSeals(database, sealedText);
     addLateColumns(database, 'vacancy_fit_queue', LATE_COLUMNS);
     addLateColumns(database, 'vacancy_fit_cache', LATE_CACHE_COLUMNS);
   }
@@ -86,6 +129,15 @@ export class SqliteVacancyFitStore {
   /** One row per vacancy and candidate, whatever the profile: the percent shown while a new one is counted. */
   private latestKey(candidateId: string, vacancyId: string): string {
     return this.sealedText.indexToken(`vacancy-fit-latest:${candidateId}`, vacancyId);
+  }
+  /** B676: own vacancy rows are linked by this token, so a delete finds them without opening anything. */
+  private ownVacancyKey(candidateId: string, vacancyId: string): string {
+    return this.sealedText.indexToken(`vacancy-fit-own:${candidateId}`, vacancyId);
+  }
+  private linkOwnRow(input: VacancyFitInput, key: string): void {
+    if (!input.vacancyId.startsWith(OWN_VACANCY_ID_PREFIX)) return;
+    this.database.prepare('INSERT OR IGNORE INTO vacancy_fit_own_rows(cache_key,candidate_key,vacancy_key) VALUES(?,?,?)')
+      .run(key, this.candidateKey(input.candidateId), this.ownVacancyKey(input.candidateId, input.vacancyId));
   }
   cacheKey(input: VacancyFitInput, algorithmVersion = VACANCY_FIT_ALGORITHM_VERSION, factScope: VacancyFitFactScope = 'evidence'): string {
     const fingerprint = vacancyFitFingerprint(input, algorithmVersion, factScope);
@@ -145,6 +197,7 @@ export class SqliteVacancyFitStore {
    */
   cachedVacancyIds(candidateId: string): ReadonlySet<string> {
     const candidateKey = this.candidateKey(candidateId);
+    this.restoreIds(candidateKey);
     const stat = this.database.prepare('SELECT COUNT(*) AS count, COALESCE(MAX(rowid), 0) AS last FROM vacancy_fit_cache WHERE candidate_key = ?')
       .get(candidateKey) as { count: number; last: number };
     const known = this.cachedIdsMemo.get(candidateKey);
@@ -178,23 +231,73 @@ export class SqliteVacancyFitStore {
    */
   async warmCachedVacancyIds(
     candidateId: string,
-    { batch = 200, yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve)) }: { readonly batch?: number; readonly yieldToLoop?: () => Promise<void> } = {},
+    { batch = 50, yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve)) }: { readonly batch?: number; readonly yieldToLoop?: () => Promise<void> } = {},
   ): Promise<void> {
     const candidateKey = this.candidateKey(candidateId);
+    this.restoreIds(candidateKey);
     const page = this.database.prepare('SELECT rowid AS id, cache_key, result_cipher FROM vacancy_fit_cache WHERE candidate_key = ? AND rowid > ? ORDER BY rowid LIMIT ?');
-    for (;;) {
+    // B770a: the batch holds the loop between yields; named so a stall over list:fit-ids shows it.
+    let growing: Set<string> | undefined;
+    const warmBatch = () => {
       const known = this.cachedIdsMemo.get(candidateKey);
       const rows = page.all(candidateKey, known?.last ?? 0, batch) as { id: number; cache_key: string; result_cipher: string }[];
-      if (rows.length === 0) return;
-      const ids = new Set(known?.ids ?? []);
+      if (rows.length === 0) return 0;
+      // A set nobody reads yet grows in place: copying thousands of ids per batch was most of it (B702).
+      const ids = known && known.ids === growing ? growing : new Set(known?.ids ?? []);
+      growing = ids;
       for (const row of rows) {
         const id = this.openedVacancyId(row, candidateId);
         if (id) ids.add(id);
       }
       this.cachedIdsMemo.set(candidateKey, { ids, count: (known?.count ?? 0) + rows.length, last: rows.at(-1)!.id });
+      return rows.length;
+    };
+    for (;;) {
+      const read = syncSection('fit-ids:batch', warmBatch);
+      if (read === 0) break;
       await yieldToLoop();
-      if (rows.length < batch) return;
+      if (read < batch) break;
     }
+    this.sealIds(candidateKey);
+  }
+
+  /** B702 part 2: the ids of the previous process, once; only the rows after them are opened. */
+  private restoreIds(candidateKey: string): void {
+    if (this.sealedIdsCount.has(candidateKey)) return;
+    this.sealedIdsCount.set(candidateKey, 0);
+    if (this.cachedIdsMemo.has(candidateKey)) return;
+    const text = this.seals.read(candidateKey, 'ids', IDS_STAMP);
+    if (text === undefined) return;
+    const stored = JSON.parse(text) as { readonly ids: readonly string[]; readonly count: number; readonly last: number };
+    const { count } = this.database.prepare('SELECT COUNT(*) AS count FROM vacancy_fit_cache WHERE candidate_key = ? AND rowid <= ?')
+      .get(candidateKey, stored.last) as { count: number };
+    // A row was deleted or the table was rebuilt since: read them all again.
+    if (count !== stored.count) return;
+    this.cachedIdsMemo.set(candidateKey, { ids: new Set(stored.ids), count, last: stored.last });
+    this.sealedIdsCount.set(candidateKey, count);
+  }
+
+  private sealIds(candidateKey: string): void {
+    const known = this.cachedIdsMemo.get(candidateKey);
+    const sealed = this.sealedIdsCount.get(candidateKey) ?? 0;
+    if (!known || Math.abs(known.count - sealed) < IDS_SEAL_STEP) return;
+    this.sealedIdsCount.set(candidateKey, known.count);
+    const text = JSON.stringify({ ids: [...known.ids], count: known.count, last: known.last });
+    this.lastSeal = this.seals.write(candidateKey, 'ids', IDS_STAMP, text).catch(() => {
+      // A cache: the next process opens the rows, the next warm seals again.
+      this.sealedIdsCount.set(candidateKey, sealed);
+    });
+  }
+
+  /** Tests and shutdown: the last seal has been written. */
+  lastSeal: Promise<void> = Promise.resolve();
+
+  /** B702 part 2: the order's percents of the previous process, under the same profile. */
+  readSealedViews(candidateId: string, stamp: string): string | undefined {
+    return this.seals.read(this.candidateKey(candidateId), 'views', stamp, Date.now() - VIEWS_MAX_AGE_MS);
+  }
+  sealViews(candidateId: string, stamp: string, text: string): Promise<void> {
+    return this.seals.write(this.candidateKey(candidateId), 'views', stamp, text);
   }
 
   private openedVacancyId(row: { cache_key: string; result_cipher: string }, candidateId: string): string | undefined {
@@ -224,7 +327,9 @@ export class SqliteVacancyFitStore {
   /**
    * The last result for this vacancy under any profile (01.11): after a profile edit the row says
    * «пересчитывается» with it instead of «не посчитан». Its evidence is checked against the current
-   * profile when it still holds; otherwise the stored numbers are shown as they were computed.
+   * profile; the numbers are always those of the current rules (25.11: a
+   * rule that lowers a percent left the old, higher one on screen until the recount). Only a result
+   * that misses a requirement of the current text stays as stored, and the runtime hides it.
    */
   private getLatest(input: VacancyFitInput): VacancyFitResult | undefined {
     const key = this.latestKey(input.candidateId, input.vacancyId);
@@ -233,8 +338,9 @@ export class SqliteVacancyFitStore {
     try {
       const stored = JSON.parse(this.sealedText.open(row.result_cipher, key)) as VacancyFitResult;
       if (stored.candidateId !== input.candidateId || stored.vacancyId !== input.vacancyId || !Number.isFinite(Date.parse(stored.calculatedAt))) return undefined;
-      const rechecked = evaluateVacancyFit({ ...input, assessments: stored.assessments }, stored.calculatedAt);
-      return rechecked.status === 'assessed' && (rechecked.coveragePercent ?? 0) >= (stored.coveragePercent ?? 0) ? rechecked : stored;
+      const assessed = new Set(stored.assessments.map((item) => item.requirementId));
+      if (!sourcedRequirements(input).every((item) => assessed.has(item.id))) return stored;
+      return evaluateVacancyFit({ ...input, assessments: recited(input, stored) }, stored.calculatedAt);
     } catch { return undefined; }
   }
 
@@ -243,6 +349,7 @@ export class SqliteVacancyFitStore {
     const key = this.cacheKey(input, algorithmVersion);
     this.database.prepare(`INSERT INTO vacancy_fit_cache(cache_key,candidate_key,result_cipher,updated_at,answered_by) VALUES(?,?,?,?,?)
       ON CONFLICT(cache_key) DO UPDATE SET result_cipher=excluded.result_cipher,updated_at=excluded.updated_at,answered_by=excluded.answered_by`).run(key, this.candidateKey(input.candidateId), this.sealedText.seal(JSON.stringify(result), key), now, answeredBy);
+    this.linkOwnRow(input, key);
     if (result.status !== 'assessed') return;
     const latest = this.latestKey(input.candidateId, input.vacancyId);
     this.database.prepare(`INSERT INTO vacancy_fit_latest(latest_key,candidate_key,result_cipher,updated_at) VALUES(?,?,?,?)
@@ -287,16 +394,19 @@ export class SqliteVacancyFitStore {
     this.database.prepare(`INSERT INTO vacancy_fit_queue(cache_key,candidate_key,input_cipher,status,requested_at,created_at,updated_at)
       VALUES(?,?,?,'pending',?,?,?) ON CONFLICT(cache_key) DO UPDATE SET requested_at=excluded.requested_at WHERE status='pending'`)
       .run(key, this.candidateKey(input.candidateId), this.sealedText.seal(JSON.stringify(input), key), requestedAt, now, now);
+    this.linkOwnRow(input, key);
     const row = this.database.prepare('SELECT status FROM vacancy_fit_queue WHERE cache_key=?').get(key) as { status: string };
     return { key, status: row.status };
   }
 
+  /** B757: a request over the per-call ceiling is the same request next time, so it is not revived. */
   retryFailed(input: VacancyFitInput, now = new Date().toISOString(), options: FitEnqueueOptions = {}): void {
     const key = this.cacheKey(input);
     const requestedAt = requestedAtFor(now, options);
     this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',input_cipher=?,attempts=0,defers=0,last_error=NULL,
-      lease_token=NULL,lease_until=NULL,requested_at=?,updated_at=? WHERE cache_key=? AND candidate_key=? AND status='failed'`)
-      .run(this.sealedText.seal(JSON.stringify(input), key), requestedAt, now, key, this.candidateKey(input.candidateId));
+      lease_token=NULL,lease_until=NULL,requested_at=?,updated_at=? WHERE cache_key=? AND candidate_key=? AND status='failed'
+      AND COALESCE(last_error,'')<>?`)
+      .run(this.sealedText.seal(JSON.stringify(input), key), requestedAt, now, key, this.candidateKey(input.candidateId), FIT_INPUT_TOO_LARGE);
   }
 
   /**
@@ -389,6 +499,24 @@ export class SqliteVacancyFitStore {
     const update = this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',lease_token=NULL,lease_until=?,attempts=MAX(0,attempts-1),last_error=?,updated_at=?
       WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>?`).run(until, reason, now, job.key, job.leaseToken, now);
     return Number(update.changes) === 1;
+  }
+
+  /**
+   * A job for a profile that changed before its model call: its key (facts and profile stamp) is
+   * never asked again, so the row goes. Kept as `failed`, 18.5K of them held 2 GB of sealed input
+   * on prod (23.11) and a revision bump would requeue them into the day's recount ceiling.
+   */
+  discard(job: VacancyFitJob, now = new Date().toISOString()): boolean {
+    const removed = this.database.prepare("DELETE FROM vacancy_fit_queue WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>?")
+      .run(job.key, job.leaseToken, now);
+    return Number(removed.changes) === 1;
+  }
+
+  /** One small batch of the `profile_changed` rows written before `discard`; the caller paces the batches. */
+  purgeSupersededBatch(size = REQUEUE_BATCH): number {
+    const ids = (this.database.prepare(`SELECT rowid AS id FROM vacancy_fit_queue WHERE ${SUPERSEDED} LIMIT ?`).all(Math.max(0, Math.floor(size))) as { id: number }[]).map((row) => row.id);
+    if (ids.length === 0) return 0;
+    return Number(this.database.prepare(`DELETE FROM vacancy_fit_queue WHERE rowid IN (${ids.map(() => '?').join(',')}) AND ${SUPERSEDED}`).run(...ids).changes);
   }
 
   /** A retried job waits 30 s, 60 s, 120 s… before the next model call; the reason is an error class only. */
@@ -489,6 +617,26 @@ export class SqliteVacancyFitStore {
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }
   }
 
+  /**
+   * B676: a candidate deletes one own vacancy — every row for it goes, under any profile version.
+   * Rows are found through vacancy_fit_own_rows by index; nothing is read or opened (18.11: opening
+   * every sealed row of a candidate with thousands of them ran the server out of memory).
+   */
+  forgetVacancy(candidateId: string, vacancyId: string): number {
+    const vacancyKey = this.ownVacancyKey(candidateId, vacancyId);
+    const linked = 'SELECT cache_key FROM vacancy_fit_own_rows WHERE vacancy_key=?';
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      let removed = Number(this.database.prepare(`DELETE FROM vacancy_fit_cache WHERE cache_key IN (${linked})`).run(vacancyKey).changes);
+      // A completed job has its sealed input wiped; the link by cache_key still finds it.
+      removed += Number(this.database.prepare(`DELETE FROM vacancy_fit_queue WHERE cache_key IN (${linked})`).run(vacancyKey).changes);
+      removed += Number(this.database.prepare('DELETE FROM vacancy_fit_latest WHERE latest_key=?').run(this.latestKey(candidateId, vacancyId)).changes);
+      this.database.prepare('DELETE FROM vacancy_fit_own_rows WHERE vacancy_key=?').run(vacancyKey);
+      this.database.exec('COMMIT');
+      return removed;
+    } catch (error) { this.database.exec('ROLLBACK'); throw error; }
+  }
+
   deleteCandidate(candidateId: string): void {
     const key = this.candidateKey(candidateId);
     this.database.exec('BEGIN IMMEDIATE');
@@ -496,6 +644,8 @@ export class SqliteVacancyFitStore {
       this.database.prepare('DELETE FROM vacancy_fit_cache WHERE candidate_key=?').run(key);
       this.database.prepare('DELETE FROM vacancy_fit_queue WHERE candidate_key=?').run(key);
       this.database.prepare('DELETE FROM vacancy_fit_latest WHERE candidate_key=?').run(key);
+      this.database.prepare('DELETE FROM vacancy_fit_own_rows WHERE candidate_key=?').run(key);
+      this.seals.delete(key);
       this.database.exec('COMMIT');
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }
   }

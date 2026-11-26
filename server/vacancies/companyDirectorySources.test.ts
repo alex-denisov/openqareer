@@ -140,6 +140,25 @@ describe('directoryBoard', () => {
     });
     expect(directoryBoard(company({ careersUrl: 'https://acme.com/careers' }))).toBeUndefined();
   });
+
+  it('classifies a Teamtailor careers URL as its ATS board', async () => {
+    const { planCompanyChannels } = await import('./companyDirectorySources');
+    const plan = planCompanyChannels(REGISTRY, [
+      company({
+        companyKey: 'agito',
+        companyName: 'Agito Sverige AB',
+        careersUrl: 'https://agitosverige.teamtailor.com/jobs',
+      }),
+    ]);
+    expect(plan.channels).toEqual([
+      expect.objectContaining({
+        companyKey: 'agito',
+        kind: 'company_ats',
+        sourceId: 'ats-teamtailor-agitosverige',
+      }),
+    ]);
+    expect(plan.sources.find((source) => source.id === 'ats-teamtailor-agitosverige')).toBeTruthy();
+  });
 });
 
 describe('B628 — directory career sites become sources', () => {

@@ -140,15 +140,27 @@ describe('candidate draft HTTP boundary', () => {
       (await post(undefined, { authorization: '', origin: 'https://evil.example' })).statusCode,
     ).toBe(403);
   });
-  it('uses the server tier, including free and pro post paywalls', async () => {
-    const free = await setup('free');
-    expect(
-      (await free.post({ kind: 'comment', topic: 'Опыт', subscriptionTier: 'enterprise' }))
-        .statusCode,
-    ).toBe(402);
-    const pro = await setup();
-    expect((await pro.post({ kind: 'post', topic: 'Опыт' })).statusCode).toBe(402);
-    expect(free.writer).not.toHaveBeenCalled();
+  it('uses the server tier: Free and Basic have no drafts (B778)', async () => {
+    for (const tier of ['free', 'basic']) {
+      const plan = await setup(tier);
+      for (const kind of ['comment', 'post']) {
+        const response = await plan.post({ kind, topic: 'Опыт', subscriptionTier: 'enterprise' });
+        expect(response.statusCode, `${tier} ${kind}`).toBe(402);
+        expect(response.json().error.code).toBe('paywall_required');
+      }
+      expect(plan.writer).not.toHaveBeenCalled();
+    }
+  });
+  it('gives Pro 3 posts a day from «Посты LinkedIn 90» (B778)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-29T09:00:00Z'));
+    const { post } = await setup();
+    for (let i = 0; i < 3; i++)
+      expect((await post({ kind: 'post', topic: 'Опыт' })).statusCode).toBe(200);
+    const fourth = await post({ kind: 'post', topic: 'Опыт' });
+    expect(fourth.statusCode).toBe(429);
+    expect(fourth.json().error.code).toBe('draft_daily_limit');
+    expect((await post()).statusCode).toBe(200);
   });
   it('fails closed when server tier is unknown', async () => {
     const { post } = await setup('unexpected');
@@ -164,19 +176,24 @@ describe('candidate draft HTTP boundary', () => {
     expect(response.json().error.code).toBe('draft_daily_limit');
     expect(repository.countForDay('alice', '2026-09-30', 'comment')).toBe(3);
   });
-  it('uses the billing plan for quotas and grants max the executive daily limit', async () => {
+  it('gives Max and legacy Executive 2 posts and 5 comments a day on separate counters', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-13T09:30:00Z'));
-    const { post, writer, getSubscription } = await setup('free', undefined, [], 'max');
-
-    expect((await post({ kind: 'post', topic: 'Первый черновик' })).statusCode).toBe(200);
-    expect((await post({ kind: 'post', topic: 'Второй черновик' })).statusCode).toBe(200);
-    const overLimit = await post({ kind: 'post', topic: 'Третий черновик' });
-
-    expect(overLimit.statusCode).toBe(429);
-    expect(overLimit.json().error.code).toBe('draft_daily_limit');
-    expect(writer).toHaveBeenCalledTimes(2);
-    expect(getSubscription).toHaveBeenCalledWith('user', expect.any(String));
+    for (const [tier, planId] of [['free', 'max'], ['executive', undefined]] as const) {
+      const { post, writer, getSubscription } = await setup(tier, undefined, [], planId);
+      for (let i = 0; i < 2; i++) {
+        expect((await post({ kind: 'post', topic: `Пост ${i}` })).statusCode).toBe(200);
+      }
+      expect((await post({ kind: 'post', topic: 'Третий пост' })).statusCode).toBe(429);
+      for (let i = 0; i < 5; i++) {
+        expect((await post({ kind: 'comment', topic: `Комментарий ${i}` })).statusCode).toBe(200);
+      }
+      const overLimit = await post({ kind: 'comment', topic: 'Шестой комментарий' });
+      expect(overLimit.statusCode).toBe(429);
+      expect(overLimit.json().error.code).toBe('draft_daily_limit');
+      expect(writer).toHaveBeenCalledTimes(7);
+      expect(getSubscription).toHaveBeenCalledWith('user', expect.any(String));
+    }
   });
   it('serializes concurrent generation so quota cannot be bypassed', async () => {
     const { post, repository } = await setup();

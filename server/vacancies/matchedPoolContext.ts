@@ -1,7 +1,13 @@
 import { createHash } from 'node:crypto';
 import type { RouteDeps } from '../routes/deps';
 import type { deriveCandidateTargetLevel } from './candidateLevel';
-import { MatchedPoolSnapshots, type MatchedPoolReadOptions } from './matchedPoolSnapshot';
+import {
+  MatchedPoolSnapshots,
+  type MatchedPoolReadOptions,
+  type MatchedSnapshotMiss,
+  type MatchedSnapshotStore,
+} from './matchedPoolSnapshot';
+import { mapYielding } from './mapYielding';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import { matchGeographyKey, type MatchGeography } from './matchGeography';
 import { candidateGradeRange, type GradeRange } from './titleParse/gradeRange';
@@ -141,6 +147,61 @@ function snapshotsOf(engine: RouteDeps['multiSourceEngine']): MatchedPoolSnapsho
   return created;
 }
 
+/** What the candidate store keeps between processes: text in, text out. */
+interface SealedSnapshotText {
+  read(candidateId: string, profileKey: string): { builtAt: number; text: string } | null;
+  write(
+    candidateId: string,
+    profileKey: string,
+    builtAt: number,
+    text: string,
+    isWanted: () => boolean,
+  ): Promise<void>;
+  delete(candidateId: string): void;
+  keys(candidateId: string): string[];
+}
+
+/** Prod 19.11: a new process answers from the last snapshot, not from a cold pool read. */
+export function setMatchedSnapshotStore(
+  engine: RouteDeps['multiSourceEngine'],
+  sealed: SealedSnapshotText,
+): void {
+  const store: MatchedSnapshotStore = {
+    read(candidateId, profileKey) {
+      const row = sealed.read(candidateId, profileKey);
+      if (!row) return null;
+      const items = JSON.parse(row.text) as unknown;
+      return Array.isArray(items)
+        ? { items: items as MatchedVacancyItem[], storedAt: row.builtAt }
+        : null;
+    },
+    async write(candidateId, profileKey, snapshot, isWanted) {
+      const items = await mapYielding(snapshot.items, (item) => JSON.stringify(item));
+      const text = `[${items.join(',')}]`;
+      await sealed.write(candidateId, profileKey, snapshot.storedAt, text, isWanted);
+    },
+    delete: (candidateId) => sealed.delete(candidateId),
+    keys: (candidateId) => sealed.keys(candidateId),
+  };
+  snapshotsOf(engine).setStore(store);
+}
+
+/** Loads the stored snapshots of these candidates into the process; returns how many. */
+export function preloadMatchedSnapshots(
+  engine: RouteDeps['multiSourceEngine'],
+  candidateIds: readonly string[],
+): Promise<number> {
+  return snapshotsOf(engine).preload(candidateIds);
+}
+
+/** B770: a reader with no snapshot for its profile, for the journal. */
+export function setMatchedSnapshotMissLog(
+  engine: RouteDeps['multiSourceEngine'],
+  log: (miss: MatchedSnapshotMiss) => void,
+): void {
+  snapshotsOf(engine).setMissLog(log);
+}
+
 /** A rebuild behind an expired snapshot has no request to fail: its failure goes here. */
 export function setMatchedSnapshotFailureLog(
   engine: RouteDeps['multiSourceEngine'],
@@ -173,6 +234,12 @@ export function readMatchedSnapshot(
         ...(geography ? { matchGeography: geography } : {}),
         ...(gradeRange ? { gradeRange } : {}),
       }),
-    options,
+    // Without roles the facts are the whole search: another profile's list does not stand in.
+    targetRoles.length > 0
+      ? {
+          ...options,
+          scope: matchedSnapshotKey([], targetRoles, targetLevel, geography, gradeRange),
+        }
+      : options,
   );
 }

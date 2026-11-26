@@ -3,7 +3,8 @@ set -Eeuo pipefail
 
 readonly DEPLOY_USER=openqareer-deploy
 readonly RELEASE_ROOT=/srv/openqareer
-readonly LISTEN_ADDRESS=127.0.0.1:3210
+readonly UPSTREAM_SNIPPET=/etc/caddy/openqareer-upstream.caddy
+readonly SLOTS_LIB_DIR=/usr/local/lib/openqareer
 # Адрес, по которому установщик узнаёт «свой» хост. AWS — прежний по умолчанию;
 # новый хост передаёт свой: OPENQAREER_EXPECTED_ADDRESS=<адрес> bootstrap.sh … (B305).
 readonly EXPECTED_PRIVATE_ADDRESS="${OPENQAREER_EXPECTED_ADDRESS:-172.31.41.215}"
@@ -45,10 +46,10 @@ cleanup() {
 trap cleanup EXIT
 
 wait_for_application_health() {
-  local -r expected="$1"
+  local -r expected="$1" port="$2"
   local attempt
-  for attempt in $(seq 1 20); do
-    if curl -fsS --max-time 3 "http://$LISTEN_ADDRESS/health" 2>/dev/null |
+  for attempt in $(seq 1 180); do
+    if curl -fsS --max-time 3 "http://127.0.0.1:$port/health" 2>/dev/null |
       grep -Fqx "$expected"; then
       return 0
     fi
@@ -169,12 +170,143 @@ install_caddy_configuration() {
   systemctl reload caddy
 }
 
+# B705: the port Caddy points at. Without a snippet the pre-B705 single
+# service owns 3210, so the snippet starts there and nothing moves.
+ensure_upstream_snippet() {
+  [[ -f "$UPSTREAM_SNIPPET" ]] && return 0
+  install -d -o root -g root -m 0755 "$(dirname "$UPSTREAM_SNIPPET")"
+  printf 'to 127.0.0.1:3210\n' > "$UPSTREAM_SNIPPET"
+  chmod 0644 "$UPSTREAM_SNIPPET"
+}
+
+live_port() {
+  sed -nE 's/^[[:space:]]*to[[:space:]]+127\.0\.0\.1:(3210|3211)([[:space:]]+127\.0\.0\.1:(3210|3211))?[[:space:]]*$/\1/p' \
+    "$UPSTREAM_SNIPPET" | head -n 1
+}
+
+install_sudoers() {
+  local sudoers_temp port
+  sudoers_temp="$(mktemp)"
+  {
+    printf '%s\n' \
+      'openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart openqareer-static.service' \
+      'openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl disable --now openqareer-static.service' \
+      'openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart openqareer-maintenance.service' \
+      'openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart openqareer-vacancy-mechanics.service'
+    for port in 3210 3211; do
+      printf 'openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl %s openqareer-static@%s.service\n' \
+        restart "$port" stop "$port" enable "$port" disable "$port"
+      printf 'openqareer-deploy ALL=(root) NOPASSWD: /usr/local/bin/openqareer-upstream %s\n' "$port"
+      # B705-2: тёплый резерв — сторож окна и Caddy с двумя портами.
+      printf 'openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl %s openqareer-reserve@%s.service\n' \
+        restart "$port" stop "$port"
+    done
+    printf 'openqareer-deploy ALL=(root) NOPASSWD: /usr/local/bin/openqareer-upstream %s\n' \
+      '3210 3211' '3211 3210'
+  } > "$sudoers_temp"
+  # Проверка до установки: битый файл в sudoers.d не должен попасть на хост.
+  visudo -cf "$sudoers_temp" >/dev/null || fail "generated sudoers rules do not parse"
+  if ! cmp -s "$sudoers_temp" /etc/sudoers.d/openqareer-deploy; then
+    install -o root -g root -m 0440 "$sudoers_temp" /etc/sudoers.d/openqareer-deploy
+  fi
+  rm -f -- "$sudoers_temp"
+}
+
+install_zero_downtime_files() {
+  install -d -o root -g root -m 0755 "$SLOTS_LIB_DIR"
+  install -o root -g root -m 0644 \
+    "$SCRIPT_DIR/openqareer-slots.sh" "$SLOTS_LIB_DIR/openqareer-slots.sh"
+  install -o root -g root -m 0755 \
+    "$SCRIPT_DIR/openqareer-upstream" /usr/local/bin/openqareer-upstream
+  install -o root -g root -m 0755 \
+    "$SCRIPT_DIR/openqareer-activate" /usr/local/bin/openqareer-activate
+  install -o root -g root -m 0755 \
+    "$SCRIPT_DIR/openqareer-rollback" /usr/local/bin/openqareer-rollback
+  install -o root -g root -m 0644 \
+    "$SCRIPT_DIR/openqareer-static@.service" \
+    "/etc/systemd/system/openqareer-static@.service"
+  install -o root -g root -m 0755 \
+    "$SCRIPT_DIR/openqareer-reserve-watch" /usr/local/bin/openqareer-reserve-watch
+  install -o root -g root -m 0644 \
+    "$SCRIPT_DIR/openqareer-reserve@.service" \
+    "/etc/systemd/system/openqareer-reserve@.service"
+  install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 "$RELEASE_ROOT/slots"
+  systemctl daemon-reload
+  systemd-analyze verify "/etc/systemd/system/openqareer-static@3210.service"
+  systemd-analyze verify "/etc/systemd/system/openqareer-reserve@3210.service"
+}
+
 [[ "$(id -u)" == "0" ]] || fail "run with sudo/root"
+
+# B705: switch a running host to zero-downtime deploys without restarting the
+# application. The next deploy starts the template instance on 3211 and stops
+# the old single service; repeat runs change nothing.
+if [[ "$PUBLIC_KEY_FILE" == "--zero-downtime" ]]; then
+  install_zero_downtime_files
+  install_sudoers
+  ensure_upstream_snippet
+  install_caddy_configuration
+  printf 'openqareer-bootstrap: zero-downtime deploy installed; live port %s\n' "$(live_port)"
+  exit 0
+fi
 
 # Only the proxy configuration: validate, back up, install, reload. No service
 # restarts, units or keys — for a Caddyfile change on a running host (02.11).
 if [[ "$PUBLIC_KEY_FILE" == "--caddy-only" ]]; then
+  ensure_upstream_snippet
   install_caddy_configuration
+  exit 0
+fi
+# B759: maintenance and the mechanics worker run from their own release links,
+# which openqareer-activate moves only when their code fingerprint changes. A
+# missing link starts at the current release; an existing one is left alone.
+ensure_worker_links() {
+  local link_name target
+  target="$(readlink "$RELEASE_ROOT/current")"
+  [[ -n "$target" ]] || fail "current release is missing"
+  for link_name in maintenance mechanics; do
+    if [[ ! -L "$RELEASE_ROOT/$link_name" ]]; then
+      ln -s "$target" "$RELEASE_ROOT/$link_name"
+      chown -h "$DEPLOY_USER:$DEPLOY_USER" "$RELEASE_ROOT/$link_name"
+      printf 'openqareer-bootstrap: %s -> %s\n' "$link_name" "$target"
+    fi
+  done
+}
+
+# B649-6: only the three units. Installs a unit whose file differs, reloads,
+# verifies and restarts just the changed ones; a repeat run changes nothing.
+install_units_only() {
+  local unit changed=()
+  for unit in openqareer-maintenance.service openqareer-vacancy-mechanics.service; do
+    if ! cmp -s "$SCRIPT_DIR/$unit" "/etc/systemd/system/$unit"; then
+      install -o root -g root -m 0644 "$SCRIPT_DIR/$unit" "/etc/systemd/system/$unit"
+      changed+=("$unit")
+    fi
+  done
+  # The template has no instance to restart: the next deploy starts one.
+  if ! cmp -s "$SCRIPT_DIR/openqareer-static@.service" \
+    "/etc/systemd/system/openqareer-static@.service"; then
+    install -o root -g root -m 0644 "$SCRIPT_DIR/openqareer-static@.service" \
+      "/etc/systemd/system/openqareer-static@.service"
+    systemctl daemon-reload
+    systemd-analyze verify "/etc/systemd/system/openqareer-static@3210.service"
+    printf 'openqareer-bootstrap: installed openqareer-static@.service\n'
+  fi
+  if [[ "${#changed[@]}" -eq 0 ]]; then
+    printf 'openqareer-bootstrap: units unchanged\n'
+    return 0
+  fi
+  ensure_worker_links
+  systemctl daemon-reload
+  for unit in "${changed[@]}"; do
+    systemd-analyze verify "/etc/systemd/system/$unit"
+    systemctl restart "$unit"
+    printf 'openqareer-bootstrap: restarted %s\n' "$unit"
+  done
+}
+
+if [[ "$PUBLIC_KEY_FILE" == "--units-only" ]]; then
+  install_units_only
   exit 0
 fi
 for command_name in apt-get awk basename cat chmod chown cmp curl cut \
@@ -226,18 +358,11 @@ touch "$RELEASE_ROOT/.ssh/authorized_keys"
 install -o root -g root -m 0755 \
   "$SCRIPT_DIR/openqareer-ci-command" /usr/local/bin/openqareer-ci-command
 install -o root -g root -m 0755 \
-  "$SCRIPT_DIR/openqareer-activate" /usr/local/bin/openqareer-activate
-install -o root -g root -m 0755 \
-  "$SCRIPT_DIR/openqareer-rollback" /usr/local/bin/openqareer-rollback
-install -o root -g root -m 0755 \
   "$SCRIPT_DIR/openqareer-desktop-publish" /usr/local/bin/openqareer-desktop-publish
 install -o root -g root -m 0755 \
   "$SCRIPT_DIR/openqareer-env-set" /usr/local/bin/openqareer-env-set
 install -o root -g root -m 0755 \
   "$SCRIPT_DIR/openqareer-browser-install" /usr/local/bin/openqareer-browser-install
-install -o root -g root -m 0644 \
-  "$SCRIPT_DIR/openqareer-static.service" \
-  /etc/systemd/system/openqareer-static.service
 install -o root -g root -m 0644 \
   "$SCRIPT_DIR/openqareer-maintenance.service" \
   /etc/systemd/system/openqareer-maintenance.service
@@ -253,16 +378,7 @@ install -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0600 \
   "$authorized_keys_temp" "$RELEASE_ROOT/.ssh/authorized_keys"
 chown -R "$DEPLOY_USER:$DEPLOY_USER" "$RELEASE_ROOT/.ssh"
 
-sudoers_temp="$(mktemp)"
-cat > "$sudoers_temp" <<'EOF'
-openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart openqareer-static.service
-openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart openqareer-maintenance.service
-openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart openqareer-vacancy-mechanics.service
-EOF
-# Проверка до установки: битый файл в sudoers.d не должен попасть на хост.
-visudo -cf "$sudoers_temp" >/dev/null || fail "generated sudoers rules do not parse"
-install -o root -g root -m 0440 "$sudoers_temp" /etc/sudoers.d/openqareer-deploy
-rm -f -- "$sudoers_temp"
+install_sudoers
 
 [[ -L "$RELEASE_ROOT/current" ]] ||
   fail "an immutable application release must be staged before migration"
@@ -273,25 +389,33 @@ rm -f -- "$sudoers_temp"
 
 /usr/local/bin/openqareer-browser-install
 
-systemctl daemon-reload
-systemd-analyze verify /etc/systemd/system/openqareer-static.service
+install_zero_downtime_files
+ensure_upstream_snippet
 systemd-analyze verify /etc/systemd/system/openqareer-maintenance.service
 systemd-analyze verify /etc/systemd/system/openqareer-vacancy-mechanics.service
-systemctl enable openqareer-static.service
 systemctl enable openqareer-maintenance.service
 systemctl enable openqareer-vacancy-mechanics.service
-systemctl restart openqareer-static.service
+# B705: the instance on the port Caddy points at runs the current release;
+# the pre-B705 single service gives the port up first.
+listen_port="$(live_port)"
+[[ -n "$listen_port" ]] || fail "upstream snippet has no known port"
+ln -sfn "../$(readlink "$RELEASE_ROOT/current")" "$RELEASE_ROOT/slots/$listen_port"
+chown -h "$DEPLOY_USER:$DEPLOY_USER" "$RELEASE_ROOT/slots/$listen_port"
+systemctl disable --now openqareer-static.service 2>/dev/null || true
+systemctl enable "openqareer-static@$listen_port.service"
+systemctl restart "openqareer-static@$listen_port.service"
 expected_health="$(basename "$(readlink "$RELEASE_ROOT/current")")"
-wait_for_application_health "$expected_health" ||
+wait_for_application_health "$expected_health" "$listen_port" ||
   fail "application service health failed after restart"
+ensure_worker_links
 systemctl restart openqareer-maintenance.service
 systemctl restart openqareer-vacancy-mechanics.service
 
 install_caddy_configuration
-systemctl is-active --quiet openqareer-static.service ||
+systemctl is-active --quiet "openqareer-static@$listen_port.service" ||
   fail "application service is not active"
 systemctl is-active --quiet caddy ||
   fail "Caddy is not active"
 
 printf 'bootstrap=ok health=%s listen=%s caddy=%s\n' \
-  "$expected_health" "$LISTEN_ADDRESS" "$(caddy version | awk '{print $1}')"
+  "$expected_health" "127.0.0.1:$listen_port" "$(caddy version | awk '{print $1}')"
