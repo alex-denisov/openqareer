@@ -63,7 +63,14 @@ function useEdit(source: EditSource) {
     let live = true;
     setState({ kind: 'loading' });
     loadByKey(key)
-      .then((edit) => live && setState({ kind: 'ready', edit }))
+      .then((edit) => {
+        if (!live) return;
+        setState(
+          edit && 'appliedRewriteId' in edit
+            ? { kind: 'applied', rewriteId: edit.appliedRewriteId }
+            : { kind: 'ready', edit },
+        );
+      })
       .catch(() => live && setState({ kind: 'failed' }));
     return () => {
       live = false;
@@ -141,8 +148,9 @@ export function editReply(
   memory: readonly CandidateMemory[],
   messages: readonly ChatMessage[],
 ): string {
+  // B786: новая формулировка строки собрана из самой строки и записей о месте — перечень их не нужен.
+  if (edit.replaces) return `Новая формулировка первой строки: «${edit.place}».`;
   const facts = edit.sourceFactIds.flatMap((id) => {
-    if (id === edit.replaces) return [];
     const fact = memory.find((item) => item.id === id && !item.sensitive);
     if (!fact) return [];
     const said = messages.find((item) => fact.sourceMessageIds.includes(item.id));
@@ -151,11 +159,7 @@ export function editReply(
     const confirmed = said && fact.status === 'confirmed' ? ', запись вы подтвердили: «Верно»' : '';
     return [`«${fact.statement}»${from}${confirmed}.`];
   });
-  const head = edit.replaces
-    ? `Новая формулировка первой строки: «${edit.place}».`
-    : edit.place
-      ? `Новая строка: «${edit.place}».`
-      : 'Новая строка.';
+  const head = edit.place ? `Новая строка: «${edit.place}».` : 'Новая строка.';
   return [head, ...facts].join(' ');
 }
 
