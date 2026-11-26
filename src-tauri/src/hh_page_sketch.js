@@ -45,7 +45,7 @@
         ? JSON.parse((state.content && state.content.textContent) || state.textContent || '')
             .userType
         : '';
-    } catch (e) {
+    } catch (_e) {
       userType = 'unparsed';
     }
     var out = [
@@ -85,7 +85,7 @@
     };
     walk(document.querySelector('main') || document.body || document.documentElement, 0);
     return out.join('\n').slice(0, MAX);
-  } catch (e) {
+  } catch (_e) {
     return 'sketch_failed';
   }
 })();
