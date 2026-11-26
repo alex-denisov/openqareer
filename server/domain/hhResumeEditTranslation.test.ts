@@ -91,6 +91,16 @@ describe('B787: exit через продажу не переводится ка�
   });
   it('промпт перевода называет exit продажей', async () => {
     const { BULLET_TRANSLATION_INSTRUCTIONS } = await import('./experienceBulletLanguage');
-    expect(BULLET_TRANSLATION_INSTRUCTIONS).toContain('состоялась продажа компании');
+    expect(BULLET_TRANSLATION_INSTRUCTIONS).toContain('компания была продана');
+  });
+});
+
+describe('B787: суммы по-русски одним видом', () => {
+  it('«$73K … $50M+ … $10M» — «73 тыс. $ … более 50 млн $ … 10 млн $»', async () => {
+    const { russianMoney } = await import('./hhResumeEditTranslation');
+    expect(russianMoney('с $73K до $50M+, бюджеты до $10M, сделка $1.5B')).toBe(
+      'с 73 тыс. $ до более 50 млн $, бюджеты до 10 млн $, сделка 1,5 млрд $',
+    );
+    expect(russianMoney('выручка свыше 50 млн $')).toBe('выручка более 50 млн $');
   });
 });
