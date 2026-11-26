@@ -213,11 +213,9 @@ fn waits_while_the_page_reloads_and_stops_without_sign_in() {
         return;
     };
     assert_eq!(codes(&out), ["waiting"]);
-    // B787: hh.ru serves the editor only to a signed-in applicant; without the profile
-    // menu (below 1020 px) and the initial state the page itself is the sign-in.
     let anon = "document.getElementById('HH-Lux-InitialState').remove();";
     let out = run(&editor("no_one", false), &path, anon, &steps).expect("jsdom");
-    assert_eq!(codes(&out), ["hidden"]);
+    assert_eq!(codes(&out), ["not_signed_in"]);
 }
 
 #[test]
@@ -231,7 +229,12 @@ fn the_list_without_the_profile_menu_still_counts_as_signed_in() {
         return;
     };
     assert_eq!(codes(&out), ["waiting", "menu_open"]);
-    // Off the private pages the missing marks still mean a signed-out visitor.
+    // A login form on the list, or any other page, still means a signed-out visitor.
+    let login = format!(
+        r#"{anon}document.body.insertAdjacentHTML('beforeend','<div data-qa="account-login-page"></div>');"#
+    );
+    let out = run(&list(), LIST, &login, &[menu_script(SRC)]).expect("jsdom");
+    assert_eq!(codes(&out), ["not_signed_in"]);
     let out = run(&list(), "/vacancy/1", &anon, &[menu_script(SRC)]).expect("jsdom");
     assert_eq!(codes(&out), ["not_signed_in"]);
 }
