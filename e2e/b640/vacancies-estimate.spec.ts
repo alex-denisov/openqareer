@@ -11,5 +11,6 @@ test('B803: оценка в строке списка вместо «не ука
   const estimate = page.locator('.b640 tr.vt-row .vt-main[title*="Оценка openqareer"]').first();
   await expect(estimate).toBeVisible({ timeout: 15_000 });
   await expect(estimate).toHaveText(/^≈ /u);
+  await expect(estimate.locator('.vt-est')).toHaveText('оценка');
   await expect(estimate).toHaveAttribute('title', /Оценка openqareer, 05\.10/u);
 });

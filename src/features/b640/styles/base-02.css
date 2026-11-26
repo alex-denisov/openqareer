@@ -593,6 +593,7 @@
   .b640 .vt-format { color: var(--career-text-soft); }
   .b640 .vt-date { color: var(--career-text-dim); }
   .b640 .vt-main { display: block; color: var(--career-text); }
+  .b640 .vt-row .vt-est { display: block; font-size: var(--career-text-xs); font-weight: 400; color: var(--career-text-soft); }
   .b640 .vt-orig { display: block; color: var(--career-text-dim); font-size: var(--career-text-xs); }
   .b640 .vt-fit .fit,
   .b640 .vt-fitc .fit { min-inline-size: 0; justify-content: flex-start; font-size: var(--career-text-md); }
