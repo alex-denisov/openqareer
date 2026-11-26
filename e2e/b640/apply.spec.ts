@@ -890,6 +890,10 @@ test.describe('B657: единый экран отклика', () => {
     await page.route('**/api/v1/candidate/hh/resumes*', (route) =>
       route.fulfill({ json: { data: snapshot } }),
     );
+    // M7-1: разбор открывается из листа выбора — «Продолжить» сохраняет выбор под вакансию.
+    await page.route('**/api/v1/candidate/hh/resumes/choice', (route) =>
+      route.fulfill({ json: { data: snapshot } }),
+    );
     await page.route('**/api/v1/candidate/hh/resumes/edits**', (route) =>
       route.fulfill({
         json: {
