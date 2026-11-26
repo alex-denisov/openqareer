@@ -13,6 +13,8 @@ export interface StatusStripProps {
   readonly onReverted: (title: string) => void;
   /** B650 s05b: «С 2 октября: 13 откликов → 1 интервью → 1 оффер»; `null` — откликов нет. */
   readonly funnel?: string | null;
+  /** Макет s04: вопрос стоит над колонками — строки «Статус» нет, «Вернуть прежний» остаётся. */
+  readonly withoutRow?: boolean;
 }
 
 type RevertState =
@@ -48,6 +50,20 @@ function UndoStrip({ title, busy, error, onRevert }: UndoStripProps) {
   );
 }
 
+function StatusRow({ title, funnel }: { readonly title: string; readonly funnel: string | null }) {
+  return (
+    <p className="s5-prog col-wide">
+      <span>
+        Статус: <strong>{title}</strong>
+      </span>
+      {funnel ? <span className="num">{funnel}</span> : null}
+      <Link className="row-act is-sm" to={buildNodePath('s02')}>
+        Сменить
+      </Link>
+    </p>
+  );
+}
+
 /**
  * Строка статуса над «Сегодня». Сразу после смены — «Вернуть прежний»
  * (до конца дня), дальше — статус, путь откликов (s05b; без откликов строки нет) и «Сменить».
@@ -57,6 +73,7 @@ export function StatusStrip({
   revertedTitle,
   onReverted,
   funnel = null,
+  withoutRow = false,
 }: StatusStripProps) {
   const [revert, setRevert] = useState<RevertState>({ step: 'idle' });
 
@@ -87,15 +104,7 @@ export function StatusStrip({
 
   return (
     <>
-      <p className="s5-prog col-wide">
-        <span>
-          Статус: <strong>{revertedTitle ?? status.title}</strong>
-        </span>
-        {funnel ? <span className="num">{funnel}</span> : null}
-        <Link className="row-act is-sm" to={buildNodePath('s02')}>
-          Сменить
-        </Link>
-      </p>
+      {withoutRow ? null : <StatusRow title={revertedTitle ?? status.title} funnel={funnel} />}
       {revertedTitle ? (
         <div className="col-wide">
           <ResultLine text={`Статус возвращён: ${revertedTitle}`} />

@@ -105,14 +105,17 @@ describe('a03: профиль LinkedIn по макету', () => {
     expect(root.querySelector('[aria-label="Скопировать: Навыки"]')).not.toBeNull();
   });
 
-  it('B801: «Скопировать» с подписью перед «Выполнено» копирует показанный текст; залитая кнопка одна', async () => {
+  it('M6-1: «Скопировать» значком первым, как в макете a03; копирует показанный текст; залитая кнопка одна', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     const root = (await open()).container;
     const rec = root.querySelector('#ls-headline ~ .li-rec')!;
-    const buttons = [...rec.querySelectorAll('.li-offer-a button.btn')];
-    expect(buttons.map((item) => item.textContent)).toEqual(['Скопировать', 'Выполнено']);
-    click(buttons[0] as HTMLElement);
+    const order = [...rec.querySelectorAll('.li-offer-a > button')].map((item) => item.className);
+    expect(order).toEqual(['icon-btn li-copy', 'icon-btn li-alt', 'btn is-sm']);
+    const copyBtn = rec.querySelector('.li-offer-a .li-copy')!;
+    expect(copyBtn.textContent).toBe('');
+    expect(copyBtn.getAttribute('aria-label')).toBe('Скопировать: Заголовок');
+    click(copyBtn as HTMLElement);
     await flush();
     expect(writeText).toHaveBeenCalledWith(rec.querySelector('.li-new')!.textContent);
     expect(root.querySelectorAll('.is-primary')).toHaveLength(1);
@@ -155,7 +158,7 @@ describe('a03: профиль LinkedIn по макету', () => {
     expect(root.querySelector('.li-all')).toBeNull();
   });
 
-  it('«Предложить заново»: новый вариант на экране, «Вариант 2 из 4» и листание назад', async () => {
+  it('«Предложить заново»: новый вариант на экране, «2 из 2» и листание назад', async () => {
     vi.mocked(api.requestOfferVariant).mockResolvedValueOnce(
       offer('skills', '', { variants: ['Go · Kubernetes', 'Kubernetes · Go'] }) as never,
     );
@@ -166,10 +169,10 @@ describe('a03: профиль LinkedIn по макету', () => {
     expect(api.requestOfferVariant).toHaveBeenCalledWith('skills');
     expect(root.querySelector('#li-new-skills')!.textContent).toBe('Kubernetes · Go');
     const sw = root.querySelector('[aria-label="Варианты: Навыки"]')!;
-    expect(sw.querySelector('.num')!.textContent).toBe('Вариант 2 из 4');
+    expect(sw.querySelector('.num')!.textContent).toBe('2 из 2');
     click(sw.querySelector('[aria-label="Предыдущий вариант"]'));
     expect(root.querySelector('#li-new-skills')!.textContent).toBe('Go · Kubernetes');
-    expect(sw.querySelector('.num')!.textContent).toBe('Вариант 1 из 4');
+    expect(sw.querySelector('.num')!.textContent).toBe('1 из 2');
     expect(root.querySelector('[aria-label="Другой вариант: Навыки · осталось 2"]')).not.toBeNull();
   });
 

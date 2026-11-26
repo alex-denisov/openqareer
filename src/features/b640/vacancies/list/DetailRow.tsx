@@ -1,6 +1,5 @@
 import { pressApply } from '../../apply/applyIntent';
-import { useCallback, useEffect, useId, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useId, useState } from 'react';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { sameCurrency } from '../../../../../shared/currencyRates';
@@ -11,7 +10,7 @@ import {
 } from '../../../../../shared/marketSalaryEstimate';
 import { formatCompensationCompact } from '../../../vacancies/vacancyCompensation';
 import { getVacancyConnectionCircles } from '../../../vacancies/vacancyLetterApi';
-import { ActionDock, Icon, Link, useIsMobile } from '../../kit';
+import { Icon, Link } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { BarPart } from '../Bar';
 import { BriefBlock } from './BriefBlock';
@@ -152,7 +151,7 @@ function MoneyScale({ item, env }: { item: MatchedVacancyItem; env: RowEnv }) {
   );
 }
 
-/** v06b2: на 390 «Откликнуться» — в полосе страницы над навигацией, в строке остаётся «Открыть». */
+/** Макет v06b (M9-2): «Откликнуться» и «Открыть» в самой раскрытой строке на всех ширинах. */
 function RowActions({
   vacancyId,
   responseId,
@@ -160,12 +159,6 @@ function RowActions({
   vacancyId: string;
   responseId?: string | undefined;
 }) {
-  const mobile = useIsMobile();
-  const [page, setPage] = useState<Element | null>(null);
-  const findPage = useCallback(
-    (node: HTMLElement | null) => setPage(node?.closest('.page') ?? null),
-    [],
-  );
   const apply = (
     <Link
       className="btn is-primary"
@@ -181,10 +174,9 @@ function RowActions({
   ) : (
     apply
   );
-  const docked = mobile && page !== null;
   return (
-    <div className="actions vd-actions vs-acts" ref={findPage}>
-      {docked ? createPortal(<ActionDock kind="auto" primary={primary} />, page) : primary}
+    <div className="actions vd-actions vs-acts">
+      {primary}
       <Link
         className="row-act vs-open"
         to={buildNodePath('v04', { vacancyId })}

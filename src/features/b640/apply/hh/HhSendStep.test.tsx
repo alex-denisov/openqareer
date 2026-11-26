@@ -436,32 +436,18 @@ describe('B704: отклик через hh.ru в приложении', () => {
     expect(button('Отправить отклик').disabled).toBe(false);
   });
 
-  it('B678: «N правок» открывает разбор резюме «сейчас → предложение» и возвращает к отправке', async () => {
+  it('M7-1: на a01 у резюме нет отметки «N правки», как в макете; разбор открывается из листа выбора', async () => {
     const sections = { title: 'CDO', about: '', skills: ['SQL'], places: [{ employer: 'Ромашка', title: 'CDO', period: '2020', text: 'Вёл данные.' }] };
     api.getHhResumes.mockResolvedValue({ ...snapshot, selected: { ...snapshot.selected, sections } });
     api.getHhResumeEdits.mockResolvedValue({
       resumeId: 'abc1',
       vacancyId: 'cluster-1',
-      edits: [
-        { id: 'title', section: 'title', was: 'CDO', now: 'Директор по данным' },
-        { id: 'experience:0', section: 'experience', place: 'Ромашка · 2020 — н.в.', was: 'Вёл данные.', now: 'Построил платформу данных.\nВнедрил dbt.' },
-      ],
+      edits: [{ id: 'title', section: 'title', was: 'CDO', now: 'Директор по данным' }],
     });
     await render();
     expect(api.getHhResumeEdits).toHaveBeenCalledWith('cluster-1', expect.anything());
-    click(button('2 правки'));
-    await settle();
-
-    const text = view!.container.textContent ?? '';
-    expect(text).toContain('Должность');
-    expect(text).toContain('Опыт по местам');
-    expect(text).toContain('Ромашка · 2020 — н.в.');
-    expect(view!.container.querySelectorAll('.hh2-now .hh2-line')).toHaveLength(3);
-    expect(view!.container.querySelectorAll('button[aria-label="Скопировать"]')).toHaveLength(2);
-    expect(desktop.runHhApplyInSession).not.toHaveBeenCalled();
-    click(button('К отправке'));
-    await settle();
-    expect(view!.container.textContent).toContain('«CDO»');
+    expect(view!.container.querySelector('.ap-parts .res-act')).toBeNull();
+    expect(view!.container.querySelector('.ap-parts')!.textContent).not.toContain('правк');
   });
 
   it('B678: у резюме без прочитанных разделов правки не запрашиваются', async () => {
@@ -470,27 +456,11 @@ describe('B704: отклик через hh.ru в приложении', () => {
     expect(view!.container.textContent).not.toContain('правк');
   });
 
-  it('B716: «Я уже откликнулся» — отметка без окна hh.ru, отклик уходит из черновиков', async () => {
-    const onSent = await render();
-    click(button('Я уже откликнулся'));
-    await settle();
-    expect(onSent).toHaveBeenCalledTimes(1);
-    expect(api.startHhApply).not.toHaveBeenCalled();
-    expect(desktop.runHhApplyInSession).not.toHaveBeenCalled();
-    const text = view!.container.textContent ?? '';
-    expect(text).toContain('Отклик отмечен как отправленный');
-    expect(text).not.toContain('можно отправлять');
-    expect(text).not.toContain('Отправить отклик');
-  });
-
-  it('B716: отметка не сохранилась — строка ошибки, отправка остаётся', async () => {
-    const onSent = vi.fn().mockRejectedValue(new Error('Сеть недоступна'));
-    await render(onSent);
-    click(button('Я уже откликнулся'));
-    await settle();
-    const text = view!.container.textContent ?? '';
-    expect(text).toContain('Отметка не сохранилась');
-    expect(text).toContain('Отправить отклик');
+  it('M7-1: действия a01 как в макете — «Отправить отклик» и «Вакансия на hh.ru», без «Я уже откликнулся»', async () => {
+    await render();
+    const actions = view!.container.querySelector('.lead > .actions')!;
+    expect([...actions.children].map((item) => item.textContent)).toEqual(['Отправить отклик', 'Вакансия на hh.ru']);
+    expect(view!.container.textContent).not.toContain('Я уже откликнулся');
   });
 
   const send = async () => {

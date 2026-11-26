@@ -39,6 +39,9 @@ const api = vi.hoisted(() => ({
   getHhSessionState: vi.fn(),
 }));
 vi.mock('./hhSessionApi', () => ({ getHhSessionState: api.getHhSessionState }));
+vi.mock('../../connections/HhConnectModal', () => ({
+  HhConnectModal: ({ isOpen }: { readonly isOpen: boolean }) => (isOpen ? <div className="hh-connect-modal" /> : null),
+}));
 vi.mock('./twoFactorApi', () => ({ getTwoFactorStatus: async () => ({ enabled: false, backupCodesLeft: 0 }) }));
 
 vi.mock('../../coach/coachApi', async (original) => ({
@@ -309,6 +312,15 @@ describe('n03 «Подключения»', () => {
     expect(root.querySelector('.cn-pop')).toBeNull();
     expect(root.querySelector('.set-h')?.textContent).toBe('Подключено 1 из 4');
     expect(root.querySelector('.cn-off')).toBeNull();
+  });
+
+  it('a11b: hh.ru не подключён — «Подключить» в строке открывает окно входа', async () => {
+    api.getConnections.mockResolvedValue([{ ...linkedin, platform: 'hh' }, linkedin]);
+    const root = await open(<ConnectionsScreen node={node('n03')} />);
+    expect(root.querySelector('.hh-connect-modal')).toBeNull();
+    expect(root.querySelector('button[aria-label="Подключить LinkedIn"]')).toBeNull();
+    click(root.querySelector('button[aria-label="Подключить hh.ru"]'));
+    expect(root.querySelector('.hh-connect-modal')).not.toBeNull();
   });
 
   it('B690: вход в hh.ru истёк — в строке hh предупреждение вместо «подключено»', async () => {

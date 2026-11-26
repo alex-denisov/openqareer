@@ -527,6 +527,13 @@ test.describe('B691: сигналы на «Сегодня»', () => {
       'Похоже, вы начали искать работу. Верно?',
     );
     await expect(card(page).locator('.why-q strong')).toHaveText('начали искать работу');
+    // Макет s04: строки «Статус» над вопросом нет, «Верно» залитая, ведущая кнопка — контурная.
+    await expect(page.locator('.s5-prog')).toHaveCount(0);
+    await expect(card(page).getByRole('button', { name: 'Верно' })).toHaveClass(/is-primary/u);
+    await expect(page.locator('#career-main .lead > .actions > .btn.is-primary')).toHaveCount(0);
+    if (page.viewportSize()!.width >= 768) {
+      await expect(card(page).locator('.why-body > .actions')).toHaveCSS('column-gap', '4px');
+    }
     await card(page).getByRole('button', { name: 'Почему мы так думаем' }).click();
     await expect(card(page).getByRole('tooltip')).toContainText(
       '3 отклика за неделю, раньше 0 · Отправили сами, не автооткликами',
@@ -575,8 +582,8 @@ test.describe('B691: сигналы на «Сегодня»', () => {
     });
     expect(tokens.backgroundColor).toBe(tokens.color);
     expect(tokens.borderTopColor).toBe(tokens.outlineColor);
-    // «Верно» остаётся контурной (решение CPO): главная кнопка экрана — не она.
-    await expect(card(page).getByRole('button', { name: 'Верно' })).not.toHaveClass(/is-primary/u);
+    // Макет s04: «Верно» залитая.
+    await expect(card(page).getByRole('button', { name: 'Верно' })).toHaveClass(/is-primary/u);
     // Полоса над нижней навигацией и при полной прокрутке не закрывает содержимое (урок s03).
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     const covered = await page.evaluate(() => {

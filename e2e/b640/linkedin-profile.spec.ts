@@ -187,7 +187,7 @@ test.describe('B645 a03: профиль LinkedIn по макету', () => {
     await expect(page.locator('.li-all')).toHaveCount(0);
   });
 
-  test('«Скопировать», «Предложить заново» и листание «Вариант N из 4»', async ({ page }) => {
+  test('«Скопировать», «Предложить заново» и листание «N из M»', async ({ page }) => {
     await mock(page);
     await open(page);
     // М6-1: листание стоит под текстом и не сжимает его (было 166 на 1440).
@@ -200,10 +200,10 @@ test.describe('B645 a03: профиль LinkedIn по макету', () => {
       'Руководитель разработки · финтех · Go, Kubernetes',
     );
     const variants = page.getByRole('group', { name: 'Варианты: Заголовок' });
-    await expect(variants).toContainText('Вариант 2 из 4');
+    await expect(variants).toHaveText(/^\s*2 из 2\s*$/);
     await variants.getByRole('button', { name: 'Предыдущий вариант' }).click();
     await expect(page.locator('#li-new-headline')).toContainText('Engineering Manager');
-    await expect(variants).toContainText('Вариант 1 из 4');
+    await expect(variants).toHaveText(/^\s*1 из 2\s*$/);
     await expect(
       page.getByRole('button', { name: 'Другой вариант: Заголовок · осталось 2' }),
     ).toBeVisible();

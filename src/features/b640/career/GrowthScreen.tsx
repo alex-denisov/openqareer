@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Icon, InfoTip, Link } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
@@ -75,9 +74,9 @@ function Steps({ data }: { readonly data: Ready }) {
   );
 }
 
-function GrowLead({ data, reload }: { readonly data: Ready; readonly reload: () => void }) {
+/** S12: цель, шаги и одна кнопка подготовки разговора (макет s12, без смены цели). */
+function GrowLead({ data }: { readonly data: Ready }) {
   const { openConsultant } = useShell();
-  const [changing, setChanging] = useState(false);
   const copy = goalCopy(data.goal.kind, data.company);
   return (
     <section className="lead" aria-labelledby="grow-title">
@@ -88,21 +87,14 @@ function GrowLead({ data, reload }: { readonly data: Ready; readonly reload: () 
         <InfoTip label="Источник" text={goalChosenTip(data.goal.chosenAt)} />
       </div>
       <Steps data={data} />
-      {changing ? <GrowthGoalPick current={data.goal.kind} onSaved={reload} /> : null}
-      <div className="actions">
-        {copy.action ? (
+      {copy.action ? (
+        <div className="actions">
           <button className="btn is-primary" type="button" onClick={() => openConsultant()}>
             <Icon name="file" />
             {copy.action}
           </button>
-        ) : null}
-        {changing ? null : (
-          <button className="btn is-quiet" type="button" onClick={() => setChanging(true)}>
-            <Icon name="edit" />
-            Сменить цель
-          </button>
-        )}
-      </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -187,7 +179,7 @@ function GrowthBody({ data, reload }: { readonly data: GrowthData; readonly relo
         {data.state === 'no_goal' ? (
           <GoalLead company={data.company} title={data.title} onSaved={reload} />
         ) : (
-          <GrowLead data={data} reload={reload} />
+          <GrowLead data={data} />
         )}
       </div>
       <div className="col">

@@ -100,7 +100,7 @@ function NothingRisky({ data, reload }: ViewProps) {
       {useful.length > 0 ? (
         <>
           <h3 className="pf-sub">Полезное · {useful.length}</h3>
-          <FindingList items={useful} showLevel onChanged={reload} />
+          <FindingList items={useful} showLevel profileOnly onChanged={reload} />
         </>
       ) : null}
     </section>

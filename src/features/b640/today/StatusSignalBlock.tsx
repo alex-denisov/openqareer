@@ -25,9 +25,11 @@ interface SignalCardProps {
   readonly signal: StatusSignal;
   readonly busy: StatusSignalAnswer | null;
   readonly onAnswer: (answer: StatusSignalAnswer) => void;
+  /** s04: над колонками «Верно» залитая; в правой колонке (s05b) — обычная. */
+  readonly wide: boolean;
 }
 
-function SignalCard({ signal, busy, onAnswer }: SignalCardProps) {
+function SignalCard({ signal, busy, onAnswer, wide }: SignalCardProps) {
   const { before, accent, after } = signal.question;
   return (
     <div className="why-body">
@@ -45,7 +47,7 @@ function SignalCard({ signal, busy, onAnswer }: SignalCardProps) {
           <Button
             key={answer}
             size="sm"
-            variant={answer === 'yes' ? 'default' : 'quiet'}
+            variant={answer !== 'yes' ? 'quiet' : wide ? 'primary' : 'default'}
             icon={icon}
             busy={busy === answer}
             disabled={busy !== null}
@@ -124,6 +126,7 @@ export function StatusSignalBlock({ statusTitle, wide, onShown }: StatusSignalBl
       {state.signal ? (
         <SignalCard
           signal={state.signal}
+          wide={wide}
           busy={busy === 'undo' ? null : busy}
           onAnswer={(answer) => void run(answer, state.signal)}
         />

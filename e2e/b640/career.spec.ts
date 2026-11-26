@@ -96,6 +96,15 @@ test.describe('B653: «Карьера» — роли и условия поис�
     await expect(dialog.getByLabel(/Руководитель разработки/u)).toBeChecked();
     await expectGates(page, { only: ['modal_fit'] });
     await dialog.getByLabel(/Директор по разработке/u).check();
+    if (page.viewportSize()!.width < 768) {
+      // Макет s09c на 390: подвал `rs-foot`, «Искать» и «Отмена» столбцом во всю ширину, шаг 12.
+      const search = await dialog.getByRole('button', { name: 'Искать в 2 ролях' }).boundingBox();
+      const cancel = await dialog.getByRole('button', { name: 'Отмена' }).boundingBox();
+      expect(Math.round(search!.width)).toBe(356);
+      expect(Math.round(cancel!.width)).toBe(356);
+      expect(Math.round(cancel!.x)).toBe(Math.round(search!.x));
+      expect(Math.round(cancel!.y - search!.y - search!.height)).toBe(12);
+    }
     await dialog.getByRole('button', { name: 'Искать в 2 ролях' }).click();
     await expect(page).toHaveURL(/\/app\/vacancies$/u);
     expect(calls.campaigns).toEqual([

@@ -13,8 +13,6 @@ export interface SkillResultProps {
   readonly busy: boolean;
   readonly failed: boolean;
   readonly onNext: () => void;
-  /** «Пропустить»: навык остаётся как был. */
-  readonly onSkip: () => void;
   readonly onAgain: () => void;
   readonly onAppeal: (reason: string) => Promise<boolean>;
 }
@@ -72,7 +70,6 @@ function ProfileAsk(props: {
   readonly busy: boolean;
   readonly onYes: () => void;
   readonly onAppeal: () => void;
-  readonly onSkip?: () => void;
 }) {
   return (
     <div className="lt-ask" role="group" aria-labelledby="c4-ask">
@@ -85,11 +82,6 @@ function ProfileAsk(props: {
           <Icon name="edit" />
           Исправить
         </button>
-        {props.onSkip ? (
-          <button className="row-act" type="button" disabled={props.busy} onClick={props.onSkip}>
-            Пропустить
-          </button>
-        ) : null}
       </div>
     </div>
   );
@@ -97,14 +89,13 @@ function ProfileAsk(props: {
 
 /** C4b «Итог кейса»: пункты оценки, что попадёт в профиль, дальше или ещё раз. */
 export function SkillResult(props: SkillResultProps) {
-  const { record, busy, failed, onNext, onSkip, onAgain, onAppeal } = props;
+  const { record, busy, failed, onNext, onAgain, onAppeal } = props;
   const [appealing, setAppealing] = useState(false);
   const { evaluation } = record;
   const { decision } = record;
   // Принятый итог уже в профиле: спрашивать второй раз нечего.
   const line =
     decision === 'accepted' ? null : profileLine(record.assessmentCase.skillName, evaluation.grade);
-  const skippable = decision === 'pending' || decision === 'declined';
   const appeal = async (reason: string) => {
     const sent = await onAppeal(reason);
     if (sent) setAppealing(false);
@@ -122,7 +113,6 @@ export function SkillResult(props: SkillResultProps) {
           busy={busy}
           onYes={onNext}
           onAppeal={() => setAppealing(true)}
-          onSkip={skippable ? onSkip : undefined}
         />
       ) : null}
       {appealing ? (

@@ -15,13 +15,15 @@ const PAGE = 20;
 interface ListProps {
   readonly items: readonly FootprintRiskItem[];
   readonly showLevel?: boolean;
+  /** F4 «Полезное»: только «В профиль». */
+  readonly profileOnly?: boolean;
   readonly onChanged: () => void;
 }
 
 /** Находки списком; больше 20 — порциями с «Показать ещё». */
-export function FindingList({ items, showLevel = false, onChanged }: ListProps) {
+export function FindingList({ items, showLevel = false, profileOnly = false, onChanged }: ListProps) {
   const render = (item: FootprintRiskItem) => (
-    <FindingRow key={item.id} item={item} showLevel={showLevel} onChanged={onChanged} />
+    <FindingRow key={item.id} item={item} showLevel={showLevel} profileOnly={profileOnly} onChanged={onChanged} />
   );
   if (items.length <= PAGE) return <ul className="rows exp-rows fp-finds">{items.map(render)}</ul>;
   return <PagedList items={items} renderItem={render} listClassName="rows exp-rows fp-finds" />;

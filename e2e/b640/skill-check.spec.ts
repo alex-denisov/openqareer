@@ -66,23 +66,20 @@ test.describe('B653: «Карьера» — проверка навыков C04'
     expect(calls.posts.at(-1)?.body.accepted).toBe(true);
   });
 
-  test('B734: без «Верно» навык не подтверждён и после перезагрузки; «Пропустить» ведёт дальше', async ({
+  test('B734: без «Верно» итог ждёт и после перезагрузки; «Пропустить» на C4b нет (макет)', async ({
     page,
   }) => {
     const calls = await openSkillCheck(page, PATH);
     await node(page, 'c04').getByLabel('Ваш ответ').fill('Мой ответ');
     await node(page, 'c04').getByRole('button', { name: 'Ответить' }).click();
     const result = node(page, 'c04b');
-    await expect(result.getByRole('button', { name: 'Пропустить' })).toBeVisible();
+    await expect(result.getByRole('button', { name: 'Верно' })).toBeVisible();
+    await expect(result.getByRole('button', { name: 'Пропустить' })).toHaveCount(0);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(result.getByRole('heading', { name: 'Раскрыты все 3 пункта' })).toBeVisible();
+    await expect(result.getByRole('button', { name: 'Верно' })).toBeVisible();
     await expectGates(page);
-    await result.getByRole('button', { name: 'Пропустить' }).click();
-    await expect(node(page, 'c04').getByText('Kubernetes · вопрос 6 из 6')).toBeVisible();
-    expect(calls.posts.at(-1)?.body.accepted).toBe(false);
-    await node(page, 'c04').locator('details.more-n > summary').click();
-    // Подтверждён только «Go, PostgreSQL» из начальных данных.
-    await expect(node(page, 'c04').getByLabel('Подтверждено кейсом')).toHaveCount(1);
+    expect(calls.posts.some((post) => post.body.accepted !== undefined)).toBe(false);
   });
 
   test('C4: сбой оценки — строка на месте, ответ остался, «Повторить» тем же запросом', async ({
@@ -218,7 +215,8 @@ test.describe('B653: «Карьера» — проверка навыков C04'
             fullPage: true,
           });
         }
-        if (answer) await node(page, 'c04b').getByRole('button', { name: 'Пропустить' }).click();
+        if (answer)
+          await node(page, 'c04b').getByRole('button', { name: 'Пройти ещё раз' }).click();
       }
     });
   }
