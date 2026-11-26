@@ -6,7 +6,10 @@
 //! could not be hidden. The source and every other resume the candidate already had
 //! are listed as known; hiding and deleting refuse them.
 
-use crate::connector_session::{eval_json, is_transient_eval_error};
+use crate::connector_session::{
+    append_connector_diagnostic, eval_json, is_transient_eval_error, session_window_label,
+    write_markup_sketch, HH_COPY_MARKUP_FILE,
+};
 use crate::hh_apply::{on_hh, wait_for, RunningGuard};
 use crate::hh_resume_copy_scripts::{
     delete_script, duplicate_script, hide_script, landed_script, menu_script, visibility_script,
@@ -19,9 +22,42 @@ use crate::hh_resume_experience::open_clean;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 const KNOWN_MAX: usize = 100;
+const SCOPE: &str = "hh-copy";
+/// Masked sketch of the page a copy step stopped on (B787).
+const PAGE_SKETCH_SCRIPT: &str = include_str!("hh_page_sketch.js");
+
+/// One code-only line per copy step; ids and page text never reach the log.
+fn note(app: &AppHandle, event: &str, code: &str) {
+    let _ = append_connector_diagnostic(app, SCOPE, event, Some(code));
+}
+
+/// A failed step leaves the masked page next to the log, overwritten each time.
+async fn dump_page(app: &AppHandle) {
+    let Some(window) = session_window_label("hh").and_then(|label| app.get_webview(label)) else {
+        return;
+    };
+    if let Ok(raw) = eval_json(&window, PAGE_SKETCH_SCRIPT).await {
+        let sketch: String = serde_json::from_str(&raw).unwrap_or(raw);
+        if write_markup_sketch(app, HH_COPY_MARKUP_FILE, &sketch).is_err() {
+            note(app, "dump", "invalid");
+        }
+    }
+}
+
+/// Logs the outcome of a step; a failure also leaves the page sketch.
+async fn traced<T>(app: &AppHandle, event: &str, result: Result<T, String>) -> Result<T, String> {
+    match &result {
+        Ok(_) => note(app, event, "ok"),
+        Err(code) => {
+            note(app, event, code);
+            dump_page(app).await;
+        }
+    }
+    result
+}
 const LIST_URL: &str = "https://hh.ru/applicant/resumes";
 const VISIBILITY_BLOCK: &str = "visibility";
 const STEP_POLL: Duration = Duration::from_millis(500);
@@ -152,14 +188,17 @@ async fn landed(window: &tauri::Webview, known_ids: &[String]) -> Result<String,
 }
 
 async fn copy(app: &AppHandle, request: &HhCopyRequest) -> Result<String, String> {
+    note(app, "navigate", "list");
     let window = open_clean(app, LIST_URL)
         .await?
         .ok_or("target_redirect_rejected")?;
     let menu = wait_for(&window, &menu_script(&request.source_id), STEP_WAIT).await;
+    note(app, "menu", &menu);
     expect(menu, "menu_open", "source_missing")?;
     human_pause().await;
     // From this press on the copy may exist: its code is never a plain refusal.
     let pressed = wait_for(&window, &duplicate_script(), STEP_WAIT).await;
+    note(app, "duplicate", &pressed);
     match pressed.as_str() {
         "duplicate_clicked" => landed(&window, &request.known_ids).await,
         "script_error" => Err("copy_unconfirmed".into()),
@@ -177,7 +216,7 @@ pub async fn run_hh_resume_copy(
         return Ok(HhCopyReport::failed("hh_busy"));
     };
     tokio::time::sleep(wait_before_next_edit()).await;
-    Ok(match copy(app, &request).await {
+    Ok(match traced(app, "copy", copy(app, &request).await).await {
         Ok(id) => HhCopyReport::done("copied", &id),
         Err(code) => HhCopyReport::failed(&code),
     })
@@ -199,6 +238,7 @@ async fn shown_visibility(
 async fn hide(app: &AppHandle, copy_id: &str) -> Result<(), String> {
     let path = edit_path(copy_id, VISIBILITY_BLOCK);
     let (window, code) = shown_visibility(app, copy_id).await?;
+    note(app, "visibility", &code);
     match code.as_str() {
         "hidden" => return Ok(()),
         "visible" => {}
@@ -211,6 +251,7 @@ async fn hide(app: &AppHandle, copy_id: &str) -> Result<(), String> {
     human_pause().await;
     save(&window, &path).await?;
     let (_, code) = shown_visibility(app, copy_id).await?;
+    note(app, "visibility_after", &code);
     expect(code, "hidden", "visibility_unconfirmed")
 }
 
@@ -223,10 +264,12 @@ pub async fn run_hh_resume_hide(
         return Ok(HhCopyReport::failed("hh_busy"));
     };
     // No pause between edits here: every second the copy is visible counts.
-    Ok(match hide(app, &request.copy_id).await {
-        Ok(()) => HhCopyReport::done("hidden", &request.copy_id),
-        Err(code) => HhCopyReport::failed(&code),
-    })
+    Ok(
+        match traced(app, "hide", hide(app, &request.copy_id).await).await {
+            Ok(()) => HhCopyReport::done("hidden", &request.copy_id),
+            Err(code) => HhCopyReport::failed(&code),
+        },
+    )
 }
 
 async fn delete(app: &AppHandle, copy_id: &str) -> Result<(), String> {
@@ -247,10 +290,12 @@ pub async fn run_hh_resume_delete_copy(
     let Some(_running) = RunningGuard::take() else {
         return Ok(HhCopyReport::failed("hh_busy"));
     };
-    Ok(match delete(app, &request.copy_id).await {
-        Ok(()) => HhCopyReport::done("deleted", &request.copy_id),
-        Err(code) => HhCopyReport::failed(&code),
-    })
+    Ok(
+        match traced(app, "delete", delete(app, &request.copy_id).await).await {
+            Ok(()) => HhCopyReport::done("deleted", &request.copy_id),
+            Err(code) => HhCopyReport::failed(&code),
+        },
+    )
 }
 
 #[cfg(test)]

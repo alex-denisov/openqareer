@@ -217,3 +217,24 @@ fn waits_while_the_page_reloads_and_stops_without_sign_in() {
     let out = run(&editor("no_one", false), &path, anon, &steps).expect("jsdom");
     assert_eq!(codes(&out), ["not_signed_in"]);
 }
+
+#[test]
+fn the_list_without_the_profile_menu_still_counts_as_signed_in() {
+    let anon = format!(
+        "document.getElementById('HH-Lux-InitialState').remove();{}",
+        menu(FULL)
+    );
+    let steps = [menu_script(SRC), menu_script(SRC)];
+    let Some(out) = run(&list(), LIST, &anon, &steps) else {
+        return;
+    };
+    assert_eq!(codes(&out), ["waiting", "menu_open"]);
+    // A login form on the list, or any other page, still means a signed-out visitor.
+    let login = format!(
+        r#"{anon}document.body.insertAdjacentHTML('beforeend','<div data-qa="account-login-page"></div>');"#
+    );
+    let out = run(&list(), LIST, &login, &[menu_script(SRC)]).expect("jsdom");
+    assert_eq!(codes(&out), ["not_signed_in"]);
+    let out = run(&list(), "/vacancy/1", &anon, &[menu_script(SRC)]).expect("jsdom");
+    assert_eq!(codes(&out), ["not_signed_in"]);
+}

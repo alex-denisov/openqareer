@@ -162,6 +162,31 @@ describe('B787: скрытая копия резюме hh.ru', () => {
     expect(deps.remove).not.toHaveBeenCalled();
   });
 
+  it('B787: «не вошёл» после нажатия — копия найдена в списке, вторая не создаётся', async () => {
+    let calls = 0;
+    deps.readList.mockImplementation(async () => {
+      calls += 1;
+      return { kind: 'ready', resumes: calls === 1 ? listed : [...listed, item('new')] };
+    });
+    deps.copy.mockResolvedValue({ outcome: 'failed', failureCode: 'not_signed_in' });
+    await create();
+    expect(deps.copy).toHaveBeenCalledTimes(1);
+    expect(deps.hide.mock.calls[0]?.[0]).toBe('new');
+  });
+
+  it('B787: сбой копии и непрочитанный список — начатое не забывается', async () => {
+    let calls = 0;
+    deps.readList.mockImplementation(async () => {
+      calls += 1;
+      if (calls > 1) throw new Error('hh_resumes_not_read');
+      return { kind: 'ready', resumes: listed };
+    });
+    deps.copy.mockResolvedValue({ outcome: 'failed', failureCode: 'menu_missing' });
+    expect(await create()).toEqual({ ok: false, code: 'menu_missing' });
+    expect(saved).not.toContainEqual(null);
+    expect(saved.at(-1)).toMatchObject({ sourceId: 'src', stage: 'creating' });
+  });
+
   it('нет входа — ничего не начато', async () => {
     deps.readList.mockResolvedValue({ kind: 'signed_out' });
     expect(await create()).toEqual({ ok: false, code: 'not_signed_in' });

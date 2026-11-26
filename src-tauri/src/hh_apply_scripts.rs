@@ -68,11 +68,16 @@ pub fn normalized_letter(letter: &str) -> String {
 }
 
 /// Shared prelude: element helpers, the sign-in check and the blocking surfaces.
+/// B787: below 1020 px hh.ru hides the profile menu (B709); the resume list is served
+/// only to a signed-in applicant (others land on `/account/login`), so being on it
+/// without a login form is the sign-in, as in `connector_inspection.js`. The editor
+/// still needs a sign-in mark: its initial state carries it at any width.
 fn prelude() -> String {
     format!(
         "var q=function(s){{return document.querySelector(s);}};\
 var seen=function(s){{var e=q(s);return !!(e&&e.getClientRects().length);}};\
-var signedIn=function(){{if(q({signed}))return true;var t=document.getElementById({state});\
+var signedIn=function(){{if(q({signed}))return true;\
+if(/^\\/applicant\\/(resumes|profile)(\\/|$)/.test(location.pathname)&&!q('[data-qa=account-login-page]'))return true;var t=document.getElementById({state});\
 if(!t)return false;var raw=(t.content&&t.content.textContent)||t.textContent||'';\
 try{{return JSON.parse(raw).userType==='applicant';}}catch(e){{return false;}}}};\
 var bodyText=((document.body&&document.body.innerText)||'').slice(0,2000);\

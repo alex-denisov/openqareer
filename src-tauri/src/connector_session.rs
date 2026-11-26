@@ -2492,10 +2492,45 @@ const HH_RESUME_MARKUP_MAX_CHARS: usize = 16_000;
 fn valid_markup_sketch(sketch: &str) -> bool {
     !sketch.is_empty()
         && sketch.len() <= HH_RESUME_MARKUP_MAX_CHARS
-        && sketch.chars().all(|c| c == '\n' || (' '..='~').contains(&c))
+        && sketch
+            .chars()
+            .all(|c| c == '\n' || (' '..='~').contains(&c))
 }
 
 pub fn write_hh_resume_markup(app: &AppHandle, sketch: &str) -> Result<(), String> {
+    write_markup_sketch(app, HH_RESUME_MARKUP_FILE, sketch)
+}
+
+/// B787: the candidate's own hh.ru resume list (id, title, visibility, update), overwritten on each read.
+const HH_RESUMES_LIST_FILE: &str = "hh-resumes-list.txt";
+
+fn valid_resumes_report(report: &str) -> bool {
+    !report.is_empty()
+        && report.chars().count() <= HH_RESUME_MARKUP_MAX_CHARS
+        && report
+            .chars()
+            .all(|c| c == '\n' || c == '\t' || !c.is_control())
+}
+
+pub fn write_hh_resumes_list(app: &AppHandle, report: &str) -> Result<(), String> {
+    if !valid_resumes_report(report) {
+        return Err("resumes_report_invalid".to_string());
+    }
+    let root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("diagnostics_dir_unavailable: {error}"))?
+        .join(DIAGNOSTICS_DIR);
+    create_private_directory(&root)?;
+    std::fs::write(root.join(HH_RESUMES_LIST_FILE), report)
+        .map_err(|error| format!("diagnostics_write_failed: {error}"))
+}
+
+/// B787: the masked page sketch of a failed hh.ru resume-copy step.
+pub const HH_COPY_MARKUP_FILE: &str = "hh-copy-markup.txt";
+
+/// Overwrites one masked sketch file next to the diagnostics log.
+pub fn write_markup_sketch(app: &AppHandle, file: &str, sketch: &str) -> Result<(), String> {
     if !valid_markup_sketch(sketch) {
         return Err("markup_sketch_invalid".to_string());
     }
@@ -2505,7 +2540,7 @@ pub fn write_hh_resume_markup(app: &AppHandle, sketch: &str) -> Result<(), Strin
         .map_err(|error| format!("diagnostics_dir_unavailable: {error}"))?
         .join(DIAGNOSTICS_DIR);
     create_private_directory(&root)?;
-    std::fs::write(root.join(HH_RESUME_MARKUP_FILE), sketch)
+    std::fs::write(root.join(file), sketch)
         .map_err(|error| format!("diagnostics_write_failed: {error}"))
 }
 
@@ -2544,10 +2579,18 @@ pub fn append_connector_diagnostic(
 mod tests {
     #[test]
     fn markup_sketch_accepts_only_masked_ascii() {
-        assert!(super::valid_markup_sketch("li[magritte-stepper-step]\n  \"MON_04 2023 - xxx\""));
+        assert!(super::valid_markup_sketch(
+            "li[magritte-stepper-step]\n  \"MON_04 2023 - xxx\""
+        ));
         assert!(!super::valid_markup_sketch(""));
+        assert!(super::valid_resumes_report(
+            "resumes 1\nabc\tIT Директор\tНе видно никому\t-"
+        ));
+        assert!(!super::valid_resumes_report("a\u{0}b"));
         assert!(!super::valid_markup_sketch("\"Россети\""));
-        assert!(!super::valid_markup_sketch(&"x".repeat(super::HH_RESUME_MARKUP_MAX_CHARS + 1)));
+        assert!(!super::valid_markup_sketch(
+            &"x".repeat(super::HH_RESUME_MARKUP_MAX_CHARS + 1)
+        ));
     }
 
     #[test]

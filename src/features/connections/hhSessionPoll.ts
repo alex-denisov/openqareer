@@ -59,6 +59,8 @@ interface HhSessionPollDependencies {
   readonly inspectCurrentPage: () => Promise<SessionInspectionResult>;
   readonly readSessionPage: (url: string) => Promise<SessionPageResult>;
   readonly onAuthenticated?: () => void | Promise<void>;
+  /** B787: страница списка резюме прочитана — для локального файла диагностики. */
+  readonly onResumeList?: (body: string) => void;
   /** Injected so tests do not sit through the real backoff. */
   readonly waitBeforeRetry?: (attempt: number) => Promise<void>;
 }
@@ -254,6 +256,7 @@ async function pollOnce(dependencies: HhSessionPollDependencies): Promise<HhSess
     read: () => dependencies.readSessionPage(HH_RESUME_LIST_URL),
     interpret: (page) => {
       if (!isResumeListUrl(page.url)) return undefined;
+      dependencies.onResumeList?.(page.body);
       const listed = parseHhResumesList(page.body);
       const profile = parseHhProfilePage(page.body);
       if (listed.length > 0) return { resumes: listed, profile };
