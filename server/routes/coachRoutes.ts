@@ -1,5 +1,6 @@
 import { withoutWriteClaims } from '../domain/factCorrection';
 import { correctionCards } from '../domain/factCorrectionProposals';
+import { resumeEditRequest } from '../domain/resumeEditRequest';
 import { registerRoleSkillDemandRoutes } from './roleSkillDemandRoutes';
 import { withSalaryFloorProposal } from '../domain/careerConditionClaim';
 import { selectionClaimsHold, withoutBrokenClaims } from '../coach/selectionClaims';
@@ -149,10 +150,14 @@ function honestTurn(
 ): { readonly input: typeof input; readonly honest: (message: string) => string } {
   const latest = input.messages.at(-1);
   if (input.internalPurpose || latest?.role !== 'user') return { input, honest: (message) => message };
-  const cards = correctionCards(deps.candidateStore.getSnapshot(candidateId), latest.content);
+  const snapshot = deps.candidateStore.getSnapshot(candidateId);
+  const cards = correctionCards(snapshot, latest.content);
+  // B786: на просьбу поправить резюме под репликой встанет готовая правка K6.
+  const edit = cards.length > 0 ? null : resumeEditRequest(snapshot, latest.content);
+  const withCards = cards.length > 0 ? { ...input, correctionCards: cards } : input;
   return {
-    input: cards.length > 0 ? { ...input, correctionCards: cards } : input,
-    honest: (message) => withoutWriteClaims(message, cards.length > 0),
+    input: edit ? { ...withCards, resumeEditCard: { place: edit.place } } : withCards,
+    honest: (message) => withoutWriteClaims(message, cards.length > 0 || edit !== null),
   };
 }
 

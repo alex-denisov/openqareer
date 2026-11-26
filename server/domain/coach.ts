@@ -525,6 +525,8 @@ export interface CorrectionCard {
 export type CoachTurnInput = z.infer<typeof coachTurnInputSchema> & {
   /** Считает сервер перед вызовом модели; в схеме входа этого поля нет. */
   readonly correctionCards?: readonly CorrectionCard[];
+  /** B786: готовая правка резюме K6, которая встанет под репликой; `place` пусто — место выберет правка. */
+  readonly resumeEditCard?: { readonly place: string };
 };
 export type ResumeRevisionProposal = z.infer<typeof resumeRevisionProposalSchema>;
 // The provider limit stays unchanged; only stored server-labeled replies have extra headroom.

@@ -21,6 +21,8 @@ export interface ConsultantReplyExtras {
   readonly memoryIds: readonly string[];
   /** B796: правки, которые кандидат назвал в своём вопросе; есть только под последней репликой. */
   readonly corrections?: readonly FactCorrectionProposal[];
+  /** B786: кандидат попросил поправить резюме — факт беседы для готовой правки K6; только под последней репликой. */
+  readonly resumeFactId?: string;
 }
 
 export function isConsultantReplyAction(value: unknown): value is ConsultantReplyAction {

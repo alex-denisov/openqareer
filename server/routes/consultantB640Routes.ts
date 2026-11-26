@@ -4,6 +4,7 @@ import type { ConsultantReplyExtras } from '../../shared/consultantReply';
 import { coachTurnStageSchema } from '../domain/coach';
 import { factCorrectionProposals } from '../domain/factCorrectionProposals';
 import { replyExtrasOf } from '../domain/consultantReplyExtras';
+import { resumeEditRequest } from '../domain/resumeEditRequest';
 import { confirmConsultantFact } from '../orchestration/consultantFactConfirmation';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import { withStaleAnalysis } from './coachTurnAnalysis';
@@ -56,21 +57,23 @@ interface ThreadMessage {
   readonly content: string;
 }
 
-/** Правки, названные кандидатом в вопросе перед этой репликой. */
-function correctionsFor(
-  deps: RouteDeps,
-  candidateId: string,
-  messages: readonly ThreadMessage[],
-  messageId: string | undefined,
-) {
+/** Вопрос кандидата перед этой репликой. */
+function askedBefore(messages: readonly ThreadMessage[], messageId: string | undefined): string | null {
   const index = messages.findIndex(({ id }) => id === messageId);
   const asked = messages
     .slice(0, Math.max(0, index))
     .filter(({ role }) => role === 'user')
     .at(-1);
-  return asked
-    ? factCorrectionProposals(deps.candidateStore.getSnapshot(candidateId), asked.content)
-    : [];
+  return asked?.content ?? null;
+}
+
+/** Правки, названные кандидатом в вопросе (B796), и готовая правка резюме по его просьбе (B786). */
+function cardsFor(deps: RouteDeps, candidateId: string, asked: string | null) {
+  if (asked === null) return { corrections: [], resumeFactId: null };
+  const snapshot = deps.candidateStore.getSnapshot(candidateId);
+  const corrections = factCorrectionProposals(snapshot, asked);
+  const edit = corrections.length > 0 ? null : resumeEditRequest(snapshot, asked);
+  return { corrections, resumeFactId: edit?.factId ?? null };
 }
 
 function replyExtras(
@@ -84,16 +87,17 @@ function replyExtras(
   const analysisPending = results.some(({ result }) => withStaleAnalysis(result).analysis === 'pending');
   const memory = deps.candidateStore.getSnapshot(candidateId).memory;
   const lastId = results.at(-1)?.messageId;
-  const corrections = correctionsFor(deps, candidateId, messages, lastId);
+  const { corrections, resumeFactId } = cardsFor(deps, candidateId, askedBefore(messages, lastId));
   const replies = results
     .map(({ messageId, result }) => ({
       messageId,
       ...replyExtrasOf(result, memory),
       ...(messageId === lastId && corrections.length > 0 ? { corrections } : {}),
+      ...(messageId === lastId && resumeFactId ? { resumeFactId } : {}),
     }))
     .filter(
-      ({ actions, memoryIds, corrections: fixes }: ConsultantReplyExtras) =>
-        actions.length > 0 || memoryIds.length > 0 || Boolean(fixes),
+      ({ actions, memoryIds, corrections: fixes, resumeFactId: fact }: ConsultantReplyExtras) =>
+        actions.length > 0 || memoryIds.length > 0 || Boolean(fixes) || Boolean(fact),
     );
   return { replies, analysisPending };
 }
