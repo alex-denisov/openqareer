@@ -1,3 +1,4 @@
+import { factEdits } from './hhResumeFactEdits';
 import { isPositionTerms } from '../../shared/hhPositionTerms';
 import { hhSectionsRead, type HhResumeEdit, type HhResumeSections } from '../../shared/hhCandidateSession';
 
@@ -94,11 +95,27 @@ function matchedPlaces(input: HhEditsInput): ReadonlyArray<HhPlatformPlace | und
   ).found;
 }
 
+const escaped = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+
+/** B787: в русском резюме компания называется так, как в нём самом («Россети Цифра»), а не латиницей профиля. */
+export function withResumeEmployer(line: string, hhEmployer: string, place: HhPlatformPlace): string {
+  if (languageOf(hhEmployer) !== 'ru') return line;
+  return [place.employer, ...place.aliases]
+    .map((name) => name.trim())
+    .filter((name) => name.length >= EMPLOYER_KEY_MIN && languageOf(name) === 'en')
+    .sort((a, b) => b.length - a.length)
+    .reduce((text, name) => text.replace(new RegExp(`(?<![\\p{L}\\p{N}])${escaped(name)}(?![\\p{L}\\p{N}])`, 'giu'), hhEmployer), line);
+}
+
 function experienceEdits(input: HhEditsInput): HhEditDraft[] {
   const sources = matchedPlaces(input);
   return input.resume.sections.places.flatMap((place, index) => {
     const source = sources[index];
-    const lines = (source?.bullets ?? []).map((line) => line.trim()).filter(Boolean).slice(0, PLACE_LINES_MAX);
+    const lines = (source?.bullets ?? [])
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, PLACE_LINES_MAX)
+      .map((line) => (source ? withResumeEmployer(line, place.employer, source) : line));
     const now = lines.join('\n');
     if (lines.length === 0 || normalized(now) === normalized(place.text)) return [];
     return [
@@ -144,5 +161,7 @@ function aboutEdit(input: HhEditsInput): HhEditDraft[] {
 
 export function draftHhResumeEdits(input: HhEditsInput): HhEditDraft[] {
   if (!hhSectionsRead(input.resume.sections)) return [];
-  return [...experienceEdits(input), ...skillsEdit(input), ...aboutEdit(input)];
+  const drafted = [...experienceEdits(input), ...skillsEdit(input), ...aboutEdit(input)];
+  const covered = new Set(drafted.map((edit) => edit.id));
+  return [...drafted, ...factEdits(input.resume.sections, input.platform.facts, covered)];
 }
