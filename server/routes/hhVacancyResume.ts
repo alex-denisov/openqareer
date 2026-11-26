@@ -1,6 +1,7 @@
 import {
   hhSectionsRead,
   type HhResumeContent,
+  type HhResumeCopy,
   type HhResumeSnapshot,
 } from '../../shared/hhCandidateSession';
 import { reviewHhResumes, type HhTitleRank } from '../domain/hhResumeReview';
@@ -58,6 +59,20 @@ export function chooseHhResume(
   return { ...snapshot, choices: { ...Object.fromEntries(kept), [vacancyId]: resumeId } };
 }
 
+/** B787: копию под другую вакансию к этой не предлагаем. */
+export function withoutOtherCopies(snapshot: HhResumeSnapshot, vacancyId: string): HhResumeSnapshot {
+  const others = new Set(
+    Object.entries(snapshot.copies ?? {}).flatMap(([id, copy]) => (id !== vacancyId && copy.copyId ? [copy.copyId] : [])),
+  );
+  return others.size > 0 ? { ...snapshot, resumes: snapshot.resumes.filter((item) => !others.has(item.id)) } : snapshot;
+}
+
+export function saveHhCopy(snapshot: HhResumeSnapshot, vacancyId: string, copy: HhResumeCopy | null): HhResumeSnapshot {
+  const { [vacancyId]: _previous, ...others } = snapshot.copies ?? {};
+  const kept = Object.fromEntries(Object.entries(others).slice(-(CHOICES_MAX - 1)));
+  return { ...snapshot, copies: copy ? { ...kept, [vacancyId]: copy } : kept };
+}
+
 function contentOf(snapshot: HhResumeSnapshot, resumeId: string): HhResumeContent | null {
   const found = [
     ...(snapshot.selected ? [snapshot.selected] : []),
@@ -79,7 +94,7 @@ export function resumesForVacancy(
   const listed = chosen && snapshot.resumes.some((item) => item.id === chosen) ? chosen : null;
   const cluster = listed ? undefined : resolvePoolVacancyCluster(deps.multiSourceEngine, vacancyId);
   const fitting = cluster
-    ? reviewHhResumes(snapshot, cluster.skills, titleRank(cluster.canonicalTitle)).recommendedId
+    ? reviewHhResumes(withoutOtherCopies(snapshot, vacancyId), cluster.skills, titleRank(cluster.canonicalTitle)).recommendedId
     : null;
   const id = listed ?? fitting ?? snapshot.selected?.id;
   return { ...snapshot, selected: id ? contentOf(snapshot, id) : null };

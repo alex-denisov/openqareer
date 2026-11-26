@@ -347,3 +347,43 @@ describe('B787: согласие по поручению', () => {
     expect(again.json().error.code).toBe('hh_already_applied');
   });
 });
+
+describe('B787: копия резюме hh.ru под вакансию', () => {
+  const COPY = { sourceId: 'abc123', knownIds: ['abc123'], copyId: 'copy1', stage: 'hidden' };
+  const put = (app: App, copy: unknown) => call(app, 'PUT', `${RESUMES}/copy`, flagged, { vacancyId: 'v-1', copy });
+
+  it('хранится за вакансией, переживает новое чтение резюме и снимается', async () => {
+    const { app } = await setup();
+    expect((await put(app, COPY)).statusCode).toBe(409);
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    expect((await put(app, COPY)).json().data.copy).toEqual(COPY);
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    const read = async (query: string) => (await call(app, 'GET', `${RESUMES}${query}`, flagged)).json().data;
+    expect((await read('?vacancyId=v-1')).copy).toEqual(COPY);
+    expect((await read('?vacancyId=v-2')).copy).toBeUndefined();
+    expect((await read('')).copies).toBeUndefined();
+    expect((await put(app, null)).json().data.copy).toBeUndefined();
+  });
+
+  it.each([
+    { ...COPY, copyId: 'abc123' },
+    { ...COPY, copyId: undefined },
+    { ...COPY, knownIds: ['zzz'] },
+    { ...COPY, stage: 'x' },
+  ])('не принимает чужое или неполное: %j', async (copy) => {
+    const { app } = await setup();
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    expect((await put(app, copy)).statusCode).toBe(400);
+  });
+
+  it('незаполненной копией отклик не начинается', async () => {
+    const { app } = await setup();
+    const resumes = [...SNAPSHOT.resumes, { id: 'copy1', title: 'Копия' }];
+    await call(app, 'PUT', RESUMES, flagged, { ...SNAPSHOT, resumes });
+    await put(app, COPY);
+    const refused = await call(app, 'POST', APPLY, flagged, attempt({ resumeId: 'copy1' }));
+    expect([refused.statusCode, refused.json().error.code]).toEqual([409, 'hh_copy_not_ready']);
+    await put(app, { ...COPY, stage: 'ready' });
+    expect((await call(app, 'POST', APPLY, flagged, attempt({ resumeId: 'copy1' }))).json().error?.code).not.toBe('hh_copy_not_ready');
+  });
+});

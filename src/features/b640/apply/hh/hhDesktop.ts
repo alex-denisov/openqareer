@@ -177,3 +177,28 @@ export async function applyHhResumeEditInSession(input: HhResumeEditInput): Prom
   if (!report) throw new Error('desktop_unavailable');
   return report;
 }
+
+export interface HhCopyReport {
+  readonly outcome: 'copied' | 'hidden' | 'deleted' | 'failed';
+  readonly copyId?: string | null;
+  readonly failureCode?: string | null;
+}
+
+async function copyCommand(command: string, request: Record<string, unknown>): Promise<HhCopyReport> {
+  if ((await ensureHhWindow()) === 'signed_out') return { outcome: 'failed', failureCode: 'not_signed_in' };
+  await hideHhWindow();
+  const report = await invokeDesktopCommand<HhCopyReport>(command, { request });
+  if (!report) throw new Error('desktop_unavailable');
+  return report;
+}
+
+/** B787: копия резюме в окне кандидата. Вызывается только после «Создать резюме под вакансию». */
+export const copyHhResume = (sourceId: string, knownIds: readonly string[]) =>
+  copyCommand('run_hh_resume_copy', { sourceId, knownIds });
+
+/** Копия не видна никому: подтверждено страницей hh.ru, загруженной заново. */
+export const hideHhCopy = (copyId: string, knownIds: readonly string[]) =>
+  copyCommand('run_hh_resume_hide', { copyId, knownIds });
+
+export const deleteHhCopy = (copyId: string, knownIds: readonly string[]) =>
+  copyCommand('run_hh_resume_delete_copy', { copyId, knownIds });

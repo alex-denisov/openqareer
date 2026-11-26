@@ -3,6 +3,7 @@ import type {
   HhApplyOutcome,
   HhConsentReport,
   HhResumeContent,
+  HhResumeCopy,
   HhResumeEdit,
   HhResumeReview,
   HhResumeSnapshot,
@@ -52,6 +53,16 @@ export async function chooseHhResumeFor(vacancyId: string, resumeId: string): Pr
     method: 'PUT',
     headers: JSON_HEADERS,
     body: JSON.stringify({ vacancyId, resumeId }),
+  });
+  return readDataObject<HhResumeSnapshot>(response);
+}
+
+/** B787: что известно о копии под вакансию; `null` — копии больше нет. */
+export async function saveHhCopyFor(vacancyId: string, copy: HhResumeCopy | null): Promise<HhResumeSnapshot> {
+  const response = await apiFetch(`${BASE}/resumes/copy`, {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ vacancyId, copy }),
   });
   return readDataObject<HhResumeSnapshot>(response);
 }

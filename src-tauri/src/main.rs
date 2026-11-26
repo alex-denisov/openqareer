@@ -21,6 +21,8 @@ mod hh_apply_scripts;
 mod hh_jsdom_harness;
 mod hh_questionnaire;
 mod hh_raise;
+mod hh_resume_copy;
+mod hh_resume_copy_scripts;
 mod hh_resume_edit;
 mod hh_resume_edit_scripts;
 mod hh_resume_experience;
@@ -326,6 +328,45 @@ async fn run_hh_experience_edit(
         return Err("forbidden_caller".into());
     }
     hh_resume_experience::run_hh_experience_edit(&app, request).await
+}
+
+/// B787: a copy of the candidate's hh.ru resume, after they asked for one for this vacancy.
+#[tauri::command]
+async fn run_hh_resume_copy(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: hh_resume_copy::HhCopyRequest,
+) -> Result<hh_resume_copy::HhCopyReport, String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    hh_resume_copy::run_hh_resume_copy(&app, request).await
+}
+
+/// B787: that copy hidden from everyone, confirmed by a reloaded hh.ru page.
+#[tauri::command]
+async fn run_hh_resume_hide(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: hh_resume_copy::HhCopyActionRequest,
+) -> Result<hh_resume_copy::HhCopyReport, String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    hh_resume_copy::run_hh_resume_hide(&app, request).await
+}
+
+/// B787: the copy taken away when it could not be hidden.
+#[tauri::command]
+async fn run_hh_resume_delete_copy(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: hh_resume_copy::HhCopyActionRequest,
+) -> Result<hh_resume_copy::HhCopyReport, String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    hh_resume_copy::run_hh_resume_delete_copy(&app, request).await
 }
 
 /// B699: raises the candidate's hh.ru resume in their own hh.ru window; only the cabinet may ask.
@@ -807,6 +848,9 @@ fn main() {
             ats_form_close,
             run_hh_resume_edit,
             run_hh_experience_edit,
+            run_hh_resume_copy,
+            run_hh_resume_hide,
+            run_hh_resume_delete_copy,
             run_hh_raise,
             desktop_native_fetch,
             print_resume,

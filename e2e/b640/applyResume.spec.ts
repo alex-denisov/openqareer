@@ -1,3 +1,4 @@
+import { installDesktopApiTestBridge } from '../../scripts/desktop-api-test-bridge.mjs';
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { expectGates } from './gates';
 import { mockResponses, siteDraft } from './responsesFixture';
@@ -280,7 +281,7 @@ test.describe('отклик на hh.ru: шаг «Резюме»', () => {
     { id: 'c', title: 'CTO' },
   ];
 
-  async function openHh(page: Page, data: object | null) {
+  async function openHh(page: Page, data: object | null, review: object = { resumes: [] }) {
     const prepared: string[] = [];
     await mockResponses(page);
     // Вакансии в подборке уже нет: площадка — из снимка отклика.
@@ -316,6 +317,9 @@ test.describe('отклик на hh.ru: шаг «Резюме»', () => {
           },
         },
       }),
+    );
+    await page.route('**/api/v1/candidate/hh/resumes/review*', (route) =>
+      route.fulfill({ json: { data: review } }),
     );
     await page.route('**/api/v1/candidate/hh/resumes/choice', (route) =>
       route.fulfill({
@@ -357,4 +361,42 @@ test.describe('отклик на hh.ru: шаг «Резюме»', () => {
     expect(prepared).toEqual([]);
     await expectGates(page);
   });
+
+  for (const [name, copy, expected] of [
+    ['offer', null, 'Создать резюме под вакансию'],
+    [
+      'unfinished',
+      { sourceId: 'c', knownIds: ['c'], copyId: 'a', stage: 'hidden' },
+      'Продолжить создание',
+    ],
+    ['ready', { sourceId: 'c', knownIds: ['c'], copyId: 'a', stage: 'ready' }, 'Одобрить резюме'],
+  ] as const) {
+    test(`B787: резюме под вакансию в приложении — ${name}`, async ({ page }, info) => {
+      await page.addInitScript(installDesktopApiTestBridge);
+      await page.addInitScript(() => {
+        localStorage.setItem('openqareer_session_token', 'desktop-e2e-session');
+        Object.assign(window, { __TAURI_INTERNALS__: { invoke: async () => null } });
+      });
+      const review = {
+        resumes: [
+          {
+            resumeId: 'a',
+            title: 'x',
+            status: copy ? 'fits' : 'gaps',
+            matched: [],
+            missing: copy ? [] : ['Kotlin', 'Kubernetes'],
+          },
+        ],
+      };
+      const selected = { id: 'a', title: resumes[0]!.title, text: 'x', sections: SECTIONS };
+      await openHh(page, { resumes, selected, readAt: 'x', ...(copy ? { copy } : {}) }, review);
+      await expect(page.getByRole('button', { name: expected })).toBeVisible({ timeout: 15_000 });
+      if (name === 'offer') {
+        await expect(page.getByText('Не хватает: Kotlin, Kubernetes')).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Применить все на hh.ru' })).toHaveCount(0);
+      }
+      await expectGates(page);
+      await page.screenshot({ path: info.outputPath(`b787-${name}.png`), fullPage: true });
+    });
+  }
 });

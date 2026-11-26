@@ -268,18 +268,23 @@ pub(crate) fn wait_before_next_edit() -> Duration {
     wait
 }
 
+/// Clears what an earlier run on this page left behind.
+pub(crate) async fn reset_editor(window: &tauri::Webview) {
+    let _ = eval_json(window, &reset_script()).await;
+}
+
 /// Opens the editor page fresh: flags of an earlier run on the same page are cleared.
 async fn open_clean_editor(app: &AppHandle, url: &str) -> Result<Option<tauri::Webview>, String> {
     let window = open_editor(app, url).await?;
     if !on_hh(&window) {
         return Ok(None);
     }
-    let _ = eval_json(&window, &reset_script()).await;
+    reset_editor(&window).await;
     Ok(Some(window))
 }
 
 /// Presses «Сохранить» and waits for hh.ru to leave the editor; `Err` carries the failure code.
-async fn save(window: &tauri::Webview, path: &str) -> Result<(), String> {
+pub(crate) async fn save(window: &tauri::Webview, path: &str) -> Result<(), String> {
     let clicked = wait_for(window, &save_script(path), FIELD_WAIT).await;
     if clicked != "save_clicked" {
         return Err(if clicked == "timeout" {

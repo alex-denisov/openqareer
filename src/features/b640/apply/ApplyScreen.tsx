@@ -279,6 +279,7 @@ function EditorBody(props: BodyProps) {
         {onHh && step === 'resume' ? (
           <HhResumeStep
             vacancyId={vacancyId}
+            vacancyTitle={head.title}
             confirmed={resumeOk}
             onConfirm={() => void props.onResumeOk(null)}
             dock={dock}
