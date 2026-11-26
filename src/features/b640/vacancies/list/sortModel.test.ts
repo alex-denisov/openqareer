@@ -93,3 +93,34 @@ describe('порядок подборки по умолчанию (s07)', () => 
     expect(serverSortApplies({ complete: false, loading: false, failed: true })).toBe(false);
   });
 });
+
+describe('сортировка по деньгам с оценкой (B803)', () => {
+  it('строка без зарплаты, но с оценкой, встаёт по оценке', () => {
+    const stated = makeItem({ id: 's' });
+    const withSalary = {
+      ...stated,
+      cluster: { ...stated.cluster, salary: { from: 300_000, currency: 'RUR', period: 'month' } },
+    };
+    const base = makeItem({ id: 'e' });
+    const estimated = {
+      ...base,
+      explanation: {
+        ...base.explanation,
+        marketSalary: {
+          low: 500_000,
+          high: 600_000,
+          currency: 'RUR',
+          period: 'month',
+          tax: 'unknown',
+          computedAt: '2026-11-20T03:00:00.000Z',
+        },
+      },
+    };
+    const none = makeItem({ id: 'n' });
+    const sorted = sortItems([none, withSalary, estimated] as typeof items, {
+      key: 'money',
+      dir: 'desc',
+    });
+    expect(ids(sorted)).toEqual(['e', 's', 'n']);
+  });
+});
