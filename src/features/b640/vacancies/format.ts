@@ -1,4 +1,5 @@
 import { convertAmount, type CurrencyRates } from '../../../../shared/currencyRates';
+import { marketSalaryLabel } from '../../../../shared/marketSalaryEstimate';
 import {
   monthlyAmount,
   salaryPeriodOf,
@@ -31,6 +32,8 @@ export interface MoneyView {
   readonly unit?: string;
   /** Подсказка с исходной суммой и курсом — только у пересчитанных денег. */
   readonly title?: string;
+  /** B803: вакансия без зарплаты, показана оценка openqareer. */
+  readonly estimate?: boolean;
 }
 
 const TIER_WORDS: Readonly<Record<VacancyFitTier, string>> = {
@@ -144,6 +147,29 @@ function shownAmounts(salary: ClusterSalary, period: SalaryPeriod): ClusterSalar
 /** Деньги строки и карточки: в выбранной валюте по курсу ЦБ, без курса — как в вакансии. */
 export function moneyView(item: MatchedVacancyItem, options: MoneyOptions): MoneyView {
   return salaryMoneyView(item.cluster.salary, options);
+}
+
+/**
+ * B803: строка списка — вилка вакансии, а без неё оценка openqareer в том же пересчёте, всегда
+ * с «≈» и подсказкой «Оценка openqareer, дата».
+ */
+export function rowMoneyView(item: MatchedVacancyItem, options: MoneyOptions): MoneyView {
+  const salary = item.cluster.salary;
+  const market = item.explanation.marketSalary;
+  if ((salary && (salary.from !== undefined || salary.to !== undefined)) || !market)
+    return moneyView(item, options);
+  const { low, high, currency, period } = market;
+  const view = salaryMoneyView({ from: low, to: high, currency, period }, options);
+  const text = view.text.startsWith('≈') ? view.text : `≈ ${view.text}`;
+  const amount = view.amount && !view.amount.startsWith('≈') ? `≈ ${view.amount}` : view.amount;
+  const label = marketSalaryLabel(market.computedAt);
+  return {
+    ...view,
+    text,
+    ...(amount ? { amount } : {}),
+    title: view.title ? `${label}. ${view.title}` : label,
+    estimate: true,
+  };
 }
 
 /** То же правило для суммы без строки подборки — у своей вакансии кандидата (B676). */

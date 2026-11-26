@@ -4,7 +4,7 @@ import type { ApplicationStage } from '../../../../../shared/applicationStage';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { Button, Icon, InfoTip, Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
-import { moneyView, rowDate, rowFormat } from '../../vacancies/format';
+import { rowMoneyView, rowDate, rowFormat } from '../../vacancies/format';
 import { rememberClusters } from '../../shell/vacancyNames';
 import { FitCell } from '../../vacancies/list/VacancyRow';
 import { applicationTag, formatCount } from '../format';
@@ -27,7 +27,7 @@ const FIT_TIP = 'Совпадение требований вакансии с �
 /** Деньги, формат и дата строки вакансии; пустая часть выпадает. */
 function vacancyParts(item: MatchedVacancyItem) {
   return {
-    money: moneyView(item, { currency: 'RUB' }).text,
+    money: rowMoneyView(item, { currency: 'RUB' }).text,
     format: rowFormat(item).toLocaleLowerCase('ru-RU'),
     date: rowDate(item),
   };
