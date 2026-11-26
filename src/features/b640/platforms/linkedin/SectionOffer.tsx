@@ -18,7 +18,7 @@ interface SectionOfferProps {
   readonly locked?: boolean;
 }
 
-/** «‹ Вариант 2 из 3 ›»: у единственного текста листать нечего. */
+/** «‹ 2 из 3 ›» (как o02): у единственного текста листать нечего. */
 function VariantSwitch({ label, index, total, onSelect }: {
   readonly label: string;
   readonly index: number;
@@ -31,7 +31,7 @@ function VariantSwitch({ label, index, total, onSelect }: {
       <button className="icon-btn" type="button" aria-label="Предыдущий вариант" disabled={index === 0} onClick={() => onSelect(index - 1)}>
         <Icon name="left" />
       </button>
-      <span className="num">{`Вариант ${index + 1} из ${LINKEDIN_VARIANTS_MAX}`}</span>
+      <span className="num">{`${index + 1} из ${total}`}</span>
       <button className="icon-btn" type="button" aria-label="Следующий вариант" disabled={index >= total - 1} onClick={() => onSelect(index + 1)}>
         <Icon name="right" />
       </button>
@@ -135,7 +135,7 @@ export function SectionOffer(props: SectionOfferProps) {
         </p>
         <VariantSwitch label={label} index={shown.index} total={offer.variants.length} onSelect={shown.select} />
         <div className="li-offer-a">
-          <CopyButton text={shown.text} label={label} caption="Скопировать" className="btn is-sm" />
+          <CopyButton text={shown.text} label={label} />
           <button
             className="icon-btn li-alt"
             type="button"

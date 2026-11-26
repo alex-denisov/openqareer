@@ -966,9 +966,9 @@ test.describe('B657: единый экран отклика', () => {
     await page.getByRole('button', { name: 'Резюме hh.ru «Руководитель разработки»' }).click();
     const next = page.getByRole('dialog').getByRole('button', { name: 'Продолжить' });
     await expect(next.locator('svg')).toHaveCount(1, { timeout: 15_000 });
-    await page.keyboard.press('Escape');
-
-    await page.getByRole('button', { name: '2 правки' }).click();
+    // M7-1: на a01 отметки «N правки» нет, разбор открывается из листа выбора.
+    await expect(page.locator('.ap-parts .res-act')).toHaveCount(0);
+    await next.click();
     const applyAll = page.getByRole('button', { name: 'Применить все на hh.ru' });
     await expect(page.getByRole('radio', { name: 'Руководитель разработки' })).toBeChecked();
     await expect(applyAll).toBeInViewport();

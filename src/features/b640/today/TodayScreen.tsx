@@ -3,7 +3,6 @@ import type { CandidateStatusToday, TodayStatusModule } from '../../../../shared
 import { pluralRu } from '../../../../shared/pluralRu';
 import { useTodayDay, type TodayDay } from './useTodayDay';
 import type { B640Node } from '../routes';
-import { useIsMobile } from '../kit/useMediaQuery';
 import { BlockError, BlockSkeleton, LeadQuietContext } from './parts';
 import { useManualQueue } from '../responses/data/manualQueue';
 import { responseEvents } from './responseEventsModel';
@@ -95,7 +94,7 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
   // Макет s04: при «Присматриваюсь» вопрос стоит над колонками, иначе — в правой (s05b).
   const wideSignal = status.status === 'looking' || layout.side.length === 0;
   const [signalShown, setSignalShown] = useState(false);
-  const mobile = useIsMobile();
+  const questionOnTop = wideSignal && signalShown;
   const signal = (
     <StatusSignalBlock statusTitle={status.title} wide={wideSignal} onShown={setSignalShown} />
   );
@@ -110,12 +109,13 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
       />
     ));
   return (
-    <LeadQuietContext.Provider value={events.length > 0 || (mobile && wideSignal && signalShown)}>
+    <LeadQuietContext.Provider value={events.length > 0 || questionOnTop}>
       <StatusStrip
         status={status}
         revertedTitle={revertedTitle}
         onReverted={onReverted}
         funnel={funnel}
+        withoutRow={questionOnTop}
       />
       {wideSignal ? signal : null}
       <div className="col">

@@ -131,7 +131,6 @@ function RunStep({ check, onLater }: { readonly check: SkillCheck; readonly onLa
         busy={state.busy}
         failed={Boolean(state.error)}
         onNext={() => void check.nextAfterResult(true)}
-        onSkip={() => void check.nextAfterResult(false)}
         onAgain={check.answerAgain}
         onAppeal={actions.appealCase}
       />

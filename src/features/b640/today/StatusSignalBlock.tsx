@@ -45,7 +45,7 @@ function SignalCard({ signal, busy, onAnswer }: SignalCardProps) {
           <Button
             key={answer}
             size="sm"
-            variant={answer === 'yes' ? 'default' : 'quiet'}
+            variant={answer === 'yes' ? 'primary' : 'quiet'}
             icon={icon}
             busy={busy === answer}
             disabled={busy !== null}

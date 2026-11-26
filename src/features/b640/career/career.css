@@ -76,6 +76,12 @@
     flex-wrap: wrap;
     align-items: center;
   }
+  /* S9c на 390 (M9-1): «Искать…» и «Отмена» столбцом во всю ширину, как в макете. */
+  @media (max-width: 767px) {
+    .b640 .rs-dlg .pf-df > .btn {
+      flex-basis: 100%;
+    }
+  }
   /* C10: ошибка поля «Зарплата от» — как у полей профиля (`.pf-f small.is-err`). */
   .b640 .cc-edit .field small.is-err {
     display: flex;

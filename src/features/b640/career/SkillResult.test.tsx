@@ -9,7 +9,6 @@ afterEach(() => view?.unmount());
 
 function render(decision: 'pending' | 'accepted' | 'declined' | undefined) {
   const onNext = vi.fn();
-  const onSkip = vi.fn();
   const record = {
     assessmentCase: { skillName: 'Kubernetes' },
     evaluation: { grade: 'confirmed', criteria: [] },
@@ -21,7 +20,6 @@ function render(decision: 'pending' | 'accepted' | 'declined' | undefined) {
       busy={false}
       failed={false}
       onNext={onNext}
-      onSkip={onSkip}
       onAgain={() => undefined}
       onAppeal={async () => true}
     />,
@@ -29,15 +27,14 @@ function render(decision: 'pending' | 'accepted' | 'declined' | undefined) {
   const button = (name: string) =>
     [...view!.container.querySelectorAll('button')].find((item) => item.textContent === name) ??
     null;
-  return { onNext, onSkip, button };
+  return { onNext, button };
 }
 
 describe('SkillResult: итог кейса ждёт решения (B734)', () => {
-  it('«Верно» и «Пропустить» — разные решения', () => {
-    const { onNext, onSkip, button } = render('pending');
-    click(button('Пропустить'));
-    expect(onSkip).toHaveBeenCalledOnce();
-    expect(onNext).not.toHaveBeenCalled();
+  it('по макету C4b: «Верно», «Исправить», без «Пропустить»', () => {
+    const { onNext, button } = render('pending');
+    expect(button('Пропустить')).toBeNull();
+    expect(button('Исправить')).not.toBeNull();
     click(button('Верно'));
     expect(onNext).toHaveBeenCalledOnce();
   });
