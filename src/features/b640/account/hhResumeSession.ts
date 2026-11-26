@@ -1,4 +1,6 @@
 import type { HhResumeItem } from '../../connections/hhSessionPoll';
+import type { NativeImportMode } from '../../resume/resumeApi';
+import type { ParsedResume } from '../../workspace/resumeParser';
 
 /**
  * n03, строка hh.ru в приложении: «Обновить сейчас» и «Сменить резюме».
@@ -57,5 +59,20 @@ export async function refreshHhProfile(
     parsed,
     sourceUrl: item.url,
     capturedAt: new Date().toISOString(),
+  });
+}
+
+/** a11b → n03: резюме, прочитанное окном подключения, сохраняется с профилем или только подключением. */
+export async function connectHhFromSession(
+  parsed: ParsedResume,
+  sourceUrl: string,
+  importMode: NativeImportMode | null,
+): Promise<void> {
+  const { persistHhSessionImport } = await import('../../connections/AccountConnections');
+  await persistHhSessionImport({
+    parsed,
+    sourceUrl,
+    capturedAt: new Date().toISOString(),
+    ...(importMode ? { importMode } : {}),
   });
 }

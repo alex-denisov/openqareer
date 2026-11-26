@@ -12,10 +12,12 @@ import { disconnectAndForgetSession } from '../../connections/connectionState';
 import { resetConnectorSession } from '../../connections/connectorSession';
 import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { Icon } from '../kit/Icon';
+import { StatusLine } from '../kit/ResultLine';
 import { useToast } from '../kit/Toast';
 import { buildNodePath, type B640Node } from '../routes';
 import { Link } from '../shell/Link';
 import { useShell } from '../shell/ShellContext';
+import { HhConnectAction } from './HhConnectAction';
 import { HhRowResult, useHhRowActions } from './HhRowActions';
 import { getHhSessionState } from './hhSessionApi';
 import { connectedCount, connectionLine, emailConfirmed, PLATFORM_NAME, updatedLine } from './model';
@@ -80,6 +82,8 @@ interface PlatformRowProps {
   readonly expired?: boolean;
   /** hh.ru в приложении: обновить профиль из резюме и сменить резюме откликов. */
   readonly onRefreshed?: () => void;
+  /** hh.ru не подключён: подключение сохранено, строки перечитываются. */
+  readonly onConnected?: () => void;
 }
 
 /** Пункты меню площадки в приложении: «Обновить сейчас»; у hh.ru ещё «Сменить резюме». */
@@ -273,7 +277,9 @@ function PlatformActions({ connection, onDisconnected, hh }: PlatformRowProps & 
   );
 }
 
-function PlatformRow({ connection, onDisconnected, expired, onRefreshed }: PlatformRowProps) {
+function PlatformRow({ connection, onDisconnected, expired, onRefreshed, onConnected }: PlatformRowProps) {
+  const [hhEmpty, setHhEmpty] = useState(false);
+  const canConnect = connection.platform === 'hh' && connection.status === 'disconnected' && onConnected;
   const hhActions = useHhRowActions(onRefreshed ?? (() => undefined), connection.platform);
   const change = connection.platform === 'hh' ? hhActions.change : undefined;
   const onConnect = expired ? hhActions.connect : undefined;
@@ -291,10 +297,12 @@ function PlatformRow({ connection, onDisconnected, expired, onRefreshed }: Platf
           <span className="set-v">{connectionLine(connection)}</span>
         )}
         {hh ? <HhRowResult actions={hhActions} /> : null}
+        {hhEmpty ? <StatusLine state="err" text="На hh.ru у вас нет резюме" /> : null}
       </div>
       {connection.status === 'connected' ? (
         <PlatformActions connection={connection} onDisconnected={onDisconnected} hh={hh} />
       ) : null}
+      {canConnect ? <HhConnectAction onConnected={onConnected} onEmpty={setHhEmpty} /> : null}
     </li>
   );
 }
@@ -373,6 +381,7 @@ export function ConnectionsScreen({ node }: { readonly node: B640Node }) {
               expired={connection.platform === 'hh' && connection.status === 'connected' && hhExpired}
               onDisconnected={() => disconnected(connection.platform)}
               onRefreshed={refreshInApp(connection) ? load.retry : undefined}
+              onConnected={load.retry}
             />
           ))}
           {telegram ? <TelegramRow telegram={telegram} /> : null}
