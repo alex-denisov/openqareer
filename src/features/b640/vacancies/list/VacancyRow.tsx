@@ -4,7 +4,7 @@ import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import { Icon, Link } from '../../kit';
 import { buildNodePath } from '../../routes';
-import { fitTierWord, moneyView, rowDate, rowFormat, rowGeo, type MoneyCurrency } from '../format';
+import { fitTierWord, rowMoneyView, rowDate, rowFormat, rowGeo, type MoneyCurrency } from '../format';
 import { appliedOn, isSaved } from '../vacancyLinks';
 import { NO_COMPANY, companyNodePath } from '../companyPath';
 import { RowMenu, type MenuView, type RowMenuActions } from './RowMenu';
@@ -75,13 +75,14 @@ export function FitCell({ item, env }: { item: MatchedVacancyItem; env: RowEnv }
 }
 
 export function MoneyCell({ item, env }: { item: MatchedVacancyItem; env: RowEnv }) {
-  const money = moneyView(item, { currency: env.currency, rates: env.rates });
+  const money = rowMoneyView(item, { currency: env.currency, rates: env.rates });
   const salary = item.cluster.salary;
-  const unset = salary?.from === undefined && salary?.to === undefined;
+  const unset = !money.estimate && salary?.from === undefined && salary?.to === undefined;
   return (
     <span className={`vt-main num${unset ? ' is-none' : ''}`} title={money.title}>
       {money.amount ?? money.text}
       {money.unit ? <span className="vt-cur"> {money.unit}</span> : null}
+      {money.estimate ? <span className="vh">, {money.title}</span> : null}
     </span>
   );
 }

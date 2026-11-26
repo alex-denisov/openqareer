@@ -5,6 +5,7 @@ import {
   moneyView,
   pluralRu,
   remoteLabel,
+  rowMoneyView,
   rowDate,
   rowFormat,
   rowGeo,
@@ -148,5 +149,45 @@ describe('format: строка вакансии B640', () => {
     expect(safeHttpUrl('data:text/html,x')).toBeUndefined();
     expect(safeHttpUrl('не адрес')).toBeUndefined();
     expect(safeHttpUrl(undefined)).toBeUndefined();
+  });
+});
+
+describe('rowMoneyView: оценка в строке без зарплаты (B803)', () => {
+  const market = {
+    low: 545_000,
+    high: 635_000,
+    currency: 'RUR',
+    period: 'month',
+    tax: 'unknown',
+    computedAt: '2026-11-20T03:00:00.000Z',
+  };
+  const withMarket = (cluster: Record<string, unknown>): MatchedVacancyItem => {
+    const base = item(cluster);
+    return {
+      ...base,
+      explanation: { ...base.explanation, marketSalary: market },
+    } as MatchedVacancyItem;
+  };
+
+  it('без зарплаты показывает оценку с ≈ и подписью источника', () => {
+    const view = rowMoneyView(withMarket({}), { currency: 'RUB', rates: RATES });
+    expect(view.estimate).toBe(true);
+    expect(view.text.startsWith('≈')).toBe(true);
+    expect(view.text).toContain('545');
+    expect(view.title).toContain('Оценка openqareer, 20.11');
+  });
+
+  it('с зарплатой вакансии оценку не подставляет', () => {
+    const view = rowMoneyView(withMarket({ salary: { from: 300_000, currency: 'RUR' } }), {
+      currency: 'RUB',
+      rates: RATES,
+    });
+    expect(view.estimate).toBeUndefined();
+    expect(view.text).not.toContain('545');
+  });
+
+  it('без зарплаты и оценки — как moneyView', () => {
+    const plain = item({});
+    expect(rowMoneyView(plain, { currency: 'RUB' })).toEqual(moneyView(plain, { currency: 'RUB' }));
   });
 });
