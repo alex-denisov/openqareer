@@ -185,10 +185,21 @@ interface FindingRowProps {
   readonly item: FootprintRiskItem;
   /** P2 показывает уровень у каждой находки; в сводке F3 он стоит у категории. */
   readonly showLevel?: boolean;
+  /** F4 «Полезное»: у находки только «В профиль» (макет f04). */
+  readonly profileOnly?: boolean;
   readonly onChanged: () => void;
 }
 
-export function FindingRow({ item, showLevel = false, onChanged }: FindingRowProps) {
+function ProfileOnlyActions({ item }: { readonly item: FootprintRiskItem }) {
+  if (!item.findingId) return null;
+  return (
+    <div className="fp-acts">
+      <AddToProfile findingId={item.findingId} />
+    </div>
+  );
+}
+
+export function FindingRow({ item, showLevel = false, profileOnly = false, onChanged }: FindingRowProps) {
   return (
     <li className="row fp-find">
       <div>
@@ -201,7 +212,7 @@ export function FindingRow({ item, showLevel = false, onChanged }: FindingRowPro
             </span>
           </div>
         ) : null}
-        <RowActions item={item} onChanged={onChanged} />
+        {profileOnly ? <ProfileOnlyActions item={item} /> : <RowActions item={item} onChanged={onChanged} />}
       </div>
     </li>
   );

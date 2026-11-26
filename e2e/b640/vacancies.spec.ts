@@ -544,6 +544,11 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await toggles.nth(0).click();
     await expect(page.locator('.vt-detail-row .vs')).toHaveCount(1);
     await expect(page.getByRole('link', { name: 'Откликнуться' })).toBeVisible();
+    // Макет v06b (M9-2): «Откликнуться» в самой раскрытой строке, без закреплённой полосы.
+    await expect(
+      page.locator('.vt-detail-row .vs-acts').getByRole('link', { name: 'Откликнуться' }),
+    ).toBeVisible();
+    await expect(page.locator('.act-dock')).toHaveCount(0);
     await toggles.nth(1).click();
     await expect(page.locator('.vt-detail-row .vs')).toHaveCount(1);
   });

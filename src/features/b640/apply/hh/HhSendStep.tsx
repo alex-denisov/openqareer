@@ -8,12 +8,11 @@ import { Button, Dialog, Icon, Link, ResultLine, StatusLine, useToast } from '..
 import { buildNodePath } from '../../routes';
 import { UNKNOWN_VACANCY_TITLE, type ApplyHead } from '../model/applyModel';
 import { showHhCaptcha, showHhResponse } from './hhDesktop';
-import { editsWord, HhResumeEdits } from './HhResumeEdits';
+import { HhResumeEdits } from './HhResumeEdits';
 import { HhResumeSheet } from './HhResumeSheet';
 import { useHhResumeEdits } from './useHhResumeEdits';
 import { elapsedLabel, QUESTION_TEXT, uniqueResumeTitle, type HhSendQuestion } from './hhSendModel';
 import { useHhApply, type HhApplyControls, type HhApplyInput } from './useHhApply';
-import { useMarkSent, type MarkSentState } from './useMarkSent';
 import { useHhResumes, type HhResumesState } from './useHhResumes';
 
 export interface HhSendStepProps {
@@ -52,11 +51,10 @@ export interface HhSendForm {
 interface PartsProps {
   readonly props: HhSendStepProps;
   readonly resumes: HhResumesState;
-  readonly editCount: number;
-  readonly onEdits: () => void;
 }
 
-function Parts({ props, resumes, editCount, onEdits }: PartsProps) {
+/** Что уйдёт в отклике (a01): у резюме нет отметки правок — их разбор открывается из листа выбора. */
+function Parts({ props, resumes }: PartsProps) {
   const selected = resumes.snapshot?.selected ?? null;
   return (
     <ul className="rows exp-rows ap-parts" aria-label="Что уйдёт в отклике">
@@ -74,11 +72,6 @@ function Parts({ props, resumes, editCount, onEdits }: PartsProps) {
           <button className="row-title ap-pick" type="button" onClick={resumes.openPicker}>
             {selected ? `Резюме hh.ru «${selected.title}»` : 'Выбрать резюме hh.ru'}
           </button>
-          {selected && editCount > 0 ? (
-            <button className="res-act" type="button" onClick={onEdits}>
-              {editsWord(editCount)}
-            </button>
-          ) : null}
         </div>
         {selected ? <span className="tag ok">готово</span> : null}
       </li>
@@ -195,21 +188,6 @@ function Outcome({ apply, resumes, responsePath, props }: OutcomeProps) {
   );
 }
 
-function MarkedOutcome({ marked, responsePath }: { readonly marked: MarkSentState; readonly responsePath: string }) {
-  if (marked.kind === 'error') return <StatusLine state="err" text={marked.text} />;
-  if (marked.kind !== 'done') return null;
-  return (
-    <>
-      <ResultLine text="Отклик отмечен как отправленный" />
-      <div className="actions">
-        <Link className="btn is-primary" to={responsePath}>
-          <Icon name="right" />К отклику
-        </Link>
-      </div>
-    </>
-  );
-}
-
 function ConfirmDialog({ apply, title }: { apply: HhApplyControls; title: string }) {
   const footer = (
     <>
@@ -283,9 +261,7 @@ export function HhSendStep(props: HhSendStepProps) {
   const selected = resumes.snapshot?.selected;
   const resumeId = selected?.id ?? null;
   const apply = useStepApply(props, resumes);
-  const marked = useMarkSent(props.onSent);
   const sent = isSent(apply.state.kind);
-  const done = sent || marked.state.kind === 'done';
   const responsePath = buildNodePath('o01c', { responseId: props.applicationId });
   if (reviewing && editsLoading) return <StatusLine state="wait" text="Готовим правки" />;
   if (reviewing && selected && edits.length > 0) {
@@ -294,10 +270,10 @@ export function HhSendStep(props: HhSendStepProps) {
   return (
     <section className="lead" aria-labelledby="w-title">
       <h2 className="lead-title is-long" id="w-title">
-        {done && !sent ? 'Отклик отправлен' : 'Всё одобрено — можно отправлять'}
+        Всё одобрено — можно отправлять
       </h2>
-      <Parts props={props} resumes={resumes} editCount={edits.length} onEdits={() => setReviewing(true)} />
-      {done ? null : (
+      <Parts props={props} resumes={resumes} />
+      {sent ? null : (
         <div className="actions">
           <Button variant="primary" icon="send" busy={apply.state.kind === 'sending'} disabled={!resumeId || resumes.loading} onClick={apply.ask}>
             Отправить отклик
@@ -306,13 +282,9 @@ export function HhSendStep(props: HhSendStepProps) {
             <Icon name="out" />
             Вакансия на hh.ru
           </a>
-          <Button variant="quiet" icon="checkc" busy={marked.state.kind === 'busy'} disabled={apply.state.kind === 'sending'} onClick={marked.mark}>
-            Я уже откликнулся
-          </Button>
         </div>
       )}
-      {done && !sent ? null : <Outcome apply={apply} resumes={resumes} responsePath={responsePath} props={props} />}
-      {sent ? null : <MarkedOutcome marked={marked.state} responsePath={responsePath} />}
+      <Outcome apply={apply} resumes={resumes} responsePath={responsePath} props={props} />
       <ConfirmDialog apply={apply} title={props.head.title} />
       <HhResumeSheet
         picker={resumes.picker}

@@ -890,6 +890,10 @@ test.describe('B657: единый экран отклика', () => {
     await page.route('**/api/v1/candidate/hh/resumes*', (route) =>
       route.fulfill({ json: { data: snapshot } }),
     );
+    // M7-1: разбор открывается из листа выбора — «Продолжить» сохраняет выбор под вакансию.
+    await page.route('**/api/v1/candidate/hh/resumes/choice', (route) =>
+      route.fulfill({ json: { data: snapshot } }),
+    );
     await page.route('**/api/v1/candidate/hh/resumes/edits**', (route) =>
       route.fulfill({
         json: {
@@ -966,9 +970,9 @@ test.describe('B657: единый экран отклика', () => {
     await page.getByRole('button', { name: 'Резюме hh.ru «Руководитель разработки»' }).click();
     const next = page.getByRole('dialog').getByRole('button', { name: 'Продолжить' });
     await expect(next.locator('svg')).toHaveCount(1, { timeout: 15_000 });
-    await page.keyboard.press('Escape');
-
-    await page.getByRole('button', { name: '2 правки' }).click();
+    // M7-1: на a01 отметки «N правки» нет, разбор открывается из листа выбора.
+    await expect(page.locator('.ap-parts .res-act')).toHaveCount(0);
+    await next.click();
     const applyAll = page.getByRole('button', { name: 'Применить все на hh.ru' });
     await expect(page.getByRole('radio', { name: 'Руководитель разработки' })).toBeChecked();
     await expect(applyAll).toBeInViewport();

@@ -39,4 +39,17 @@ describe('StatusStrip (B650 s05b)', () => {
   it('без откликов строки пути нет', () => {
     expect(render(null)?.querySelector('.num')).toBeNull();
   });
+
+  it('макет s04: вопрос над колонками — строки «Статус» нет, «Статус возвращён» остаётся', () => {
+    view = mount(
+      <StatusStrip status={STATUS} revertedTitle={null} onReverted={() => {}} withoutRow />,
+    );
+    expect(view.container.querySelector('.s5-prog')).toBeNull();
+    view.unmount();
+    view = mount(
+      <StatusStrip status={STATUS} revertedTitle="Ищу работу" onReverted={() => {}} withoutRow />,
+    );
+    expect(view.container.querySelector('.s5-prog')).toBeNull();
+    expect(view.container.textContent).toContain('Статус возвращён: Ищу работу');
+  });
 });

@@ -1,6 +1,7 @@
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../../kit';
+import { useScreenActive } from '../../kit/screenActive';
 import { useModalFocus } from '../../kit/useModalFocus';
 import { FilterPane, type PaneProps } from './FilterPanes';
 import { HiddenChip, type HiddenChipProps } from './HiddenChip';
@@ -93,7 +94,13 @@ export function FilterSheet(props: FilterSheetProps) {
   useLayoutEffect(() => {
     setHost(anchor.current?.closest<HTMLElement>('.b640') ?? null);
   }, []);
-  const shown = open && host !== null;
+  // Макет v08 (M9-3): список ушёл под другой экран («Назад», «Сегодня») — лист закрыт,
+  // а не висит над чужой страницей; при возврате к списку он не открывается сам.
+  const active = useScreenActive();
+  useEffect(() => {
+    if (open && !active) onClose();
+  }, [open, active, onClose]);
+  const shown = open && active && host !== null;
   useModalFocus(shown, { host, dialog, back }, onClose);
   return (
     <>

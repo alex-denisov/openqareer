@@ -142,6 +142,11 @@ function useFreshDialog(onDialog: () => void): FreshDialog {
   return { key, busy, failed, startNew, reopen };
 }
 
+/** «Новый разговор» в шапке: в разговоре и в непустом списке (K5); в K5b его нет. */
+function newAllowed(view: PanelView, historyEmpty: boolean): boolean {
+  return view.kind === 'dialog' || (view.kind === 'history' && !historyEmpty);
+}
+
 function headTitle(view: PanelView, stage: CoachTurnStage | null): string | null {
   if (view.kind === 'history') return null;
   if (view.kind === 'dialog' && view.resumeFactId) return 'Консультант · Резюме';
@@ -175,6 +180,8 @@ interface PanelBodyProps {
   readonly pathOf: (view: PanelView) => string;
   readonly onView: (view: PanelView) => void;
   readonly onContinued: () => void;
+  readonly onStartNew: () => void;
+  readonly onHistoryEmpty: (empty: boolean) => void;
 }
 
 function PanelBody({
@@ -185,6 +192,8 @@ function PanelBody({
   pathOf,
   onView,
   onContinued,
+  onStartNew,
+  onHistoryEmpty,
 }: PanelBodyProps) {
   if (view.kind === 'review') return <ReviewView />;
   if (view.kind === 'conversation') {
@@ -195,7 +204,8 @@ function PanelBody({
       <HistoryView
         conversationPath={(id) => pathOf({ kind: 'conversation', id })}
         onOpen={(id) => onView({ kind: 'conversation', id })}
-        onStart={() => onView({ kind: 'dialog' })}
+        onStart={onStartNew}
+        onEmpty={onHistoryEmpty}
       />
     );
   }
@@ -230,6 +240,7 @@ export function ConsultantPanel({
   useEscape(onClose);
   const showDialog = useCallback(() => onView({ kind: 'dialog' }), [onView]);
   const fresh = useFreshDialog(showDialog);
+  const [historyEmpty, setHistoryEmpty] = useState(false);
   return (
     <>
       <div className="backdrop only-mob" aria-hidden="true" onClick={onClose} />
@@ -244,7 +255,7 @@ export function ConsultantPanel({
           titleId={titleId}
           conversation={headTitle(view, named ? stage : null)}
           back={backOf(view, pathOf, onView)}
-          onNew={view.kind === 'dialog' || view.kind === 'history' ? fresh.startNew : undefined}
+          onNew={newAllowed(view, historyEmpty) ? fresh.startNew : undefined}
           newBusy={fresh.busy}
           onClose={onClose}
         />
@@ -259,6 +270,8 @@ export function ConsultantPanel({
           pathOf={pathOf}
           onView={onView}
           onContinued={fresh.reopen}
+          onStartNew={fresh.startNew}
+          onHistoryEmpty={setHistoryEmpty}
         />
       </aside>
     </>
