@@ -53,8 +53,18 @@ export function nextSort(current: SortState | null, key: SortKey): SortState {
   return { key, dir: DESC_FIRST.includes(key) ? 'desc' : 'asc' };
 }
 
+/** Деньги строки: зарплата вакансии, а без неё — оценка openqareer, как на сервере (B803). */
+function rowSalary(item: MatchedVacancyItem): MatchedVacancyItem['cluster']['salary'] {
+  const salary = item.cluster.salary;
+  if (salary && (salary.from !== undefined || salary.to !== undefined)) return salary;
+  const market = item.explanation.marketSalary;
+  if (!market) return salary;
+  const { low, high, currency, period } = market;
+  return { from: low, to: high, currency, period } as MatchedVacancyItem['cluster']['salary'];
+}
+
 function moneyValue(item: MatchedVacancyItem, rates?: CurrencyRates): number | undefined {
-  const salary = monthlySalary(item.cluster.salary, rates);
+  const salary = monthlySalary(rowSalary(item), rates);
   const amount = salary?.from ?? salary?.to;
   if (amount === undefined || !salary?.currency) return undefined;
   return convertAmount(amount, salary.currency, 'RUB', rates) ?? amount;
