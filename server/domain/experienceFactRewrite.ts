@@ -304,7 +304,7 @@ export function arithmeticFails(text: string): boolean {
 }
 
 /** A bullet may only state numbers its own sources state (digits or words). */
-function numbersAreSourced(text: string, sources: readonly string[]): boolean {
+export function numbersAreSourced(text: string, sources: readonly string[]): boolean {
   const joined = sources.join(' ');
   const known = new Set([...numbersIn(joined), ...numberWordsIn(joined)]);
   return numbersIn(text).every((number) => known.has(number));
