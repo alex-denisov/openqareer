@@ -73,7 +73,17 @@ async function reviewList(
   }
 }
 
-/** Разделы не прочитаны: правок по такому резюме нет (409), поэтому выбранное читаем сами, один раз. */
+/** B787: снимок старше получаса или копия не доведена — при открытии шага резюме читается с hh.ru заново. */
+export const HH_SNAPSHOT_STALE_MS = 30 * 60_000;
+
+export function needsFreshRead(snapshot: HhResumeSnapshot | null, now: number): boolean {
+  if (!snapshot) return false;
+  const age = now - Date.parse(snapshot.readAt);
+  const unfinished = snapshot.copy !== undefined && snapshot.copy.stage !== 'ready';
+  return unfinished || !(age < HH_SNAPSHOT_STALE_MS);
+}
+
+/** Разделы не прочитаны или снимок устарел: выбранное читаем сами, один раз за открытие шага. */
 function useSectionsRefresh(vacancyId: string, snapshot: HhResumeSnapshot | null, replaceData: (saved: HhResumeSnapshot) => void) {
   const refreshed = useRef<{ readonly id: string; readonly done: Promise<void> } | null>(null);
   // Снимок после перечитывания: замыкание открытия листа помнит прежний.
@@ -98,7 +108,8 @@ function useSectionsRefresh(vacancyId: string, snapshot: HhResumeSnapshot | null
   useEffect(() => {
     const selected = snapshot?.selected;
     // Страницу hh.ru читает только приложение: в браузере ждать нечего.
-    if (!isTauriEnvironment() || !selected || hhSectionsRead(selected.sections) || refreshed.current?.id === selected.id) return;
+    if (!isTauriEnvironment() || !selected || refreshed.current?.id === selected.id) return;
+    if (hhSectionsRead(selected.sections) && !needsFreshRead(snapshot, Date.now())) return;
     reread();
   }, [snapshot, reread]);
   const settled = async () => {

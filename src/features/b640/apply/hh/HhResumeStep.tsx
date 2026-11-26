@@ -121,7 +121,7 @@ interface ResumeBodyProps {
   readonly canWrite: boolean;
 }
 
-function ResumeBody({ resumes, edits: { edits, loading }, copy, missing, copyReady, canWrite }: ResumeBodyProps) {
+function ResumeBody({ resumes, edits: { edits, loading, failed, retry }, copy, missing, copyReady, canWrite }: ResumeBodyProps) {
   const selected = resumes.snapshot?.selected ?? null;
   const read = selected !== null && hhSectionsRead(selected.sections) ? selected.sections : null;
   const running = copy.state.kind === 'running';
@@ -143,6 +143,17 @@ function ResumeBody({ resumes, edits: { edits, loading }, copy, missing, copyRea
       <CopyStatus copy={copy} missing={missing} ready={copyReady} />
       {selected && !read && !resumes.loading ? <NotRead onRetry={resumes.reread} /> : null}
       {loading && !running ? <StatusLine state="wait" text="Готовим правки" /> : null}
+      {failed && !running ? (
+        <StatusLine
+          state="err"
+          text="Правки под вакансию не подготовились."
+          action={
+            <button className="res-act" type="button" onClick={retry}>
+              Повторить
+            </button>
+          }
+        />
+      ) : null}
       {selected && edits.length > 0 ? (
         <HhEditsList
           key={selected.id}
@@ -204,7 +215,11 @@ export function HhResumeStep({ vacancyId, vacancyTitle, confirmed, onConfirm, do
   const missing = useHhMissing(vacancyId, snapshot);
   const copy = useHhHiddenCopy(vacancyId, vacancyTitle, snapshot, resumes.replace);
   const selectedId = snapshot?.selected?.id ?? null;
-  const ownCopy = snapshot?.copy && snapshot.copy.copyId === selectedId ? snapshot.copy : null;
+  // B787: копия начата, а её id ещё не подтверждён — она «за» исходным резюме: продолжить, а не начать заново.
+  const ownCopy =
+    snapshot?.copy && (snapshot.copy.copyId === selectedId || (!snapshot.copy.copyId && snapshot.copy.sourceId === selectedId))
+      ? snapshot.copy
+      : null;
   // Править нечем — новое резюме повторило бы прежнее.
   const offer = isTauriEnvironment() && !ownCopy && missing.length > 0 && edits.edits.length > 0;
   const action = (
