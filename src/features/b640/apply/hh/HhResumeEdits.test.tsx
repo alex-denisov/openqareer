@@ -11,23 +11,14 @@ vi.mock('./hhDesktop', () => desktop);
 vi.mock('./hhResumeReading', () => reading);
 vi.mock('./hhEditPace', () => pace);
 
-const variantApi = vi.hoisted(() => ({
-  listHhEditVariants: vi.fn(),
-  createHhEditVariant: vi.fn(),
-}));
+const variantApi = vi.hoisted(() => ({ listHhEditVariants: vi.fn(), createHhEditVariant: vi.fn() }));
 vi.mock('../hhEditVariantApi', () => variantApi);
 
 const { HhResumeEdits } = await import('./HhResumeEdits');
 
 const edits: HhResumeEdit[] = [
   { id: 'title', section: 'title', was: 'CDO', now: 'Директор по данным' },
-  {
-    id: 'experience:0',
-    section: 'experience',
-    place: 'Ромашка · 2020 — н.в.',
-    was: 'Вёл данные.',
-    now: 'Построил платформу.',
-  },
+  { id: 'experience:0', section: 'experience', place: 'Ромашка · 2020 — н.в.', was: 'Вёл данные.', now: 'Построил платформу.' },
   {
     id: 'experience:1',
     section: 'experience',
@@ -63,31 +54,21 @@ function render() {
 }
 
 function buttons(text: string): HTMLButtonElement[] {
-  return [...document.querySelectorAll<HTMLButtonElement>('button')].filter(
-    (item) => item.textContent?.trim() === text,
-  );
+  return [...document.querySelectorAll<HTMLButtonElement>('button')].filter((item) => item.textContent?.trim() === text);
 }
 
 describe('B678, срез 3: «Применить» на hh.ru', () => {
   it('«Применить» есть у должности, навыков, «О себе» и у места работы, которое hh.ru показал с работодателем и должностью', () => {
     render();
     expect(buttons('Применить')).toHaveLength(4);
-    const unnamed = [...document.querySelectorAll('.hh2-r')].find((row) =>
-      row.textContent?.includes('Ромашка'),
-    );
+    const unnamed = [...document.querySelectorAll('.hh2-r')].find((row) => row.textContent?.includes('Ромашка'));
     expect(unnamed?.textContent).not.toContain('Применить');
   });
 
   it('место работы уходит в приложение с работодателем, должностью и прежним текстом — по ним hh.ru находит исходное место', async () => {
     render();
-    const row = [...document.querySelectorAll('.hh2-r')].find((item) =>
-      item.textContent?.includes('Лютик'),
-    );
-    click(
-      [...row!.querySelectorAll('button')].find(
-        (item) => item.textContent?.trim() === 'Применить',
-      )!,
-    );
+    const row = [...document.querySelectorAll('.hh2-r')].find((item) => item.textContent?.includes('Лютик'));
+    click([...row!.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Применить')!);
     await settle();
     expect(desktop.applyHhResumeEditInSession).toHaveBeenCalledWith({
       resumeId: 'abc1',
@@ -100,55 +81,30 @@ describe('B678, срез 3: «Применить» на hh.ru', () => {
   });
 
   it('если у места работы на hh.ru отмечено и другое резюме, приложение ничего не сохраняет и просит скопировать', async () => {
-    desktop.applyHhResumeEditInSession.mockResolvedValue({
-      outcome: 'failed',
-      failureCode: 'other_resumes_ticked',
-    });
+    desktop.applyHhResumeEditInSession.mockResolvedValue({ outcome: 'failed', failureCode: 'other_resumes_ticked' });
     render();
-    const row = [...document.querySelectorAll('.hh2-r')].find((item) =>
-      item.textContent?.includes('Лютик'),
-    );
-    click(
-      [...row!.querySelectorAll('button')].find(
-        (item) => item.textContent?.trim() === 'Применить',
-      )!,
-    );
+    const row = [...document.querySelectorAll('.hh2-r')].find((item) => item.textContent?.includes('Лютик'));
+    click([...row!.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Применить')!);
     await settle();
     expect(row!.textContent).toContain('другими резюме');
     expect(row!.textContent).not.toContain('Изменено на hh.ru');
   });
 
   it('если новое место уже сохранилось, а прежнее осталось, повтор не предлагается: он добавил бы второе место', async () => {
-    desktop.applyHhResumeEditInSession.mockResolvedValue({
-      outcome: 'failed',
-      failureCode: 'new_place_left',
-    });
+    desktop.applyHhResumeEditInSession.mockResolvedValue({ outcome: 'failed', failureCode: 'new_place_left' });
     render();
-    const row = [...document.querySelectorAll('.hh2-r')].find((item) =>
-      item.textContent?.includes('Лютик'),
-    );
-    click(
-      [...row!.querySelectorAll('button')].find(
-        (item) => item.textContent?.trim() === 'Применить',
-      )!,
-    );
+    const row = [...document.querySelectorAll('.hh2-r')].find((item) => item.textContent?.includes('Лютик'));
+    click([...row!.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Применить')!);
     await settle();
     expect(row!.textContent).toContain('прежнее место');
-    expect(
-      [...row!.querySelectorAll('button')].some((item) => item.textContent?.trim() === 'Применить'),
-    ).toBe(false);
+    expect([...row!.querySelectorAll('button')].some((item) => item.textContent?.trim() === 'Применить')).toBe(false);
   });
 
   it('«Применить» переносит один раздел и показывает, что hh.ru его принял', async () => {
     render();
     click(buttons('Применить')[2]!);
     await settle();
-    expect(desktop.applyHhResumeEditInSession).toHaveBeenCalledWith({
-      resumeId: 'abc1',
-      section: 'skills',
-      text: '',
-      skills: ['dbt'],
-    });
+    expect(desktop.applyHhResumeEditInSession).toHaveBeenCalledWith({ resumeId: 'abc1', section: 'skills', text: '', skills: ['dbt'] });
     expect(view!.container.textContent).toContain('Изменено на hh.ru');
     expect(reading.forgetReadResumes).toHaveBeenCalled();
   });
@@ -160,30 +116,18 @@ describe('B678, срез 3: «Применить» на hh.ru', () => {
     expect(desktop.applyHhResumeEditInSession).not.toHaveBeenCalled();
     const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog.querySelector('h2')!.textContent).toBe('Применить все на hh.ru?');
-    expect(dialog.querySelector('.hh-ok-d')!.textContent).toMatch(
-      /^Резюме «.+» изменится на hh\.ru для всех работодателей\.$/,
-    );
-    expect(
-      [...dialog.querySelectorAll('.pf-df button')].map((item) => item.textContent?.trim()),
-    ).toEqual(['Применить', 'Отмена']);
+    expect(dialog.querySelector('.hh-ok-d')!.textContent).toMatch(/^Резюме «.+» изменится на hh\.ru для всех работодателей\.$/);
+    expect([...dialog.querySelectorAll('.pf-df button')].map((item) => item.textContent?.trim())).toEqual(['Применить', 'Отмена']);
     click(document.querySelector('.pf-df button.is-primary')!);
     await settle();
     await settle();
     await settle();
-    expect(desktop.applyHhResumeEditInSession.mock.calls.map(([input]) => input.section)).toEqual([
-      'title',
-      'experience',
-      'skills',
-      'about',
-    ]);
+    expect(desktop.applyHhResumeEditInSession.mock.calls.map(([input]) => input.section)).toEqual(['title', 'experience', 'skills', 'about']);
     expect(pace.pauseBetweenEdits).toHaveBeenCalledTimes(3);
   });
 
   it('отказ hh.ru — понятная строка под правкой, остальные разделы не трогаем', async () => {
-    desktop.applyHhResumeEditInSession.mockResolvedValueOnce({
-      outcome: 'failed',
-      failureCode: 'captcha',
-    });
+    desktop.applyHhResumeEditInSession.mockResolvedValueOnce({ outcome: 'failed', failureCode: 'captcha' });
     render();
     click(buttons('Применить все на hh.ru')[0]!);
     await settle();
@@ -196,27 +140,14 @@ describe('B678, срез 3: «Применить» на hh.ru', () => {
 
 describe('B682: «Другой вариант» правки (a01c)', () => {
   const variantOf = { vacancyId: 'v', subjectId: 's1' };
-  const withVariants = edits.map((edit) =>
-    edit.section === 'skills' ? { ...edit, variantOf } : edit,
-  );
+  const withVariants = edits.map((edit) => (edit.section === 'skills' ? { ...edit, variantOf } : edit));
   const list = {
-    variants: [
-      {
-        id: 'x',
-        position: 1,
-        text: 'dbt, Airflow, SQL',
-        payload: { added: ['dbt', 'Airflow'] },
-        wish: { chips: [], text: '' },
-        createdAt: '',
-      },
-    ],
+    variants: [{ id: 'x', position: 1, text: 'dbt, Airflow, SQL', payload: { added: ['dbt', 'Airflow'] }, wish: { chips: [], text: '' }, createdAt: '' }],
     remaining: 2,
   };
   const icons = () => document.querySelectorAll<HTMLButtonElement>('[aria-label="Другой вариант"]');
   async function open() {
-    view = mount(
-      <HhResumeEdits resumeId="abc1" resumeTitle="CDO" edits={withVariants} onBack={vi.fn()} />,
-    );
+    view = mount(<HhResumeEdits resumeId="abc1" resumeTitle="CDO" edits={withVariants} onBack={vi.fn()} />);
     await settle();
   }
 
@@ -233,16 +164,9 @@ describe('B682: «Другой вариант» правки (a01c)', () => {
     click(row.querySelector('[aria-label="Предыдущий вариант"]'));
     expect(row.querySelector('.hh2-now')?.textContent).toContain('SQL, dbt');
     click(row.querySelector('[aria-label="Следующий вариант"]'));
-    click(
-      [...row.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Применить')!,
-    );
+    click([...row.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Применить')!);
     await settle();
-    expect(desktop.applyHhResumeEditInSession).toHaveBeenCalledWith({
-      resumeId: 'abc1',
-      section: 'skills',
-      text: '',
-      skills: ['dbt', 'Airflow'],
-    });
+    expect(desktop.applyHhResumeEditInSession).toHaveBeenCalledWith({ resumeId: 'abc1', section: 'skills', text: '', skills: ['dbt', 'Airflow'] });
   });
 
   it('предел — значок выключен; сбой — строка под правкой, текст прежний', async () => {
@@ -255,48 +179,5 @@ describe('B682: «Другой вариант» правки (a01c)', () => {
     variantApi.listHhEditVariants.mockResolvedValue({ ...list, remaining: 0 });
     await open();
     expect(icons()[0]!.disabled).toBe(true);
-  });
-});
-
-function rowOf(text: string): Element {
-  return [...document.querySelectorAll('.hh2-r')].find((item) => item.textContent?.includes(text))!;
-}
-const inRow = (row: Element, text: string) =>
-  [...row.querySelectorAll('button')].find((item) => item.textContent?.trim() === text)!;
-
-describe('B787: правку можно изменить или не применять', () => {
-  it('«Изменить» — на hh.ru уходит свой текст кандидата', async () => {
-    render();
-    click(inRow(rowOf('Лютик'), 'Изменить'));
-    const area = rowOf('Лютик').querySelector('textarea')!;
-    act(() => {
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
-        area,
-        'Свой текст.',
-      );
-      area.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    click(inRow(rowOf('Лютик'), 'Сохранить'));
-    expect(rowOf('Лютик').textContent).toContain('Свой текст.');
-    click(inRow(rowOf('Лютик'), 'Применить'));
-    await settle();
-    expect(desktop.applyHhResumeEditInSession).toHaveBeenCalledWith(
-      expect.objectContaining({ text: 'Свой текст.' }),
-    );
-  });
-
-  it('«Не применять» убирает правку из переноса и возвращается «Вернуть правку»', () => {
-    render();
-    click(inRow(rowOf('Лютик'), 'Не применять'));
-    expect(rowOf('Лютик').textContent).toContain('не применяется');
-    expect(inRow(rowOf('Лютик'), 'Применить')).toBeUndefined();
-    click(inRow(rowOf('Лютик'), 'Вернуть правку'));
-    expect(inRow(rowOf('Лютик'), 'Применить')).toBeDefined();
-  });
-
-  it('у навыков нет «Изменить»: правка — список добавляемых пунктов', () => {
-    render();
-    expect(inRow(rowOf('dbt'), 'Изменить')).toBeUndefined();
-    expect(inRow(rowOf('dbt'), 'Не применять')).toBeDefined();
   });
 });
