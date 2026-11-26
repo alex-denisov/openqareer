@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { VacancyFitView } from '../../../../../shared/vacancyFit';
 import { vacancyFitSentence } from '../../../vacancies/vacancyFitModel';
-import { fitBlockState, fitRows, listedRows, sourceLine } from './fitRows';
+import { fitBlockState, fitRows, listedRows, requirementsLabel, sourceLine } from './fitRows';
 
 function req(id: string, text: string, skill = true) {
   return {
@@ -76,7 +76,12 @@ describe('fitRows', () => {
 
   it('условия (не навыки) в список не попадают', () => {
     const rows = fitRows(
-      view({ requirements: [req('a', 'Kubernetes'), { ...req('z', 'Высшее образование', false), kind: 'education' as const }] }),
+      view({
+        requirements: [
+          req('a', 'Kubernetes'),
+          { ...req('z', 'Высшее образование', false), kind: 'education' as const },
+        ],
+      }),
     );
     expect(rows.map((row) => row.id)).toEqual(['a']);
   });
@@ -106,7 +111,11 @@ describe('fitRows', () => {
     const base = view();
     const rows = fitRows(
       view({
-        requirements: [req('a', 'Kubernetes'), req('b', 'Опыт найма', false), req('d', 'Вести планёрки')],
+        requirements: [
+          req('a', 'Kubernetes'),
+          req('b', 'Опыт найма', false),
+          req('d', 'Вести планёрки'),
+        ],
         result: { ...base.result!, duties: ['d'] },
       }),
     );
@@ -127,6 +136,23 @@ describe('fitRows', () => {
   it('без оценки требование неизвестно', () => {
     const rows = fitRows(view({ result: undefined }));
     expect(rows.every((row) => row.status === 'unknown')).toBe(true);
+  });
+});
+
+describe('requirementsLabel', () => {
+  it('«N из M есть в профиле» по покрытию', () => {
+    expect(requirementsLabel(view())).toBe('Требования: 2 из 4 есть в профиле');
+  });
+  it('без процента — «Требования из текста вакансии · N»', () => {
+    const none = view({
+      result: {
+        ...view().result!,
+        reason: 'no_eligible_facts',
+        status: 'unknown',
+        coveragePercent: null,
+      },
+    });
+    expect(requirementsLabel(none)).toBe('Требования из текста вакансии · 4');
   });
 });
 

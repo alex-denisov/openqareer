@@ -655,7 +655,7 @@
   @media (min-width: 768px) { .b640 .v4-act > .v4-act-main { display: contents; } }
   @container main (max-width: 1179px) { .b640 .v4-act { gap: var(--career-space-2); } .b640 .v4-act .btn { padding-inline: var(--career-space-3); } }
   .b640 .v4-reqs-box { border: var(--career-border-width) solid var(--career-line); border-radius: var(--career-radius-ctl); overflow: hidden; min-inline-size: 0; }
-  .b640 .v4-reqs-box > .v4-req-row { border: 0; border-radius: 0; }
+  .b640 .v4-reqs-box > .v4-req-row { border: 0; border-radius: 0; padding-block: 0; }
   .b640 .v4-reqs-box > .v4-req-row:focus-visible { outline-offset: -2px; }
   .b640 .v4-reqs-box > .v4-reqs-open { border-block-start: var(--career-border-width) solid var(--career-line); padding: var(--career-space-1) var(--career-space-3) var(--career-space-2); }
   .b640 .v4-reqs-open .vg-rl li:has(.v4-req-go) { grid-template-columns: var(--career-target-min) minmax(0, 1fr) auto; }

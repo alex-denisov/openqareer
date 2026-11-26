@@ -112,7 +112,7 @@ test.describe('B654: карточка вакансии нового кабине
     await openCard(page);
     await expect(page.locator('.r6-steps [aria-current="page"]')).toHaveText('Вакансия');
     await expect(page.locator('.v4-head .lead-title')).toBeVisible();
-    await expect(page.locator('.v4-req-row')).toHaveCount(0);
+    await expect(page.locator('.v4-req-row')).toHaveText('Требования: 2 из 4 есть в профиле');
     await expect(page.getByRole('link', { name: 'Откликнуться' }).first()).toBeVisible();
   });
 
@@ -126,6 +126,57 @@ test.describe('B654: карточка вакансии нового кабине
     await expect(dialog.locator('.is-part')).toContainText('частично');
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
+  });
+
+  test('B800 v04: «Требования: N из M» под процентом — размеры как в макете', async ({ page }) => {
+    await openCard(page);
+    const row = page.locator('.v4-head2 .v4-req-row');
+    await expect(row).toHaveText('Требования: 2 из 4 есть в профиле');
+    await expect(row).toHaveAttribute('aria-expanded', 'false');
+    // Замер макета v04 (16.11): рамка во всю колонку, строка 44, 14/21, поля 12, до кнопок 12.
+    const m = await page.evaluate(() => {
+      const box = document.querySelector('.v4-head2 .v4-reqs-box')!.getBoundingClientRect();
+      const act = document.querySelector('.v4-head2 .v4-act')!.getBoundingClientRect();
+      const fit = document.querySelector('.v4-head2 .v4-fit')!.getBoundingClientRect();
+      const node = document.querySelector('.v4-head2 .v4-req-row')!;
+      const css = getComputedStyle(node);
+      const frame = getComputedStyle(node.parentElement!);
+      return {
+        box: { x: box.x, w: box.width, h: box.height, top: box.top, bottom: box.bottom },
+        act: { x: act.x, w: act.width, top: act.top },
+        fitBottom: fit.bottom,
+        row: {
+          h: node.getBoundingClientRect().height,
+          font: css.fontSize,
+          line: css.lineHeight,
+          padStart: css.paddingInlineStart,
+        },
+        frame: { radius: frame.borderTopLeftRadius, border: frame.borderTopWidth },
+      };
+    });
+    expect(m.box.h).toBe(46);
+    expect(m.row).toEqual({ h: 44, font: '14px', line: '21px', padStart: '12px' });
+    expect(m.frame).toEqual({ radius: '12px', border: '1px' });
+    if ((page.viewportSize()?.width ?? 0) < 768) {
+      // На 390 «Откликнуться» закреплена внизу (B700): рамка — во всю ширину колонки, как в макете.
+      expect({ x: m.box.x, w: m.box.w }).toEqual({ x: 16, w: 358 });
+    } else {
+      expect({ x: m.box.x, w: m.box.w }).toEqual({ x: m.act.x, w: m.act.w });
+      expect(Math.round(m.act.top - m.box.bottom)).toBe(12);
+    }
+    expect(m.box.top).toBeGreaterThan(m.fitBottom);
+
+    await row.click();
+    await expect(row).toHaveAttribute('aria-expanded', 'true');
+    const open = page.locator('.v4-head2 .v4-reqs-open');
+    const items = open.locator('.v4-fd-l li');
+    await expect(items).toHaveCount(4);
+    for (const item of await items.all()) await expect(item.locator('svg').first()).toBeVisible();
+    await expect(open.locator('.is-part')).toContainText('частично');
+    await expect(open.locator('.v4-fd-src')).toHaveText(
+      /^Требования — из текста вакансии, .+, 11\.11 · 4 требования$/,
+    );
+    await expectGates(page);
   });
 
   test('B800: задачи, требования и условия под «Откликнуться»', async ({ page }) => {

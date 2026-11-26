@@ -17,10 +17,11 @@ import { Head } from './Head';
 import { LetterBlock } from './LetterBlock';
 import { MoneyBlock } from './MoneyBlock';
 import { QuotaLine } from './QuotaLine';
+import { ReqsBox } from './ReqsBox';
 import { StepTabs } from './StepTabs';
 import { useCardData, type CardData } from './useCardData';
 import { useSave } from './useSave';
-import { useVacancyFit } from './useVacancyFit';
+import { useVacancyFit, type VacancyFitState } from './useVacancyFit';
 import { VacancyText } from './VacancyText';
 import { appliedOn } from '../vacancyLinks';
 import { WaysBlock } from './WaysBlock';
@@ -113,6 +114,17 @@ function SaveFailure({ onRetry }: { readonly onRetry: () => void }) {
   );
 }
 
+/** Процент совпадения и под ним «Требования: N из M есть в профиле» (v04). */
+function FitHead({ fit, source }: { readonly fit: VacancyFitState; readonly source: string }) {
+  const state = fitBlockState(fit.view, fit.failed);
+  return (
+    <>
+      <FitBlock state={state} view={fit.view} sourceName={source} onRetry={fit.retry} />
+      {state === 'ready' ? <ReqsBox view={fit.view} sourceName={source} /> : null}
+    </>
+  );
+}
+
 interface CardBodyProps {
   readonly vacancyId: string;
   readonly item: LoadedItem;
@@ -127,7 +139,6 @@ function CardBody({ vacancyId, item, data, companyPath, onCompose }: CardBodyPro
   useEffect(() => rememberClusters([item]), [item]);
   const fit = useVacancyFit(vacancyId);
   const save = useSave(item, data.links);
-  const state = fitBlockState(fit.view, fit.failed);
   const ways = waysFor(item, data);
   const existing = data.links.byCluster.get(item.cluster.id);
   const responseId = appliedOn(existing) ? existing?.id : undefined;
@@ -137,16 +148,11 @@ function CardBody({ vacancyId, item, data, companyPath, onCompose }: CardBodyPro
       <div className="col">
         <Head item={item} companyPath={companyPath} save={save.button} />
         <div className="v4-head2">
-          <FitBlock
-            state={state}
-            view={fit.view}
-            sourceName={sourceName(item)}
-            onRetry={fit.retry}
-          />
+          <FitHead fit={fit} source={sourceName(item)} />
           <ActBar
             vacancyId={vacancyId}
             responseId={responseId}
-            noProfile={state === 'none'}
+            noProfile={fitBlockState(fit.view, fit.failed) === 'none'}
             save={save.button}
           />
           {save.failed ? <SaveFailure onRetry={save.retry} /> : null}
@@ -156,7 +162,12 @@ function CardBody({ vacancyId, item, data, companyPath, onCompose }: CardBodyPro
           fit={fit.view}
           source={sourceLinkOf(item.cluster, ways)}
         />
-        <WaysBlock ways={ways} vacancyId={vacancyId} responseId={responseId} onCompose={onCompose} />
+        <WaysBlock
+          ways={ways}
+          vacancyId={vacancyId}
+          responseId={responseId}
+          onCompose={onCompose}
+        />
       </div>
       <RightColumn
         vacancyId={vacancyId}

@@ -61,6 +61,19 @@ export function PendingBanner({ count, to, onOpen }: PendingBannerProps) {
   );
 }
 
+/** B786: правка K6 под ответом на просьбу кандидата поправить резюме. */
+function AskedResumeEdit({ factId, dialog }: { factId?: string; dialog: DialogState }) {
+  if (!factId) return null;
+  return (
+    <ResumeEditCard
+      key={factId}
+      factId={factId}
+      memory={dialog.memory}
+      messages={dialog.messages}
+    />
+  );
+}
+
 interface FeedProps {
   readonly dialog: DialogState;
   readonly placed: ReadonlyMap<string, readonly CandidateMemory[]>;
@@ -101,6 +114,7 @@ function Feed({ dialog, placed, onDecide, resumeFactId, resumeReason }: FeedProp
             {placed.get(message.id)?.map((fact) => (
               <FactCard key={fact.id} fact={fact} onDecide={onDecide} />
             ))}
+            {resumeFactId ? null : <AskedResumeEdit factId={extra?.resumeFactId} dialog={dialog} />}
           </Fragment>
         );
       })}

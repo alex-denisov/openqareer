@@ -3,7 +3,11 @@ import type {
   VacancyFitView,
 } from '../../../../../shared/vacancyFit';
 import { vacancyFitPercent } from '../../../../../shared/vacancyFitPercent';
-import { countedSkillRequirements, requirementVerdict, wishRequirements } from '../../../vacancies/vacancyRequirementChips';
+import {
+  countedSkillRequirements,
+  requirementVerdict,
+  wishRequirements,
+} from '../../../vacancies/vacancyRequirementChips';
 import { pluralRu } from '../format';
 
 export type FitStatus = VacancyFitRequirementAssessment['status'];
@@ -78,6 +82,15 @@ export function listedRows(view: VacancyFitView | undefined): readonly FitRow[] 
     };
   });
   return [...fitRows(view), ...wishes];
+}
+
+/** «Требования: 6 из 7 есть в профиле»; без процента — «Требования из текста вакансии · 7». */
+export function requirementsLabel(view: VacancyFitView | undefined): string {
+  const coverage = view?.result?.coverage;
+  if (vacancyFitPercent(view) === null || !coverage) {
+    return `Требования из текста вакансии · ${fitRows(view).length}`;
+  }
+  return `Требования: ${coverage.matched} из ${coverage.total} есть в профиле`;
 }
 
 function shortDate(iso: string | undefined): string {

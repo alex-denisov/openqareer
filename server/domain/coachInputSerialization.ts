@@ -40,6 +40,7 @@ export function serializeCoachInput(input: CoachTurnInput): string {
     marketObservations: input.marketObservations ?? [],
     ...(history?.messageSnippets.length ? { pastMessageMatches: history.messageSnippets } : {}),
     ...(input.correctionCards?.length ? { correctionCards: input.correctionCards } : {}),
+    ...(input.resumeEditCard ? { resumeEditCard: input.resumeEditCard } : {}),
     conversation: input.messages,
   });
 }
