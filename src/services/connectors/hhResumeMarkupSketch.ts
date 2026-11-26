@@ -27,7 +27,7 @@ export function maskResumeText(text: string): string {
 }
 
 const TAG = /<(\/?)([a-z][a-z0-9-]*)\b([^>]*)>/giu;
-const VOID = new Set(['br', 'hr', 'img', 'input', 'wbr', 'source', 'col', 'area', 'path']);
+const VOID = new Set(['br', 'hr', 'img', 'input', 'wbr', 'source', 'col', 'area']);
 const qaOf = (attributes: string) => /data-qa=["']([^"']*)["']/iu.exec(attributes)?.[1] ?? '';
 const safeQa = (qa: string) => qa.replace(/[^A-Za-z0-9_ -]/gu, '?').slice(0, 120);
 
@@ -69,7 +69,8 @@ function periodLines(html: string): string[] {
 }
 
 /** Набросок для файла диагностики; ограничен по длине и состоит только из ASCII. */
-export function hhResumeMarkupSketch(html: string): string {
+export function hhResumeMarkupSketch(page: string): string {
+  const html = page.replace(/<!--[\s\S]*?-->/gu, '');
   const cards = hhQaBlocks(html, 'profile-experience-company-card').slice(0, CARDS_MAX);
   const block =
     cards.length > 0 ? cards : hhQaBlocks(html, 'resume-list-card-experience').slice(0, 1);
