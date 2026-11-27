@@ -18,7 +18,6 @@ import {
   type CandidateFootprintAudit,
   type CandidateFootprintConsentState,
   type CandidateFootprintFinding,
-  type FootprintAdapterId,
   type FootprintAdapterRegistryItem,
   type FootprintReview,
   type SourceCapabilityStatus,
@@ -34,31 +33,21 @@ import {
   FootprintSanitationChecklist,
   type FootprintManualMark,
 } from './FootprintSanitationChecklist';
-import { statusMessage } from './candidateFootprintApi';
+import {
+  FOOTPRINT_STEP_LABELS,
+  FOOTPRINT_STEPS,
+  type FootprintStep,
+  type FootprintStepStatus,
+} from '../../../shared/footprintSteps';
+import { statusMessage, stepStatuses } from './candidateFootprintApi';
 /* Keep the consent, audit and result steps beside the single stateful surface they form. */
 /* eslint max-lines: ["error", 1300] */
 import './profileFootprint.css';
 
-const ADAPTER_IDS: readonly FootprintAdapterId[] = [
-  'sherlock',
-  'maigret',
-  'hibp',
-  'wayback',
-  'exa',
-];
-
-const ADAPTER_LABELS: Readonly<Record<FootprintAdapterId, string>> = {
-  sherlock: 'Профили по никнейму',
-  maigret: 'Профили по никнейму: расширенная проверка',
-  hibp: 'Утечки почты',
-  wayback: 'Старые версии страниц',
-  exa: 'Упоминания в открытом вебе',
-};
-
 export interface CandidateFootprintAuditSurfaceProps {
   readonly plan: readonly PublicFootprintQueryPlanItem[];
   readonly unidentifiedEmployers?: readonly string[];
-  readonly sourceAvailability: Readonly<Record<FootprintAdapterId, boolean>>;
+  readonly sourceAvailability: Readonly<Partial<Record<FootprintStep, boolean>>>;
   readonly adapterRegistry?: readonly FootprintAdapterRegistryItem[];
   readonly consent: CandidateFootprintConsentState;
   readonly audit: CandidateFootprintAudit | null;
@@ -92,18 +81,18 @@ export interface CandidateFootprintAuditSurfaceProps {
   readonly metadataCheck?: FootprintMetadataCheck | null;
 }
 function adapterState(
-  adapterId: FootprintAdapterId,
+  step: FootprintStep,
   audit: CandidateFootprintAudit | null,
-  availability: Readonly<Record<FootprintAdapterId, boolean>>,
-): CandidateFootprintAdapterStatus {
-  const existing = audit?.adapterStatuses.find((status) => status.adapterId === adapterId);
-  if (existing?.state === 'not_run' && !availability[adapterId]) {
+  availability: Readonly<Partial<Record<FootprintStep, boolean>>>,
+): FootprintStepStatus {
+  const existing = stepStatuses(audit).find((status) => status.adapterId === step);
+  if (existing?.state === 'not_run' && !availability[step]) {
     return { ...existing, state: 'not_connected' };
   }
   return (
     existing ?? {
-      adapterId,
-      state: availability[adapterId] ? 'not_run' : 'not_connected',
+      adapterId: step,
+      state: availability[step] ? 'not_run' : 'not_connected',
       sourcesChecked: 0,
       findingsCount: 0,
     }
@@ -154,16 +143,13 @@ function AdapterStatusList({
     <section className="career-footprint-status-section" aria-labelledby="footprint-status-title">
       <h3 id="footprint-status-title">Состояние источников</h3>
       <ul className="career-footprint-status-list">
-        {ADAPTER_IDS.map((adapterId) => {
-          const status = adapterState(adapterId, audit, sourceAvailability);
+        {FOOTPRINT_STEPS.map((step) => {
+          const status = adapterState(step, audit, sourceAvailability);
           const StatusIcon = adapterIcon(status.state);
           return (
-            <li
-              key={adapterId}
-              className={`career-footprint-status-row ${statusClass(status.state)}`}
-            >
+            <li key={step} className={`career-footprint-status-row ${statusClass(status.state)}`}>
               <StatusIcon aria-hidden="true" />
-              <span className="career-footprint-status-name">{ADAPTER_LABELS[adapterId]}</span>
+              <span className="career-footprint-status-name">{FOOTPRINT_STEP_LABELS[step]}</span>
               <span className="career-footprint-status-label">{statusMessage(status)}</span>
             </li>
           );

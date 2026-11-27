@@ -1,121 +1,139 @@
-import { useRef, useState, type ChangeEvent } from 'react';
-import { apiErrorMessage } from '../../coach/apiClient';
+import { useRef, type ChangeEvent } from 'react';
 import { useCandidateMediaSrc } from '../../resume/candidateMediaSrc';
 import { getResumeStudio } from '../../resume/resumeApi';
 import { forgetSharedRead } from '../../resume/sharedRead';
-import { Button, Icon, Link, ResultLine } from '../kit';
+import { Button, Dialog, Icon, Link, useToast } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
+import { useShell } from '../shell/ShellContext';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
-import { PROFILE_CHANGED } from './ExperienceEditScreen';
-import {
-  photoFileError,
-  preparePhoto,
-  removePhoto,
-  UNREADABLE_PHOTO,
-  uploadPhoto,
-} from './profileExtrasApi';
+import { PhotoInResumeSwitch } from './PhotoInResume';
+import { getResumePhoto } from './profileExtrasApi';
+import { ProfileScreen } from './ProfileScreen';
+import { usePhotoDraft, type PhotoStep } from './usePhotoDraft';
 
 interface PhotoProfile {
   readonly hasProfile: boolean;
   readonly photoMediaId: string | null;
+  /** Фото из последнего импорта LinkedIn; `null` — из LinkedIn не импортировали. */
+  readonly linkedinPhotoMediaId: string | null;
+  readonly inResume: boolean;
 }
 
-async function loadPhoto(): Promise<PhotoProfile> {
+async function loadPhoto(signal: AbortSignal): Promise<PhotoProfile> {
   forgetSharedRead('resume');
-  const view = await getResumeStudio();
+  const [view, setting] = await Promise.all([getResumeStudio(), getResumePhoto(signal)]);
+  const candidate = view.draft?.candidate;
   return {
     hasProfile: view.draft !== null,
-    photoMediaId: view.draft?.candidate.photoMediaId ?? null,
+    photoMediaId: candidate?.photoMediaId ?? null,
+    linkedinPhotoMediaId: candidate?.linkedinPhotoMediaId ?? null,
+    inResume: setting.inResume,
   };
 }
 
-type Work =
-  | { readonly step: 'idle' }
-  | { readonly step: 'upload' | 'remove' }
-  | { readonly step: 'done'; readonly text: string }
-  | { readonly step: 'error'; readonly message: string };
-
-/** Загрузка и удаление фото; после успеха профиль и шапка перечитываются. */
-function usePhotoWork(onChanged: () => void) {
-  const [work, setWork] = useState<Work>({ step: 'idle' });
-
-  async function run(step: 'upload' | 'remove', action: () => Promise<unknown>, done: string) {
-    setWork({ step });
-    try {
-      await action();
-      forgetSharedRead('resume');
-      window.dispatchEvent(new Event(PROFILE_CHANGED));
-      setWork({ step: 'done', text: done });
-      onChanged();
-    } catch (reason) {
-      const fallback = step === 'upload' ? 'Не удалось загрузить фото.' : 'Не удалось убрать фото.';
-      const unreadable = reason instanceof Error && reason.message === UNREADABLE_PHOTO;
-      setWork({
-        step: 'error',
-        message: unreadable ? UNREADABLE_PHOTO : apiErrorMessage(reason, fallback),
-      });
-    }
-  }
-
-  function upload(file: File) {
-    const refused = photoFileError(file);
-    if (refused) setWork({ step: 'error', message: refused });
-    else void run('upload', async () => uploadPhoto(await preparePhoto(file)), 'Фото обновлено');
-  }
-
-  return { work, upload, remove: () => void run('remove', removePhoto, 'Фото убрано') };
-}
-
-function WorkLine({ work }: { readonly work: Work }) {
-  if (work.step === 'upload' || work.step === 'remove') {
+function WorkLine({ work }: { readonly work: PhotoStep }) {
+  if (work.step === 'reading' || work.step === 'saving') {
     return (
       <p className="ph-st" role="status">
         <Icon name="upload" />
-        {work.step === 'upload' ? 'Загружаем…' : 'Убираем…'}
+        {work.step === 'reading' ? 'Готовим фото…' : 'Сохраняем…'}
       </p>
     );
   }
-  if (work.step === 'error') {
-    return (
-      <p className="st-var-line" role="alert">
-        <Icon name="warn" />
-        <span>{work.message}</span>
-      </p>
-    );
-  }
-  return work.step === 'done' ? <ResultLine text={work.text} /> : null;
+  if (work.step !== 'error') return null;
+  return (
+    <p className="st-var-line" role="alert">
+      <Icon name="warn" />
+      <span>{work.message}</span>
+    </p>
+  );
 }
 
-function CurrentPhoto({ src }: { readonly src: string | undefined }) {
+function CurrentPhoto({ src }: { readonly src: string | null | undefined }) {
   if (!src) return <p className="mod-text">Фото пока нет</p>;
   return (
     <div className="ph-crop">
-      <img className="ph-big" src={src} alt="Текущее фото" width={144} height={144} />
+      <img
+        className="ph-big"
+        src={src}
+        alt="Фото профиля, обрезка кругом"
+        width={144}
+        height={144}
+      />
+    </div>
+  );
+}
+
+type PhotoDraft = ReturnType<typeof usePhotoDraft>;
+
+function shownPhoto(
+  pending: PhotoDraft['pending'],
+  saved: string | undefined,
+  linkedin: string | undefined,
+) {
+  if (pending?.kind === 'file') return pending.preview;
+  if (pending?.kind === 'linkedin') return linkedin;
+  return pending?.kind === 'remove' ? null : saved;
+}
+
+interface ActionsProps {
+  readonly draft: PhotoDraft;
+  readonly linkedinId: string | null;
+  readonly hasPhoto: boolean;
+  readonly onUpload: () => void;
+}
+
+/** «Взять из LinkedIn» — только после импорта из LinkedIn, где было фото. */
+function PhotoActions({ draft, linkedinId, hasPhoto, onUpload }: ActionsProps) {
+  const busy = draft.work.step === 'reading' || draft.work.step === 'saving';
+  return (
+    <div className="ph-acts">
+      {linkedinId ? (
+        <Button icon="linkedin" disabled={busy} onClick={() => draft.takeLinkedin(linkedinId)}>
+          Взять из LinkedIn
+        </Button>
+      ) : null}
+      <Button icon="upload" busy={draft.work.step === 'reading'} disabled={busy} onClick={onUpload}>
+        Загрузить
+      </Button>
+      {hasPhoto ? (
+        <button
+          className="btn is-quiet is-danger"
+          type="button"
+          disabled={busy}
+          onClick={draft.remove}
+        >
+          <Icon name="trash" />
+          Убрать фото
+        </button>
+      ) : null}
     </div>
   );
 }
 
 interface EditorProps {
-  readonly photoMediaId: string | null;
-  readonly onChanged: () => void;
+  readonly profile: PhotoProfile;
+  readonly draft: PhotoDraft;
 }
 
-function PhotoEditor({ photoMediaId, onChanged }: EditorProps) {
+function PhotoEditor({ profile, draft }: EditorProps) {
   const input = useRef<HTMLInputElement>(null);
-  const src = useCandidateMediaSrc(photoMediaId ?? undefined);
-  const { work, upload, remove } = usePhotoWork(onChanged);
-  const busy = work.step === 'upload' || work.step === 'remove';
+  const saved = useCandidateMediaSrc(profile.photoMediaId ?? undefined);
+  const linkedin = useCandidateMediaSrc(profile.linkedinPhotoMediaId ?? undefined);
+  const { pending, work } = draft;
+  const shown = shownPhoto(pending, saved, linkedin);
+  const busy = work.step === 'reading' || work.step === 'saving';
 
   function onFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
-    if (file) upload(file);
+    if (file) draft.pick(file);
   }
 
   return (
     <>
-      <CurrentPhoto src={src} />
+      <CurrentPhoto src={shown} />
       <WorkLine work={work} />
       <input
         ref={input}
@@ -126,27 +144,18 @@ function PhotoEditor({ photoMediaId, onChanged }: EditorProps) {
         tabIndex={-1}
         onChange={onFile}
       />
-      <div className="ph-acts">
-        <Button
-          icon="upload"
-          busy={work.step === 'upload'}
-          disabled={busy}
-          onClick={() => input.current?.click()}
-        >
-          Загрузить
-        </Button>
-        {photoMediaId ? (
-          <Button
-            variant="danger"
-            icon="trash"
-            busy={work.step === 'remove'}
-            disabled={busy}
-            onClick={remove}
-          >
-            Убрать фото
-          </Button>
-        ) : null}
-      </div>
+      <PhotoActions
+        draft={draft}
+        linkedinId={profile.linkedinPhotoMediaId}
+        hasPhoto={Boolean(shown)}
+        onUpload={() => input.current?.click()}
+      />
+      <PhotoInResumeSwitch
+        id="ph-cv"
+        checked={draft.inResume}
+        disabled={busy}
+        onChange={draft.setInResume}
+      />
     </>
   );
 }
@@ -165,26 +174,58 @@ function NoProfile() {
   );
 }
 
-/** p08 «Фото»: своё фото профиля — загрузить, заменить, убрать (B666). */
-export function PhotoScreen({ node }: { readonly node: B640Node }) {
-  const photo = useLoad(loadPhoto);
+function Footer({ draft, onClose }: { readonly draft: PhotoDraft; readonly onClose: () => void }) {
   return (
-    <div className="page pf" data-b640-node={node.code} data-b640-section={node.section}>
-      <div className="col">
-        <section className="lead" aria-labelledby="ph-t">
-          <h2 className="lead-title is-long" id="ph-t">
-            Фото профиля
-          </h2>
-          {photo.state === 'loading' ? <BlockSkeleton label="Загружаем фото" /> : null}
-          {photo.state === 'error' ? (
-            <BlockError text="Не удалось загрузить профиль." onRetry={photo.retry} />
-          ) : null}
-          {photo.state === 'ready' && photo.data.hasProfile ? (
-            <PhotoEditor photoMediaId={photo.data.photoMediaId} onChanged={photo.retry} />
-          ) : null}
-          {photo.state === 'ready' && !photo.data.hasProfile ? <NoProfile /> : null}
-        </section>
-      </div>
-    </div>
+    <>
+      <Button
+        variant="primary"
+        icon="check"
+        busy={draft.work.step === 'saving'}
+        disabled={!draft.changed}
+        onClick={draft.save}
+      >
+        Сохранить
+      </Button>
+      <Button variant="quiet" icon="close" onClick={onClose}>
+        Отмена
+      </Button>
+    </>
+  );
+}
+
+/** Окно «Фото профиля»: изменения уходят по «Сохранить», «Отмена» ничего не меняет. */
+function PhotoDialog({ onClose }: { readonly onClose: () => void }) {
+  const photo = useLoad(loadPhoto);
+  const toast = useToast();
+  const ready = photo.state === 'ready' && photo.data.hasProfile ? photo.data : null;
+  const draft = usePhotoDraft(ready?.inResume ?? null, (text) => {
+    toast.show({ text });
+    onClose();
+  });
+  return (
+    <Dialog
+      open
+      title="Фото профиля"
+      onClose={onClose}
+      footer={ready ? <Footer draft={draft} onClose={onClose} /> : undefined}
+    >
+      {photo.state === 'loading' ? <BlockSkeleton label="Загружаем фото" /> : null}
+      {photo.state === 'error' ? (
+        <BlockError text="Не удалось загрузить профиль." onRetry={photo.retry} />
+      ) : null}
+      {ready ? <PhotoEditor profile={ready} draft={draft} /> : null}
+      {photo.state === 'ready' && !ready ? <NoProfile /> : null}
+    </Dialog>
+  );
+}
+
+/** p08 «Фото» по макету: окно над «Профилем», на 390 — нижний лист (B666, B645). */
+export function PhotoScreen({ node }: { readonly node: B640Node }) {
+  const { navigate } = useShell();
+  return (
+    <>
+      <ProfileScreen node={node} />
+      <PhotoDialog onClose={() => navigate(buildNodePath('s01'))} />
+    </>
   );
 }

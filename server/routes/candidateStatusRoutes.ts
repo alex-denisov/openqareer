@@ -1,3 +1,5 @@
+import { readRoleSnapshot } from './roleSkillAssessmentRoutes';
+import { startWeeklySelectionJob } from './weeklySelectionSchedule';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { CANDIDATE_STATUSES, TARGET_PROFESSION_MAX_LENGTH } from '../../shared/candidateStatus';
@@ -19,6 +21,7 @@ import { normalizeTargetProfession, type StatusChoice } from '../domain/candidat
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
+import { registerB640NotificationRoutes } from './b640NotificationRoutes';
 import { registerGrowthGoalRoutes } from './growthGoalRoutes';
 import { registerProfessionPathRoutes } from './professionPathRoutes';
 import { registerRelocationPayRoutes } from './relocationPayRoutes';
@@ -51,7 +54,10 @@ const choiceSchema = z.object({
     .nullish(),
 });
 const changeSchema = choiceSchema.extend({
-  options: z.object({ pauseAutoApply: z.boolean().optional() }).strict().optional(),
+  options: z
+    .object({ pauseAutoApply: z.boolean().optional(), weeklySelection: z.boolean().optional() })
+    .strict()
+    .optional(),
 });
 
 function signedIn(deps: BoundDeps, request: FastifyRequest, reply: FastifyReply): Signed | null {
@@ -101,6 +107,16 @@ const previewStatus: Handler = async (deps, request, reply) => {
   return { data: { preview }, meta: { requestId: request.id } };
 };
 
+/**
+ * B669 (prod 22.11): «Карьера» при «Меняю профессию» читала срез профессии холодным — 12 с
+ * ожидания и «Не удалось прочитать вакансии профессии». Срез строится сразу после выбора;
+ * экран подхватывает уже идущее построение.
+ */
+function warmTargetProfession(deps: BoundDeps, candidateId: string, target: string | null): void {
+  if (!target?.trim()) return;
+  void readRoleSnapshot(deps, candidateId, target, { awaitRebuild: true });
+}
+
 const putStatus: Handler = async (deps, request, reply) => {
   const signed = signedIn(deps, request, reply);
   if (!signed) return reply;
@@ -114,6 +130,7 @@ const putStatus: Handler = async (deps, request, reply) => {
       now: new Date(),
       timezone: accountTimezone(deps, signed.userId),
     });
+    warmTargetProfession(deps, signed.candidate.id, result.state.current.targetProfession);
     return {
       data: { ...result.state, applied: result.applied },
       meta: { requestId: request.id },
@@ -158,6 +175,8 @@ export function registerCandidateStatusRoutes(
       encryptionKey: deps.config.dataEncryptionKey,
     });
   if (!deps.candidateStatusRepository) app.addHook('onClose', async () => repository.close());
+  // B779: подборка раз в неделю тем, кто включил её на s02.
+  startWeeklySelectionJob(app, deps, repository);
   const bound: BoundDeps = {
     ...deps,
     status: {
@@ -181,4 +200,5 @@ export function registerCandidateStatusRoutes(
   // B653 C06: вилки мест для «Релокации».
   registerRelocationPayRoutes(app, deps);
   registerRelocationPlacesRoutes(app, deps);
+  registerB640NotificationRoutes(app, deps);
 }

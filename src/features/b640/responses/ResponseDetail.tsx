@@ -1,13 +1,19 @@
+import { pressSend } from '../apply/applyIntent';
 import { useRef, useState } from 'react';
 import type { ApplicationView } from '../../applications/applicationsApi';
+import type { ApplyConsentEntry } from '../../../../shared/applyConsent';
+import { ConsentItems, ConsentTextLink } from '../account/consentParts';
 import { Button, Icon, Link, ResultLine, StatusLine, useToast } from '../kit';
-import { buildNodePath } from '../routes';
 import { timeline, type ListedResponse, type TimelineEvent } from './model/responseList';
-import { onPlatform, platformOf } from './model/platform';
+import { onPlatform, responsePlatform } from './model/platform';
 import { reminderDraft } from './model/reminderDraft';
 import { pluralRu } from './model/responseRow';
 import { RejectionReasonForm } from './RejectionReasonForm';
+import { useApplyConsents } from './useApplyConsents';
+import { useSentMessages } from './useSentMessages';
 import { actionPath } from './ResponsesTable';
+import { InterviewActions } from './InterviewActions';
+import { useRecordingLine } from './useRecordingLine';
 import {
   marksFor,
   useResponseActions,
@@ -19,6 +25,37 @@ import {
   type ResponseWriter,
 } from './useResponseActions';
 
+/** B787: сохранённый текст согласия, поручение, по которому оно дано, и данные записи. */
+function ConsentRecord({ entry }: { readonly entry: ApplyConsentEntry }) {
+  const facts = [
+    entry.employer,
+    entry.host,
+    `${entry.occurredAt.slice(0, 19).replace('T', ' ')} UTC`,
+    `Команда: ${entry.command}`,
+    ...(entry.checkboxLabel ? [`Подпись у галочки: ${entry.checkboxLabel}`] : []),
+    ...(entry.policySha256 ? [`SHA-256 политики: ${entry.policySha256}`] : []),
+    `Поручение: ${entry.mandateVersion}`,
+  ];
+  return (
+    <ConsentTextLink title="Согласие на обработку данных">
+      <p className="c5-lead">{entry.checkboxText}</p>
+      <ul className="c5-list">
+        {facts.map((fact) => (
+          <li key={fact}>{fact}</li>
+        ))}
+        {entry.policyUrl ? (
+          <li>
+            <a href={entry.policyUrl} target="_blank" rel="noopener noreferrer">
+              Политика работодателя
+            </a>
+          </li>
+        ) : null}
+      </ul>
+      <ConsentItems capability="actions_on_behalf" versionId={entry.mandateVersion} />
+    </ConsentTextLink>
+  );
+}
+
 function Events({ events }: { readonly events: readonly TimelineEvent[] }) {
   return (
     <ul className="tl">
@@ -28,6 +65,7 @@ function Events({ events }: { readonly events: readonly TimelineEvent[] }) {
           <span className="od-ev">
             <b>{item.title}</b>
             {item.note ? <small>{item.note}</small> : null}
+            {item.consent ? <ConsentRecord entry={item.consent} /> : null}
           </span>
           <span className="when num">{item.when}</span>
         </li>
@@ -37,7 +75,9 @@ function Events({ events }: { readonly events: readonly TimelineEvent[] }) {
 }
 
 function History({ application }: { readonly application: ApplicationView }) {
-  const events = timeline(application);
+  const messages = useSentMessages(application.clusterId);
+  const consents = useApplyConsents(application.id);
+  const events = timeline(application, new Date(), messages, consents);
   if (events.length === 0) return null;
   const rest = events.slice(1);
   return (
@@ -161,11 +201,21 @@ function NextActions({ item, actions, draft }: ActionsProps) {
   const { application, row } = item;
   const copy = useCopy(draft);
   const busy = actions.outcome.kind === 'busy';
-  const interviewAhead = application.stage === 'interview' && row.tag.tone !== 'ok';
+  const interview = application.stage === 'interview';
+  const interviewAhead = interview && row.tag.tone !== 'ok';
+  const past = interview && !interviewAhead;
+  const marks = marksFor(application.stage);
+  // Макет o01c: после интервью «В архив» — в «Другом способе», остальные отметки — в меню.
+  const archive = past ? marks.find((mark) => mark.stage === 'archived') : undefined;
+  const menuMarks = archive ? marks.filter((mark) => mark !== archive) : marks;
   return (
     <div className="actions">
-      {row.action ? (
-        <Link className="btn is-primary" to={actionPath(row)}>
+      {row.action && row.action.kind !== 'debrief' ? (
+        <Link
+          className="btn is-primary"
+          to={actionPath(row)}
+          onClick={() => row.action && pressSend(row.action, actionPath(row))}
+        >
           <Icon name={row.action.icon} />
           {row.action.label}
         </Link>
@@ -180,22 +230,45 @@ function NextActions({ item, actions, draft }: ActionsProps) {
           </Button>
         </>
       ) : null}
-      {application.stage === 'interview' ? (
-        <Link
-          className="btn is-primary"
-          to={buildNodePath(interviewAhead ? 'i01' : 'i04', { responseId: application.id })}
-        >
-          <Icon name={interviewAhead ? 'checkc' : 'mic'} />
-          {interviewAhead ? 'Подготовиться к интервью' : 'Рассказать, как прошло'}
-        </Link>
+      {interview ? (
+        <InterviewActions
+          responseId={application.id}
+          ahead={interviewAhead}
+          archive={archive}
+          disabled={busy}
+          onArchive={actions.mark}
+        />
       ) : null}
       {application.stage === 'archived' ? (
         <Button icon="undo" busy={busy} onClick={actions.restore}>
           Вернуть из архива
         </Button>
       ) : null}
-      <MarkMenu marks={marksFor(application.stage)} disabled={busy} onMark={actions.mark} />
+      <MarkMenu marks={menuMarks} disabled={busy} onMark={actions.mark} />
     </div>
+  );
+}
+
+function pastInterview(item: ListedResponse): boolean {
+  return item.application.stage === 'interview' && item.row.tag.tone === 'ok';
+}
+
+/** Что дальше: после интервью — вопрос, как оно прошло, и есть ли запись (макет o01c). */
+function NextLine({ item }: { readonly item: ListedResponse }) {
+  const past = pastInterview(item);
+  const recording = useRecordingLine(item.application.id, past);
+  if (!past) {
+    return (
+      <p>
+        <b>{item.row.next}</b>
+      </p>
+    );
+  }
+  return (
+    <p>
+      <b>{`Как прошло интервью с ${item.row.company}?`}</b>
+      {recording ? ` ${recording}` : null}
+    </p>
   );
 }
 
@@ -225,7 +298,7 @@ function NoteField({ fieldId, application, writer }: NoteProps) {
 function VacancyLink({ application }: { readonly application: ApplicationView }) {
   const url = application.vacancy?.url;
   if (!url || !/^https?:\/\//u.test(url)) return null;
-  const place = onPlatform(platformOf(application.vacancy?.source));
+  const place = onPlatform(responsePlatform(application));
   return (
     <a className="row-act" href={url} target="_blank" rel="noopener noreferrer">
       <Icon name="out" /> {`Вакансия ${place}`}
@@ -252,9 +325,7 @@ export function ResponseDetail({ item, titleId, onChanged }: ResponseDetailProps
         Что дальше
       </h3>
       {row.failure ? <StatusLine state="err" text={`Не доставлен · ${row.failure}`} /> : null}
-      <p>
-        <b>{row.next}</b>
-      </p>
+      <NextLine item={item} />
       {row.remind ? (
         <ReminderDraft fieldId={`${titleId}-drt`} draft={draft} onChange={setDraft} />
       ) : null}

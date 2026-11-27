@@ -1,3 +1,4 @@
+import { withoutTitleQuestions } from '../domain/manualApplyQuestions';
 import { DatabaseSync } from 'node:sqlite';
 import type {
   QuestionnaireAnswer,
@@ -23,6 +24,9 @@ CREATE TABLE IF NOT EXISTS application_questionnaires (
 ) STRICT;
 `;
 
+/** Анкет на кандидата: вакансии клиент называет сам, поэтому число строк ограничено. */
+export const QUESTIONNAIRE_MAX_PER_CANDIDATE = 200;
+
 export interface StoredQuestionnaire {
   readonly vacancyId: string;
   readonly formUrl: string | null;
@@ -46,7 +50,10 @@ export class SqliteQuestionnaireRepository {
   private readonly ownsDatabase: boolean;
   private readonly sealedText: SealedText;
 
-  constructor(options: DatabaseSync | { databasePath: string; encryptionKey: Buffer }, key?: Buffer) {
+  constructor(
+    options: DatabaseSync | { databasePath: string; encryptionKey: Buffer },
+    key?: Buffer,
+  ) {
     this.ownsDatabase = !(options instanceof DatabaseSync);
     this.database =
       options instanceof DatabaseSync ? options : new DatabaseSync(options.databasePath);
@@ -79,6 +86,17 @@ export class SqliteQuestionnaireRepository {
     }
   }
 
+  /** B738: все анкеты кандидата с ответами — для выгрузки данных. */
+  exportAll(candidateId: string): StoredQuestionnaire[] {
+    const rows = this.database
+      .prepare(
+        `SELECT vacancy_id, form_url, questions_json, answers_cipher, read_at, submitted_at
+         FROM application_questionnaires WHERE candidate_id = ? ORDER BY read_at, vacancy_id`,
+      )
+      .all(candidateId) as unknown as Row[];
+    return rows.map((row) => this.toStored(candidateId, row));
+  }
+
   get(candidateId: string, vacancyId: string): StoredQuestionnaire | null {
     const row = this.database
       .prepare(
@@ -86,11 +104,14 @@ export class SqliteQuestionnaireRepository {
          FROM application_questionnaires WHERE candidate_id = ? AND vacancy_id = ?`,
       )
       .get(candidateId, vacancyId) as unknown as Row | undefined;
-    if (!row) return null;
+    return row ? this.toStored(candidateId, row) : null;
+  }
+
+  private toStored(candidateId: string, row: Row): StoredQuestionnaire {
     return {
       vacancyId: row.vacancy_id,
       formUrl: row.form_url,
-      questions: JSON.parse(row.questions_json) as QuestionnaireQuestion[],
+      questions: withoutTitleQuestions(JSON.parse(row.questions_json) as QuestionnaireQuestion[]),
       answers: this.openAnswers(candidateId, row),
       readAt: row.read_at,
       submittedAt: row.submitted_at,
@@ -101,8 +122,13 @@ export class SqliteQuestionnaireRepository {
   saveQuestions(
     candidateId: string,
     vacancyId: string,
-    input: { readonly questions: readonly QuestionnaireQuestion[]; readonly formUrl: string | null; readonly readAt: string },
+    input: {
+      readonly questions: readonly QuestionnaireQuestion[];
+      readonly formUrl: string | null;
+      readonly readAt: string;
+    },
   ): void {
+    this.makeRoom(candidateId, vacancyId);
     this.database
       .prepare(
         `INSERT INTO application_questionnaires
@@ -115,8 +141,33 @@ export class SqliteQuestionnaireRepository {
       .run(candidateId, vacancyId, input.formUrl, JSON.stringify(input.questions), input.readAt);
   }
 
+  /**
+   * Новая анкета при полном лимите вытесняет старые: сначала без ответов, потом самые давние.
+   * Анкета с ответами кандидата уходит последней.
+   */
+  private makeRoom(candidateId: string, vacancyId: string): void {
+    if (this.get(candidateId, vacancyId)) return;
+    const row = this.database
+      .prepare('SELECT COUNT(*) AS n FROM application_questionnaires WHERE candidate_id = ?')
+      .get(candidateId) as unknown as { n: number };
+    const surplus = Number(row.n) - (QUESTIONNAIRE_MAX_PER_CANDIDATE - 1);
+    if (surplus <= 0) return;
+    this.database
+      .prepare(
+        `DELETE FROM application_questionnaires WHERE candidate_id = ? AND vacancy_id IN (
+           SELECT vacancy_id FROM application_questionnaires WHERE candidate_id = ?
+           ORDER BY (answers_cipher IS NOT NULL), (submitted_at IS NOT NULL), read_at, vacancy_id
+           LIMIT ?)`,
+      )
+      .run(candidateId, candidateId, surplus);
+  }
+
   /** false — анкеты у кандидата по этой вакансии нет. */
-  saveAnswers(candidateId: string, vacancyId: string, answers: readonly QuestionnaireAnswer[]): boolean {
+  saveAnswers(
+    candidateId: string,
+    vacancyId: string,
+    answers: readonly QuestionnaireAnswer[],
+  ): boolean {
     const cipher =
       answers.length > 0
         ? this.sealedText.seal(JSON.stringify(answers), this.scope(candidateId, vacancyId))

@@ -43,7 +43,7 @@ describe('план адаптации для экрана d01', () => {
       'days_31_60',
       'days_61_90',
     ]);
-    expect(result.steps.every((step) => step.tasksTotal === 0 && step.status === 'ahead')).toBe(true);
+    expect(result.steps.every((step) => step.tasksTotal === 0)).toBe(true);
   });
 
   it('день на новом месте считается от даты выхода', () => {
@@ -118,9 +118,85 @@ describe('план адаптации для экрана d01', () => {
     expect(result.stages[0].tasks.find((t) => t.id === 'b')?.step).toBeNull();
   });
 
-  it('пустой этап и пустой шаг — «впереди», даже если их дни начались', () => {
+  it('пустой этап — «впереди», даже если его дни начались', () => {
     const result = view([task({ id: 'a', stage: 'prep', completed: true })], EMPTY_ADAPTATION_DETAILS);
     expect(result.stages.map((stage) => stage.status)).toEqual(['done', 'ahead', 'ahead', 'ahead']);
+  });
+
+  it('B685: шаг без задач — по дню адаптации и дням шага', () => {
+    const status = (asOf: string) =>
+      Object.fromEntries(view([], EMPTY_ADAPTATION_DETAILS, asOf).steps.map((step) => [step.id, step.status]));
+    // День 39: шаги до 30-го дня пройдены, карта людей идёт весь срок; проверка 30-го дня
+    // без сохранённого итога идёт (B687 — действие, а не задачи).
+    expect(status('2027-01-08')).toEqual({
+      before_start: 'done',
+      first_two_weeks: 'done',
+      first_meeting: 'done',
+      people_map: 'active',
+      day_30_check: 'active',
+      settling: 'done',
+    });
+    // До выхода: идёт только «До выхода».
+    expect(status('2026-11-25')).toEqual({
+      before_start: 'active',
+      first_two_weeks: 'ahead',
+      first_meeting: 'ahead',
+      people_map: 'ahead',
+      day_30_check: 'ahead',
+      settling: 'ahead',
+    });
+    // День 10: первая встреча позади, проверка 30-го дня впереди.
+    expect(status('2026-12-10')).toMatchObject({
+      first_two_weeks: 'active',
+      first_meeting: 'done',
+      day_30_check: 'ahead',
+      settling: 'active',
+    });
+  });
+
+  it('B687: «Проверка на 30-й день» пройдена только с сохранённым итогом проверки', () => {
+    const check = (asOf: string, day30Sent: boolean, tasks: PlanTask[] = []) =>
+      buildAdaptationView({ workplace, tasks, details: EMPTY_ADAPTATION_DETAILS, asOf, day30Sent }).steps.find(
+        (item) => item.id === 'day_30_check',
+      )?.status;
+    // День 40, итога нет, задач 0 из 4 — «идёт», а не «пройдено».
+    expect(check('2027-01-09', false)).toBe('active');
+    expect(check('2027-01-09', true)).toBe('done');
+    // До 28-го дня — впереди; итог раньше срока — пройдено.
+    expect(check('2026-12-20', false)).toBe('ahead');
+    expect(check('2026-12-20', true)).toBe('done');
+  });
+
+  it('B685: день 40 — открытые задачи после дней шага «идёт», закрытые или без задач — «пройдено»', () => {
+    const tasks = [
+      task({ id: 'open', stage: 'prep', completed: false }),
+      task({ id: 'closed', stage: 'days_1_30', category: 'people', completed: true }),
+    ];
+    const status = Object.fromEntries(
+      view(tasks, EMPTY_ADAPTATION_DETAILS, '2027-01-09').steps.map((step) => [step.id, step.status]),
+    );
+    expect(view([], EMPTY_ADAPTATION_DETAILS, '2027-01-09').dayNumber).toBe(40);
+    // «До выхода»: дни прошли, задача открыта.
+    expect(status.before_start).toBe('active');
+    // «Первые две недели»: дни прошли, все задачи закрыты.
+    expect(status.first_two_weeks).toBe('done');
+    // «Первая встреча»: дни прошли, задач нет.
+    expect(status.first_meeting).toBe('done');
+  });
+
+  it('B685: в дни шага — все задачи закрыты раньше срока «пройдено», открытая или без задач — «идёт»', () => {
+    const step = (tasks: PlanTask[], asOf: string) =>
+      view(tasks, EMPTY_ADAPTATION_DETAILS, asOf).steps.find((item) => item.id === 'first_two_weeks')
+        ?.status;
+    const closed = [task({ id: 'c', stage: 'days_1_30', category: 'people', completed: true })];
+    const open = [task({ id: 'o', stage: 'days_1_30', category: 'people', completed: false })];
+    // День 5 — внутри дней «Первых двух недель» (1–13).
+    expect(step(closed, '2026-12-05')).toBe('done');
+    expect(step(open, '2026-12-05')).toBe('active');
+    expect(step([], '2026-12-05')).toBe('active');
+    // До выхода — дни шага не начались.
+    expect(step(open, '2026-11-25')).toBe('ahead');
+    expect(step([], '2026-11-25')).toBe('ahead');
   });
 
   it('статус этапа: всё сделано — готово, срок начался — в работе, иначе впереди', () => {

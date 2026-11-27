@@ -16,11 +16,13 @@ import {
   type ApplicationView,
 } from '../../applications/applicationsApi';
 import type { MatchedVacancyItem } from '../../coach/cabinetTypes';
+import { useOnReveal } from '../kit/screenActive';
 
 type Cluster = MatchedVacancyItem['cluster'];
 
+/** Только звезда кандидата: черновик отклика в той же стадии звездой не считается (B798). */
 export function isSaved(application: ApplicationView | undefined): boolean {
-  return application?.stage === 'saved';
+  return application?.stage === 'saved' && application.starred === true;
 }
 
 /** Кандидат уже откликнулся: карточка есть и она не «сохранено» и не архив. */
@@ -68,6 +70,8 @@ export interface VacancyLinks {
   readonly loading: boolean;
   readonly failed: boolean;
   readonly reload: () => void;
+  /** Перечитать без строки загрузки: сервер сам сменил карточку (скрытие и его отмена). */
+  readonly refresh: () => void;
   /** Сохранить или убрать из сохранённых; при сбое бросает ошибку. */
   readonly toggleSaved: (cluster: Cluster) => Promise<ApplicationView>;
   /** Отметить «уже откликнулись» с датой отклика; при сбое бросает ошибку. */
@@ -79,10 +83,18 @@ async function persistSaved(
   existing: ApplicationView | undefined,
 ): Promise<ApplicationView> {
   if (existing?.stage === 'saved') {
-    return patchApplication(existing.id, { expectedVersion: existing.version, stage: 'archived' });
+    const { id, version: expectedVersion } = existing;
+    // Черновик отклика с письмом звезда не создаёт и не убирает (B798).
+    if (!isSaved(existing)) return patchApplication(id, { expectedVersion, starred: true });
+    if (existing.materials?.coverLetter || existing.materials?.resume) {
+      return patchApplication(id, { expectedVersion, starred: false });
+    }
+    return patchApplication(id, { expectedVersion, stage: 'archived' });
   }
   if (existing?.stage === 'archived' && existing.archivePreviousStage === 'saved') {
-    return restoreApplicationFromArchive(existing.id, existing.version);
+    const restored = await restoreApplicationFromArchive(existing.id, existing.version);
+    if (isSaved(restored)) return restored;
+    return patchApplication(restored.id, { expectedVersion: restored.version, starred: true });
   }
   if (existing) throw new Error('По этой вакансии уже есть отклик');
   return createApplication({
@@ -118,6 +130,7 @@ interface LoadedApplications {
   readonly loading: boolean;
   readonly failed: boolean;
   readonly reload: () => void;
+  readonly refresh: () => void;
 }
 
 function useLoadedApplications(): LoadedApplications {
@@ -142,16 +155,18 @@ function useLoadedApplications(): LoadedApplications {
     return () => controller.abort();
   }, [attempt]);
 
+  const refresh = useCallback(() => setAttempt((value) => value + 1), []);
   const reload = useCallback(() => {
     setLoading(true);
-    setAttempt((value) => value + 1);
-  }, []);
-  return { applications, setApplications, loading, failed, reload };
+    refresh();
+  }, [refresh]);
+  return { applications, setApplications, loading, failed, reload, refresh };
 }
 
 /** Карточки откликов кандидата: по ним строка знает «сохранена» и «откликнулся». */
 export function useVacancyLinks(): VacancyLinks {
-  const { applications, setApplications, loading, failed, reload } = useLoadedApplications();
+  const { applications, setApplications, loading, failed, reload, refresh } = useLoadedApplications();
+  useOnReveal(refresh);
 
   const byCluster = useMemo(() => {
     const map = new Map<string, ApplicationView>();
@@ -190,5 +205,5 @@ export function useVacancyLinks(): VacancyLinks {
     [byCluster, write],
   );
 
-  return { applications, byCluster, loading, failed, reload, toggleSaved, markApplied };
+  return { applications, byCluster, loading, failed, reload, refresh, toggleSaved, markApplied };
 }

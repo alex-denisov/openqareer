@@ -22,29 +22,44 @@ function change(index: number, overrides: Record<string, unknown> = {}) {
   };
 }
 
-function contact(index: number, fullName: string, companyName: string, roleTitle: string) {
+function contact(
+  index: number,
+  fullName: string,
+  companyName: string,
+  roleTitle: string,
+  extra: Record<string, unknown> = {},
+) {
   return {
-    id: `c-${index}`,
+    id: `contact:c-${index}`,
     fullName,
     companyName,
     roleTitle,
-    relationship: '',
-    strength: 'unknown',
-    linkedinUrl: null,
-    workplaces: [],
-    knowsRecruiterIds: [],
-    source: 'linkedin_import',
-    createdAt: '2026-11-10T09:00:00.000Z',
-    updatedAt: '2026-11-10T09:00:00.000Z',
+    inSelection: false,
+    vacancyId: null,
+    circle: 1,
+    via: null,
+    message: { kind: 'known_contact', target: { contactId: `c-${index}` } },
+    ...extra,
   };
 }
 
+const IN_POOL = { inSelection: true, vacancyId: 'v-1' };
 const CONTACTS = [
-  contact(1, 'Роман Ефимов', 'Ладога Банк', 'руководитель группы платежей'),
-  contact(2, 'Наталья Седова', 'Ладога Банк', 'директор по разработке'),
+  contact(1, 'Роман Ефимов', 'Ладога Банк', 'руководитель группы платежей', IN_POOL),
+  contact(2, 'Наталья Седова', 'Ладога Банк', 'директор по разработке', {
+    ...IN_POOL,
+    circle: 2,
+    via: 'Роман Ефимов',
+    message: { kind: 'ask_introduction', target: { contactId: 'c-1', vacancyId: 'v-1' } },
+  }),
   contact(3, 'Анна Ким', 'Северный Банк', 'руководитель подбора'),
-  ...Array.from({ length: 30 }, (_, index) =>
-    contact(10 + index, `Знакомый ${index + 1}`, `Компания ${index + 1}`, 'инженер'),
+  ...Array.from({ length: 1361 }, (_, index) =>
+    contact(
+      10 + index,
+      `Знакомый ${index + 1}`,
+      `Компания ${Math.floor(index / 3) + 1}`,
+      'инженер',
+    ),
   ),
 ];
 
@@ -59,10 +74,11 @@ interface Calls {
   readonly reverted: string[];
   readonly resumePuts: Array<{ experience: Array<Record<string, unknown>> }>;
   readonly imports: Array<Record<string, unknown>>;
+  readonly drafts: Array<Record<string, unknown>>;
 }
 
 async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise<Calls> {
-  const calls: Calls = { reverted: [], resumePuts: [], imports: [] };
+  const calls: Calls = { reverted: [], resumePuts: [], imports: [], drafts: [] };
   const total = mocks.historyTotal ?? 23;
   let conflicts = mocks.revertConflicts ?? 0;
   const reverted = new Set<string>();
@@ -85,43 +101,84 @@ async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise
       return route.fulfill({ json: { data: { reverted: true } } });
     }
     const pageNumber = Number(url.searchParams.get('page') ?? 0);
+    const source = url.searchParams.get('source');
     const entries = Array.from({ length: total }, (_, index) =>
       change(
         index,
-        index === 1
-          ? {
-              section: 'status',
-              label: 'Статус',
-              previousText: 'Присматриваюсь',
-              appliedText: 'Ищу работу',
-            }
-          : {},
+        index === 2
+          ? { actor: 'consultant' }
+          : index === 1
+            ? {
+                section: 'status',
+                label: 'Статус',
+                previousText: 'Присматриваюсь',
+                appliedText: 'Ищу работу',
+              }
+            : {},
       ),
-    )
+    ).filter((entry) => !source || entry.actor === source);
+    const shown = entries
       .map((entry) =>
         reverted.has(entry.id) ? { ...entry, revertedAt: '2026-11-17T09:00:00.000Z' } : entry,
       )
       .slice(pageNumber * 20, pageNumber * 20 + 20);
-    return route.fulfill({ json: { data: { entries, total, page: pageNumber, pageSize: 20 } } });
+    return route.fulfill({
+      json: {
+        data: {
+          entries: shown,
+          total: entries.length,
+          page: pageNumber,
+          pageSize: 20,
+          sources: { all: total, candidate: Math.max(0, total - 1), consultant: total ? 1 : 0 },
+        },
+      },
+    });
   });
-  await page.route(`${API}/connection-contacts**`, (route) => {
-    if (route.request().method() !== 'GET') return route.fallback();
-    const items = mocks.noContacts ? [] : CONTACTS;
+  await page.route(`${API}/b640/connections**`, (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const needle = (params.get('search') ?? '').toLowerCase();
+    const all = mocks.noContacts ? [] : CONTACTS;
+    const found = all.filter(
+      (item) =>
+        (params.get('pool') !== 'true' || item.inSelection) &&
+        `${item.fullName} ${item.companyName}`.toLowerCase().includes(needle),
+    );
+    const offset = Number(params.get('offset') ?? 0);
+    const items = found.slice(offset, offset + 20);
+    const shown = offset + items.length;
     return route.fulfill({
       json: {
         data: {
           items,
-          total: items.length,
-          offset: 0,
-          limit: 100,
-          nextOffset: null,
+          total: found.length,
+          connections: all.length,
+          selectionCompanies: mocks.noContacts ? 0 : 1,
+          selectionPending: false,
+          offset,
+          nextOffset: shown < found.length ? shown : null,
           linkedinImport: mocks.noContacts
             ? { state: 'unknown', importedAt: null, importedCount: null }
             : {
                 state: 'imported',
                 importedAt: '2026-11-10T09:00:00.000Z',
-                importedCount: items.length,
+                importedCount: all.length,
               },
+        },
+      },
+    });
+  });
+  await page.route(`${API}/b640/contact-messages/m-1`, (route) => route.fulfill({ status: 204 }));
+  await page.route(`${API}/b640/contact-messages`, (route) => {
+    calls.drafts.push(route.request().postDataJSON());
+    return route.fulfill({
+      status: 201,
+      json: {
+        data: {
+          id: 'm-1',
+          kind: 'known_contact',
+          text: 'Черновик сообщения',
+          recipient: { name: 'Роман Ефимов', linkedinUrl: null },
+          createdAt: '2026-11-12T09:00:00.000Z',
         },
       },
     });
@@ -184,6 +241,21 @@ test.describe('B651: «История изменений» (p10)', () => {
     await expect(screen.getByRole('button', { name: /Показать ещё/u })).toHaveCount(0);
   });
 
+  test('чипы источника: счёт с сервера и отбор', async ({ page }) => {
+    await openCabinet(page, '/app/profile/history');
+    const chips = node(page, 'p10').getByRole('group', { name: 'Источник правки' });
+    await expect(chips.getByRole('button')).toHaveText([
+      'Все · 23',
+      'С ваших слов · 22',
+      'Консультант · 1',
+    ]);
+    await chips.getByRole('button', { name: 'Консультант · 1' }).click();
+    await expect(node(page, 'p10').locator('.hx-row')).toHaveCount(1);
+    await expect(node(page, 'p10').locator('#hx-title')).toHaveText('23 правки профиля');
+    await chips.getByRole('button', { name: 'Все · 23' }).click();
+    await expect(node(page, 'p10').locator('.hx-row')).toHaveCount(20);
+  });
+
   test('отмена не прошла: причина в строке правки, кнопка остаётся', async ({ page }) => {
     await openCabinet(page, '/app/profile/history', { revertConflicts: 1 });
     const row = node(page, 'p10').locator('.hx-row').first();
@@ -192,9 +264,12 @@ test.describe('B651: «История изменений» (p10)', () => {
     await expect(row.getByRole('button', { name: /Отменить/u })).toBeVisible();
   });
 
-  test('правок нет: один заголовок', async ({ page }) => {
+  test('правок нет: p10b с «Открыть профиль»', async ({ page }) => {
     await openCabinet(page, '/app/profile/history', { historyTotal: 0 });
-    await expect(node(page, 'p10').locator('#hx-title')).toHaveText('Правок пока нет');
+    await expect(node(page, 'p10').locator('#hx-title')).toHaveText('История изменений');
+    await expect(node(page, 'p10').locator('.vl-empty-t')).toHaveText('Правок пока нет');
+    await expect(node(page, 'p10').getByRole('link', { name: 'Открыть профиль' })).toBeVisible();
+    await expectGates(page);
     await expect(node(page, 'p10').locator('.hx-row')).toHaveCount(0);
   });
 });
@@ -221,6 +296,25 @@ test.describe('B651: «Уточнение профиля» (p09)', () => {
     expect(saved).toMatchObject({ teamSize: 9, employer: 'FinCloud' });
   });
 
+  test('«Не хочу указывать» хранится, вопрос о месте больше не задаётся', async ({ page }) => {
+    const calls = await openCabinet(page, '/app/profile/question');
+    await page.getByRole('button', { name: 'Не хочу указывать' }).click();
+    await expect.poll(() => calls.resumePuts.length).toBe(1);
+    expect(calls.resumePuts[0].experience.some((entry) => entry.teamSizeDeclined === true)).toBe(
+      true,
+    );
+  });
+
+  test('390: кнопки закреплены над навигацией, все три видны', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openCabinet(page, '/app/profile/question');
+    const actions = node(page, 'p09').locator('.actions');
+    await expect(actions).toHaveCSS('position', 'fixed');
+    for (const name of ['Ответить', 'Не сейчас', 'Не хочу указывать']) {
+      await expect(actions.getByText(name)).toBeInViewport();
+    }
+  });
+
   test('«Не сейчас» возвращает в профиль', async ({ page }) => {
     await openCabinet(page, '/app/profile/question');
     await page.getByRole('link', { name: 'Не сейчас' }).click();
@@ -232,7 +326,12 @@ test.describe('B651: «Откуда взять опыт» (p04)', () => {
   test('источники ведут в свои разделы, одна залитая кнопка; гейты', async ({ page }) => {
     await openCabinet(page, '/app/profile/sources');
     const screen = node(page, 'p04');
-    await expect(screen.locator('.src')).toHaveCount(4);
+    await expect(screen.locator('.src')).toHaveCount(5);
+    await expect(
+      screen
+        .locator('.src', { hasText: 'Заполнить вручную' })
+        .getByRole('link', { name: 'Заполнить' }),
+    ).toHaveAttribute('href', /\/app\/profile\/experience\/new/u);
     await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(1);
     await expectGates(page);
     await screen
@@ -240,6 +339,41 @@ test.describe('B651: «Откуда взять опыт» (p04)', () => {
       .getByRole('link', { name: 'Подключить' })
       .click();
     await expect(page).toHaveURL(/\/app\/profile\/hh$/u);
+  });
+
+  test('p04b: LinkedIn прочитан — «Готово · дата», «Обновить», проверка записей и «Дальше»', async ({
+    page,
+  }) => {
+    await openCabinet(page, '/app/profile');
+    await page.route('**/api/v1/candidate/connections', (route) =>
+      route.fulfill({
+        json: {
+          data: [
+            {
+              platform: 'linkedin',
+              available: true,
+              capabilities: [],
+              importsCareerHistory: true,
+              status: 'imported',
+              importedAt: '2026-11-12T10:00:00.000Z',
+            },
+          ],
+        },
+      }),
+    );
+    await page.goto('/app/profile/sources', { waitUntil: 'domcontentloaded' });
+    const screen = node(page, 'p04');
+    const linkedin = screen.locator('.src', { hasText: 'LinkedIn' });
+    await expect(linkedin).toContainText('Готово · 12.11');
+    await expect(linkedin.getByRole('link', { name: 'Обновить LinkedIn' })).toBeVisible();
+    await expect(screen.locator('.pr-block .pw').first()).toBeVisible();
+    await expect(screen.getByRole('link', { name: 'Дальше' })).toHaveAttribute(
+      'href',
+      /\/app\/career\/roles$/u,
+    );
+    await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(1);
+    await expectGates(page);
+    await page.screenshot({ path: `.s13-shots/p04b-${test.info().project.name}.png` });
   });
 
   test('файл не PDF: причина на месте, в профиль ничего не ушло', async ({ page }) => {
@@ -290,31 +424,91 @@ test.describe('B651: «Откуда взять опыт» (p04): замена п
 });
 
 test.describe('B651: «Связи» (p11)', () => {
-  test('связи по компаниям, поиск и «Показать ещё 20»; гейты', async ({ page }) => {
+  test('1364 связи: счёт компаний, порции по 20, подборка, поиск; гейты', async ({
+    page,
+  }, testInfo) => {
     await openCabinet(page, '/app/profile/connections');
     const screen = node(page, 'p11');
-    await expect(screen.locator('#ln-title')).toHaveText('33 связи');
+    const desktop = testInfo.project.name === 'desktop-1440';
+    await expect(screen.locator(desktop ? '.ln-h-d' : '.ln-h-m')).toHaveText(
+      desktop ? 'Знакомые есть в 1 компании из подборки' : 'Знакомые в 1 компании',
+    );
     await expect(screen.locator('.ln-row')).toHaveCount(20);
-    await expect(screen.locator('.ln-co').first().locator('.ln-co-t')).toHaveText('Ладога Банк');
-    await expect(screen.locator('.ln-co').first().locator('.ln-row')).toHaveCount(2);
+    const first = screen.locator('.ln-co').first();
+    await expect(first.locator('.ln-co-t')).toHaveText('Ладога Банк · в подборке');
+    await expect(first.locator('.ln-row')).toHaveCount(2);
+    await expect(first.locator('a.ln-open').first()).toHaveAttribute(
+      'href',
+      '/app/responses/v-1/letter',
+    );
     await expectGates(page);
+    if (desktop) {
+      await page.setViewportSize({ width: 1176, height: 800 });
+      await expectGates(page);
+    }
 
-    await screen.getByRole('button', { name: 'Показать ещё 13' }).click();
-    await expect(screen.locator('.ln-row')).toHaveCount(33);
+    await screen.getByRole('button', { name: 'Показать ещё 20 · осталось 1344' }).click();
+    await expect(screen.locator('.ln-row')).toHaveCount(40);
+
+    if (desktop) await screen.getByLabel('Только компании из подборки').check();
+    else await screen.getByRole('button', { name: 'Из подборки' }).click();
+    await expect(screen.locator('.ln-row')).toHaveCount(2);
+    if (desktop) await screen.getByLabel('Только компании из подборки').uncheck();
+    else await screen.getByRole('button', { name: 'Из подборки' }).click();
 
     await screen.getByLabel('Поиск по связям').fill('северный');
     await expect(screen.locator('.ln-row')).toHaveCount(1);
-    await expect(screen.locator('.ln-row .row-title')).toHaveText('Анна Ким');
+    await expect(screen.locator('.ln-row .row-title')).toContainText('Анна Ким');
     await screen.getByLabel('Поиск по связям').fill('никого');
     await expect(screen.getByText('Никого не нашли')).toBeVisible();
+  });
+
+  test('«Написать» и «Попросить представить» открывают черновик, ничего не отправляя', async ({
+    page,
+  }) => {
+    const calls = await openCabinet(page, '/app/profile/connections');
+    const screen = node(page, 'p11');
+    await screen.getByRole('button', { name: 'Написать: Роман Ефимов' }).click();
+    await expect(screen.getByRole('textbox', { name: 'Черновик' })).toHaveValue(
+      'Черновик сообщения',
+    );
+    await expect(screen.locator('.is-primary:visible')).toHaveCount(1);
+    // Панель черновика общая с «Контактами»; здесь проверяем, что она не распирает экран.
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await screen.getByRole('button', { name: 'Не отправлять' }).click();
+    await expect(screen.getByRole('textbox', { name: 'Черновик' })).toHaveCount(0);
+    await screen.getByRole('button', { name: 'Попросить представить: Наталья Седова' }).click();
+    await expect(screen.getByRole('textbox', { name: 'Черновик' })).toBeVisible();
+    expect(calls.drafts).toEqual([
+      { contactId: 'c-1', kind: 'known_contact' },
+      { contactId: 'c-1', vacancyId: 'v-1', kind: 'ask_introduction' },
+    ]);
   });
 
   test('связей нет: заголовок и путь к подключению LinkedIn', async ({ page }) => {
     await openCabinet(page, '/app/profile/connections', { noContacts: true });
     const screen = node(page, 'p11');
-    await expect(screen.locator('#ln-title')).toHaveText('Связей пока нет');
+    await expect(screen.getByRole('heading', { name: 'Связи ещё не подключены' })).toBeVisible();
     await screen.getByRole('link', { name: 'Подключить LinkedIn' }).click();
     await expect(page).toHaveURL(/\/app\/profile\/linkedin$/u);
+  });
+});
+
+test.describe('B651: «Добавить навык» (s01)', () => {
+  test('навык записывается в профиль; гейты', async ({ page }) => {
+    const calls = await openCabinet(page, '/app/profile');
+    const add = node(page, 's01').locator('.skill-add');
+    await add.locator('summary').click();
+    await add.getByLabel('Навык').fill('Terraform');
+    await expectGates(page);
+    await add.getByLabel('Навык').press('Enter');
+    await expect.poll(() => calls.resumePuts.length).toBe(1);
+    const { skills } = calls.resumePuts[0] as unknown as { skills: Array<{ name: string }> };
+    expect(skills.at(-1)?.name).toBe('Terraform');
+    await expect(add).not.toHaveAttribute('open', '');
   });
 });
 

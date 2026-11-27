@@ -2,6 +2,28 @@ import { describe, expect, it } from 'vitest';
 import { careerInstructionsForRole } from './careerRolePrompts';
 
 describe('career role prompts', () => {
+  it('B745: nextSection заполняет только консультант и только для совета, который делается в разделе', () => {
+    const consultant = careerInstructionsForRole('career_consultant');
+    expect(consultant).toContain('nextSection');
+    expect(consultant).toContain('На нейтральный вопрос, уточнение или разговор без шага в кабинете верни nextSection = null.');
+    for (const prompt of [
+      careerInstructionsForRole('career_strategist'),
+      careerInstructionsForRole('career_expert'),
+      careerInstructionsForRole('career_consultant', 'consultant-summary'),
+      careerInstructionsForRole('career_consultant', 'structured-stage'),
+    ]) {
+      expect(prompt).toContain('nextSection = null');
+    }
+  });
+
+  it('B735: каждая роль знает подборку кандидата, выжимка и шаг сервера — нет', () => {
+    for (const role of ['career_consultant', 'career_strategist', 'career_expert'] as const) {
+      expect(careerInstructionsForRole(role)).toContain('careerContext.selection');
+    }
+    expect(careerInstructionsForRole('career_consultant', 'consultant-summary')).not.toContain('careerContext.selection');
+    expect(careerInstructionsForRole('career_consultant', 'structured-stage')).not.toContain('careerContext.selection');
+  });
+
   it('gives each role a distinct authority boundary on top of one constitution', () => {
     const consultant = careerInstructionsForRole('career_consultant');
     const strategist = careerInstructionsForRole('career_strategist');

@@ -3,8 +3,10 @@ import type { CandidateConnection } from '../../coach/coachApi';
 import {
   connectedCount,
   connectionLine,
+  emailConfirmed,
   connectionsSummary,
   deviceLine,
+  deviceName,
   devicesTitle,
   NOTIFICATION_ROWS,
   notificationsSummary,
@@ -44,6 +46,10 @@ describe('модель «Аккаунта»', () => {
 
   it('строка площадки: состояние без лишних слов', () => {
     expect(connectionLine(hh)).toBe('подключено');
+    // B774: как в макете n03 — чей аккаунт подключён.
+    expect(connectionLine({ ...hh, account: 'Марина Соколова' } as typeof hh)).toBe(
+      'Марина Соколова · подключено',
+    );
     expect(connectionLine(linkedin)).toBe('не подключено');
     expect(connectionLine({ ...base, platform: 'hh', status: 'imported', importedAt: '2026-11-01' })).toBe(
       'данные загружены, вход не выполнен',
@@ -84,6 +90,16 @@ describe('модель «Аккаунта»', () => {
     );
   });
 
+  it('B754: название устройства из сессии, без него — «Это устройство» и «Другое устройство»', () => {
+    const session = { id: 'a', current: true, createdAt: '', lastSeenAt: '', expiresAt: '' };
+    expect(deviceName({ ...session, deviceLabel: 'MacBook · приложение openqareer' })).toBe(
+      'MacBook · приложение openqareer',
+    );
+    expect(deviceName({ ...session, current: false, deviceLabel: 'iPhone · Safari' })).toBe('iPhone · Safari');
+    expect(deviceName({ ...session, deviceLabel: null })).toBe('Это устройство');
+    expect(deviceName({ ...session, current: false })).toBe('Другое устройство');
+  });
+
   it('сводка уведомлений называет каналы, куда хоть что-то приходит', () => {
     const row = (app: boolean, email: boolean, telegram: boolean) => ({
       key: 'ev-reply' as const,
@@ -99,8 +115,15 @@ describe('модель «Аккаунта»', () => {
     expect(notificationsSummary([row(true, true, true)])).toBe('В приложении, на почту и в Telegram');
   });
 
+  it('B690: Telegram не привязан — в подписи раздела его нет, хотя галочка сохранена', () => {
+    const row = (telegram: boolean) => ({ key: 'ev-reply' as const, app: true, email: true, telegram });
+    expect(notificationsSummary([row(true)], false)).toBe('В приложении и на почту');
+    expect(notificationsSummary([{ ...row(true), app: false, email: false }], false)).toBe('Выключены');
+  });
+
   it('строки настроек: все события сервера, подписи простым языком', () => {
     expect(NOTIFICATION_ROWS.map((row) => row.key)).toEqual([
+      'ev-invitation',
       'ev-reply',
       'ev-reminder',
       'ev-approval',
@@ -109,6 +132,7 @@ describe('модель «Аккаунта»', () => {
       'ev-weekly-digest',
     ]);
     expect(NOTIFICATION_ROWS.map((row) => row.label)).toEqual([
+      'Приглашения',
       'Ответы',
       'Напоминания',
       'Письмо на одобрение',
@@ -116,5 +140,11 @@ describe('модель «Аккаунта»', () => {
       'Вакансии нужных компаний',
       'Итоги недели',
     ]);
+  });
+
+  it('B774: почта без поля «подтверждена» — проверка ей не нужна, как решает сервер', () => {
+    expect(emailConfirmed({ emailVerified: true })).toBe(true);
+    expect(emailConfirmed({})).toBe(true);
+    expect(emailConfirmed({ emailVerified: false })).toBe(false);
   });
 });

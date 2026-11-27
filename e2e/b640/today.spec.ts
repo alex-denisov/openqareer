@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
 import { expectGates } from './gates';
+import { expectLastActionReachable } from './lastActionReachable';
 
 const SHOTS = process.env.B640_SHOTS;
 const API = '**/api/v1/candidate';
@@ -200,7 +201,35 @@ interface Mocks {
   readonly statusFailures?: number;
   readonly notes?: Note[];
   readonly hasMore?: boolean;
+  /** B650 s05b: отклики кандидата; без них список пуст и событий нет. */
+  readonly responses?: readonly Record<string, unknown>[];
 }
+
+/** Отклик, который не дошёл: нужен вход в hh.ru (макет s05b). */
+const UNDELIVERED = {
+  id: 'r-karta',
+  candidateId: 'c',
+  clusterId: 'cl-karta',
+  stage: 'applied',
+  closedReason: null,
+  archiveReason: null,
+  archivePreviousStage: null,
+  processProfile: 'standard',
+  vacancy: { title: 'Руководитель платформы', company: 'Карта Технологии', url: '', source: 'hh' },
+  notes: null,
+  followUpDueAt: null,
+  stageChangedAt: '2026-11-20T10:00:00.000Z',
+  version: 1,
+  createdAt: '2026-11-20T10:00:00.000Z',
+  updatedAt: '2026-11-20T10:00:00.000Z',
+  appliedAt: '2026-11-20T10:00:00.000Z',
+  followUp: null,
+  whoseTurn: 'candidate',
+  materials: { coverLetter: true, resume: true },
+  nearestInterview: null,
+  deliveryReceipt: { kind: 'failure_note', value: 'Не доставлено: нужен вход в hh.ru' },
+  deliveryReceiptRecordedAt: '2026-11-21T10:00:00.000Z',
+};
 
 interface Calls {
   readonly answers: string[];
@@ -216,6 +245,12 @@ async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise
   let failures = mocks.statusFailures ?? 0;
   let notes = mocks.notes ?? firstPage();
   await mockSignedInCabinet(page, { cabinetB640: true });
+  const responses = mocks.responses ?? [];
+  await page.route(`${API}/applications?**`, (route) =>
+    route.fulfill({
+      json: { data: responses, meta: { total: responses.length, offset: 0, limit: 100 } },
+    }),
+  );
   await page.route(`${API}/status/today`, (route) => {
     if (failures > 0) {
       failures -= 1;
@@ -304,6 +339,35 @@ async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise
     }
     return route.fallback();
   });
+  // B671: лента нового кабинета — те же события в форме нового маршрута.
+  await page.route(`${API}/b640/notifications**`, (route) => {
+    const url = new URL(route.request().url());
+    const unreadCount = notes.filter((item) => item.readAt === null).length;
+    const later = Boolean(url.searchParams.get('cursor'));
+    const source = later
+      ? Array.from({ length: 20 }, (_, index) =>
+          note(100 + index, { title: `Раннее событие ${index + 1}`, createdAt: OLD, readAt: OLD }),
+        )
+      : notes;
+    const items = source.map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      category: 'responses',
+      important: false,
+      title: item.title,
+      company: null,
+      role: null,
+      eventAt: null,
+      createdAt: item.createdAt,
+      readAt: item.readAt,
+      sourceType: 'application',
+      sourceId: new URL(item.action.href, 'https://x.invalid').searchParams.get(
+        'notificationSource',
+      ),
+    }));
+    const nextCursor = !later && mocks.hasMore ? '20' : null;
+    return route.fulfill({ json: { data: { items, pinned: [], unreadCount, nextCursor } } });
+  });
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('cabinet-b640')).toBeVisible({ timeout: 15_000 });
   return calls;
@@ -388,12 +452,35 @@ test.describe('B650: «Сегодня» на данных в форме прод
       'Напомнить компании Snowflake про ответ',
     );
     await expect(screen.locator('.lead .lead-sub')).toContainText('ответа нет 47 дней');
-    await expect(screen.locator('.s5-prog')).toContainText('13 откликов → 1 интервью → 1 оффер');
+    // Макет s03: в строке статуса пути откликов нет; итоги — только на t02 «Отклики закончились».
+    await expect(screen.locator('.s5-prog')).toContainText('Статус:');
+    await expect(screen.locator('.s5-prog')).not.toContainText('→');
+    // Подробность лида — вакансия, как p.lead-text макета (B645 s03).
+    await expect(screen.locator('.lead .lead-text')).toHaveText(
+      'Director of Engineering, AI Functions',
+    );
     await expect(screen.locator('.ev-row')).toHaveCount(2);
-    await expect(screen.locator('.ev-row .row-sub').first()).toHaveText('LinkedIn');
+    await expect(screen.locator('#today-more')).toHaveText('Ещё 2 дела');
+    await expect(screen.locator('.ev-row .row-sub')).toHaveText([
+      'LinkedIn · черновик готов',
+      'LinkedIn · черновик готов',
+    ]);
+    // Каждый пост открывает свой черновик (B645 s03).
+    const posts = screen.locator('.ev-row a');
+    await expect(posts.nth(0)).toHaveAttribute('href', '/app/profile/linkedin/posts?post=draft-1');
+    await expect(posts.nth(1)).toHaveAttribute('href', '/app/profile/linkedin/posts?post=draft-2');
     await expect(screen.getByText('сам не опубликуется')).toHaveCount(0);
     await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(1);
     await expectGates(page);
+  });
+
+  test('B720: последнее действие не под закреплённой панелью', async ({ page }) => {
+    await openCabinet(page, '/app/today', { prodDay: true });
+    await expect(page.locator('[data-b640-node="s03"] .lead')).toBeVisible({ timeout: 15_000 });
+    await expectLastActionReachable(page);
+    // Приёмка мерила и на низком окне: последнее действие у самой панели.
+    await page.setViewportSize({ width: page.viewportSize()?.width ?? 390, height: 569 });
+    await expectLastActionReachable(page);
   });
 
   test('первый ответ оборвался по ожиданию: экран дочитывает сам, ошибки нет', async ({ page }) => {
@@ -440,6 +527,13 @@ test.describe('B691: сигналы на «Сегодня»', () => {
       'Похоже, вы начали искать работу. Верно?',
     );
     await expect(card(page).locator('.why-q strong')).toHaveText('начали искать работу');
+    // Макет s04: строки «Статус» над вопросом нет, «Верно» залитая, ведущая кнопка — контурная.
+    await expect(page.locator('.s5-prog')).toHaveCount(0);
+    await expect(card(page).getByRole('button', { name: 'Верно' })).toHaveClass(/is-primary/u);
+    await expect(page.locator('#career-main .lead > .actions > .btn.is-primary')).toHaveCount(0);
+    if (page.viewportSize()!.width >= 768) {
+      await expect(card(page).locator('.why-body > .actions')).toHaveCSS('column-gap', '4px');
+    }
     await card(page).getByRole('button', { name: 'Почему мы так думаем' }).click();
     await expect(card(page).getByRole('tooltip')).toContainText(
       '3 отклика за неделю, раньше 0 · Отправили сами, не автооткликами',
@@ -455,6 +549,77 @@ test.describe('B691: сигналы на «Сегодня»', () => {
     await card(page).getByRole('button', { name: 'Отменить ответ' }).click();
     await expect(card(page).locator('.why-q')).toBeVisible();
     expect(calls.answers).toEqual(['no', 'undo']);
+  });
+
+  test('390: ответы «Присматриваюсь» в нижней полосе по макету s04, содержимое не закрыто', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'полоса только на телефоне');
+    await openCabinet(page, '/app/today', { status: 'looking', signal: 'started_search' });
+    const box = async (name: string) =>
+      (await card(page).getByRole('button', { name, exact: true }).boundingBox())!;
+    const [yes, no, later] = [await box('Верно'), await box('Нет'), await box('Не сейчас')];
+    const width = page.viewportSize()!.width;
+    // Макет s04 на 390: «Нет» слева, «Верно» справа на полширины, «Не сейчас» строкой выше справа.
+    expect(Math.round(no.x)).toBe(16);
+    expect(Math.round(yes.x + yes.width)).toBe(width - 16);
+    expect(Math.round(yes.width)).toBe((width - 32) / 2);
+    expect(Math.round(yes.y)).toBe(Math.round(no.y));
+    expect(Math.round(later.x + later.width)).toBe(width - 16);
+    expect(Math.round(later.y + later.height)).toBe(Math.round(yes.y));
+    expect(yes.height).toBe(44);
+    // B801: отступ полосы 8/16, фон и линия как в макете (--career-surface, --career-line-strong).
+    const bar = page.locator('.route.why .why-body > .actions');
+    await expect(bar).toHaveCSS('padding', '8px 16px');
+    const tokens = await bar.evaluate((el) => {
+      const probe = document.createElement('i');
+      probe.style.cssText = 'color:var(--career-surface);outline-color:var(--career-line-strong)';
+      el.append(probe);
+      const { color, outlineColor } = getComputedStyle(probe);
+      probe.remove();
+      const { backgroundColor, borderTopColor } = getComputedStyle(el);
+      return { color, outlineColor, backgroundColor, borderTopColor };
+    });
+    expect(tokens.backgroundColor).toBe(tokens.color);
+    expect(tokens.borderTopColor).toBe(tokens.outlineColor);
+    // Макет s04: «Верно» залитая.
+    await expect(card(page).getByRole('button', { name: 'Верно' })).toHaveClass(/is-primary/u);
+    // Полоса над нижней навигацией и при полной прокрутке не закрывает содержимое (урок s03).
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const covered = await page.evaluate(() => {
+      const bar = document
+        .querySelector('.route.why .why-body > .actions')!
+        .getBoundingClientRect();
+      const blocks = [...document.querySelectorAll('#career-main .page > *:not(.route.why)')];
+      const last = blocks.at(-1)!.getBoundingClientRect();
+      return last.bottom > bar.top + 0.5;
+    });
+    expect(covered).toBe(false);
+  });
+
+  test('390: при полосе сигнала главная кнопка экрана в потоке, полоса её не закрывает (B645-2)', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'полоса только на телефоне');
+    await openCabinet(page, '/app/today', { status: 'looking', signal: 'started_search' });
+    await expect(card(page).getByRole('button', { name: 'Верно' })).toBeVisible();
+    const lead = page.locator('#career-main .lead > .actions > .btn').first();
+    await expect(lead).toBeVisible();
+    // Макет s04 на 390: кнопка ведущего блока контурная, под списком на всю ширину, не в своей полосе.
+    await expect(lead).not.toHaveClass(/is-primary/u);
+    expect(await lead.evaluate((el) => getComputedStyle(el.parentElement!).position)).toBe(
+      'static',
+    );
+    const width = page.viewportSize()!.width;
+    const btn = (await lead.boundingBox())!;
+    expect(Math.round(btn.x)).toBe(16);
+    expect(Math.round(btn.width)).toBe(width - 32);
+    await lead.scrollIntoViewIfNeeded();
+    const reachable = await lead.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+    });
+    expect(reachable).toBe(true);
   });
 
   test('«Верно» ведёт к выбору статуса с предложением, сам статус не меняет', async ({ page }) => {
@@ -555,9 +720,68 @@ test.describe('B650: флаг выключен', () => {
   });
 });
 
+test.describe('B650 s05b: «События откликов»', () => {
+  test('недоставленный отклик — карточка в левой колонке с «Войти в hh.ru»', async ({ page }) => {
+    await openCabinet(page, '/app/today', { responses: [UNDELIVERED] });
+    const events = page.locator('.b640 section.re-today');
+    await expect(events.locator('li.re-card')).toHaveCount(1);
+    await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(1);
+    await expect(events.locator('.tag.miss')).toHaveText('Не доставлен');
+    await expect(events.locator('.re-why')).toHaveText(
+      'Руководитель платформы · Нужен вход в hh.ru',
+    );
+    await expect(events.getByRole('link', { name: 'Войти в hh.ru' })).toHaveAttribute(
+      'href',
+      '/app/account/connections',
+    );
+  });
+
+  test('путь откликов в полосе статуса — между статусом и «Сменить», отклики читаются один раз', async ({
+    page,
+  }) => {
+    let reads = 0;
+    page.on('request', (request) => {
+      if (/\/api\/v1\/candidate\/applications\?/u.test(request.url())) reads += 1;
+    });
+    const interview = {
+      ...UNDELIVERED,
+      id: 'r-arka',
+      stage: 'interview',
+      deliveryReceipt: null,
+      deliveryReceiptRecordedAt: null,
+      reachedStages: ['applied', 'interview'],
+    };
+    await openCabinet(page, '/app/today', { responses: [UNDELIVERED, interview] });
+    const strip = page.locator('.b640 .s5-prog');
+    await expect(strip.locator('.num')).toHaveText(
+      'С 2 октября: 2 отклика → 1 интервью → 0 офферов',
+    );
+    await expect(strip.locator(':scope > *')).toHaveText([
+      'Статус: Ищу работу',
+      'С 2 октября: 2 отклика → 1 интервью → 0 офферов',
+      'Сменить',
+    ]);
+    await expect(page.locator('.b640 section.re-today li.re-card')).toHaveCount(1);
+    expect(reads).toBe(1);
+  });
+
+  test('откликов нет — строки пути нет', async ({ page }) => {
+    await openCabinet(page, '/app/today');
+    await expect(page.locator('.b640 .s5-prog')).toContainText('Статус: Ищу работу');
+    await expect(page.locator('.b640 .s5-prog .num')).toHaveCount(0);
+  });
+
+  test('событий нет — блока нет', async ({ page }) => {
+    await openCabinet(page, '/app/today');
+    await expect(page.locator('.b640 .col').first()).toBeVisible();
+    await expect(page.locator('.b640 section.re-today')).toHaveCount(0);
+  });
+});
+
 test.describe('B650: снимки для сверки с макетами', () => {
   const SCREENS: readonly (readonly [string, string, Mocks])[] = [
     ['today-job-search', '/app/today', {}],
+    ['today-response-events', '/app/today', { responses: [UNDELIVERED] }],
     ['today-after-change', '/app/today', { status: 'changing_profession', revert: true }],
     ['today-choosing-role', '/app/today', { status: 'choosing_role' }],
     ['today-looking', '/app/today', { status: 'looking' }],

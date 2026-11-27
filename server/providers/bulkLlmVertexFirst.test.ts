@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { BulkChannelUnavailable, type BulkLlmChannelEvent } from './bulkLlmClient';
+import { BulkChannelUnavailable, BulkInputTooLarge, type BulkLlmChannelEvent } from './bulkLlmClient';
 import { createBulkLlmRuntime } from './bulkLlmRuntime';
 import type { VertexConfig } from './vertexAi';
 
@@ -373,6 +373,22 @@ describe('Vertex first stage of the bulk channel', () => {
       const h = harness({ vertex: refused });
       await h.runtime.client!.complete(req);
       expect(h.vertexCalls).toHaveLength(1);
+      expect(h.openRouterCalls).toBe(1);
+      h.runtime.close();
+    });
+  });
+
+  describe('B757: a request over the per-request ceiling', () => {
+    it('on no stage is a final refusal: no OpenRouter call, no outage, the channel stays open', async () => {
+      const h = harness({});
+      const error = await h.runtime
+        .client!.complete({ ...req, withoutVertex: true, input: 'x'.repeat(400_000) })
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BulkInputTooLarge);
+      expect(error).not.toBeInstanceOf(BulkChannelUnavailable);
+      expect(h.openRouterCalls).toBe(0);
+      expect(h.events.some((event) => event.kind === 'channel_down' || event.kind === 'fallback')).toBe(false);
+      await h.runtime.client!.complete({ ...req, withoutVertex: true });
       expect(h.openRouterCalls).toBe(1);
       h.runtime.close();
     });

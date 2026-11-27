@@ -25,6 +25,8 @@ export interface BulletToTranslate {
   readonly text: string;
   /** Statements of the bullet's source facts: the translation may not claim more. */
   readonly facts: readonly string[];
+  /** B785: строка готового резюме переводится целиком, а не пишется заново как пункт достижения. */
+  readonly line?: 'text' | 'title' | 'term' | 'label';
 }
 
 export interface BulletTranslationRequest {
@@ -37,7 +39,7 @@ export const bulletTranslationOutputSchema = z.object({
 
 export type BulletTranslationOutput = z.infer<typeof bulletTranslationOutputSchema>;
 
-export const BULLET_TRANSLATION_PROMPT_REVISION = 'experience-bullet-translation-2026-11-05';
+export const BULLET_TRANSLATION_PROMPT_REVISION = 'experience-bullet-translation-2026-11-25';
 
 export const BULLET_TRANSLATION_INSTRUCTIONS = `Ты карьерный консультант и редактор резюме. Ниже пункты для блока «Опыт», которые консультант уже предложил кандидату, и факты из беседы, из которых собран каждый пункт. Пункты написаны не на языке профиля. Переведи каждый пункт на язык из поля language: "en" — английский, "ru" — русский.
 
@@ -48,6 +50,7 @@ export const BULLET_TRANSLATION_INSTRUCTIONS = `Ты карьерный конс
 4. Числа — только те, что есть в фактах, и цифрами. Не пиши чисел, которых в фактах нет: не «24/7», а «round-the-clock»; не «L1/L2», а «first- and second-line»; не «2x», если в фактах нет двойки.
 5. Названия компаний, продуктов и технологий оставь как в пункте, русские названия передай латиницей («Россети Цифра» → «Rosseti Tsifra»). Сокращения РТО, РПО пиши как RTO, RPO.
 6. Пункт не длиннее 250 знаков.
+7. Если у пункта есть поле line, это строка готового резюме: правила 3 и 6 и замены из правила 4 к ней не относятся. Переведи её целиком: ни одного факта, числа, валюты и единицы не опускай и не меняй, все числа оставь цифрами («$230M» — «230 млн $»). Собственные имена продуктов («e-therapy») оставь как есть, не переводи и их части («электронная терапия» — ошибка). Описательное название переводи: «Corporate University of a Top-Tier Financial Institution» — «Корпоративный университет ведущей финансовой организации». line "title" — должность, "term" — город, степень, специальность, язык, курс или название проекта, "label" — навык: ответь только переводом названия, без глагола и точки. По-русски переводи и названия уровней и ролей («Premium Support Lead» — «Руководитель премиальной поддержки»). Ни одной части должности не опускай, скобки сохраняй: «IT Lead (Acting Head of IT)» — «Руководитель направления ИТ (врио руководителя ИТ)». Exit компании через продажу или поглощение (exit, acquisition) — это продажа компании, а не закрытие: «successful exit through acquisition» — «компания была продана», не «вышла из бизнеса».
 
 Ответь только JSON: {"bullets":[{"key":"...","text":"..."}]} — ровно по одному пункту на каждый key из запроса.`;
 

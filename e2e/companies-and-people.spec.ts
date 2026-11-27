@@ -447,8 +447,11 @@ test('company directory exposes its loading state before results arrive', async 
 test('company directory can retry a failed list request', async ({ page }, testInfo) => {
   await mockSignedInCabinet(page);
   await navigateToVacanciesSection(page);
+  // Only the list itself: the same prefix also covers «Хочу» (/companies/wants…) and the card,
+  // and their requests in parallel used to take the only 503 (a race under CI load).
+  const isList = (url: URL) => url.pathname === '/api/v1/candidate/companies';
   let attempts = 0;
-  await page.route('**/api/v1/candidate/companies**', async (route) => {
+  await page.route(isList, async (route) => {
     attempts += 1;
     if (attempts === 1) {
       await route.fulfill({
@@ -459,11 +462,19 @@ test('company directory can retry a failed list request', async ({ page }, testI
     }
     await route.fallback();
   });
+  const failed = page.waitForResponse(
+    (response) => isList(new URL(response.url())) && response.status() === 503,
+  );
   await page.getByRole('tab', { name: /Компании и люди/u }).click();
+  await failed;
   await expect(page.getByRole('alert')).toContainText('Каталог компаний временно недоступен.');
   await page.getByRole('alert').scrollIntoViewIfNeeded();
   await captureCompanyState(page, testInfo, 'company-list-error');
+  const retried = page.waitForResponse(
+    (response) => isList(new URL(response.url())) && response.ok(),
+  );
   await page.getByRole('button', { name: 'Повторить' }).click();
+  await retried;
   await expect(page.getByText('400 компаний в подборке')).toBeVisible();
 });
 

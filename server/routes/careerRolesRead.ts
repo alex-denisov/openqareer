@@ -1,11 +1,15 @@
+import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import type { FastifyRequest } from 'fastify';
 import type { ProposedRole } from '../../shared/roleProposals';
 import { readCampaign } from './campaignContext';
 import { masterResumeDocument, withResumeCoverage } from './careerRoleResumeCoverage';
-import { careerRolesWithCandidateChoices } from './careerRoleSync';
+import { careerTimeZone, countRolesLikeTheList } from './careerRoleCounts';
+import { careerRolesWithCandidateChoices, withStoredTitlesRu } from './careerRoleSync';
 import type { RouteDeps } from './deps';
-import { conditionsMarketCount, finishMatchedVacancies } from './matchedVacancyRoutes';
-import { readRoleContext, type RoleContext } from './vacancyRoleContext';
+import { conditionsMarketCount, finishMatchedVacanciesYielding } from './matchedVacancyRoutes';
+import { readRoleContext, readTargetLevel, type RoleContext } from './vacancyRoleContext';
+import { levelGateSteps } from './matchedVacancyList';
+import { runStepsYielding } from '../vacancies/yieldingSteps';
 
 export interface CareerRolesRead {
   readonly context: RoleContext;
@@ -26,18 +30,40 @@ export async function readCareerRoleContext(
   if (!context) return null;
   const campaign = readCampaign(deps.candidateStore, candidateId);
   const targetRoles = [...campaign.roles.value];
-  const listed = finishMatchedVacancies(
+  const listed = await finishMatchedVacanciesYielding(
     context.matched,
     targetRoles,
     campaign,
     deps.candidateStore,
     candidateId,
   );
+  // B726: число роли — строки, которые откроет «Вакансии по роли»: список «Подборки» после
+  // ворот уровня, тот же признак роли, за 30 дней подписи «по подборке за 30 дней».
+  const targetLevel = readTargetLevel(deps.candidateStore, candidateId, targetRoles);
+  const shown = await runStepsYielding(
+    levelGateSteps(listed, targetRoles, targetLevel, deps.titleParseStore),
+    { section: 'career-roles:level' },
+  );
+  // B702-2: каждая часть — своим ходом event loop (прод 24.11: 1300 мс одним куском).
+  await yieldToEventLoop();
+  const chosen = careerRolesWithCandidateChoices(deps, candidateId, context, listed);
+  await yieldToEventLoop();
+  const roles = countRolesLikeTheList(
+    chosen,
+    shown,
+    {
+      skills: context.confirmedSkills,
+      now: new Date(),
+      // Граница дня — как у «Сегодня»: пояс кандидата из `?tz=`, без него UTC.
+      timeZone: careerTimeZone(request.query),
+    },
+  );
   return {
     context,
-    roles: withResumeCoverage(
-      careerRolesWithCandidateChoices(deps, candidateId, context, listed),
-      masterResumeDocument(deps, candidateId),
+    // B748: перевод, сохранённый прежним называнием, не теряется при новом.
+    roles: withStoredTitlesRu(
+      deps.candidateStore.getCandidateWorkspace(candidateId)?.campaign,
+      withResumeCoverage(roles, masterResumeDocument(deps, candidateId)),
     ),
     conditionsCount: conditionsMarketCount(context.matched, listed, targetRoles, campaign),
   };

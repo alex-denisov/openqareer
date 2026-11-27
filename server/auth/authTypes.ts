@@ -31,6 +31,8 @@ export interface CareerPartnerCandidatePage {
 /** B649: возможности интерфейса в ответах входа и `/auth/me`. */
 export interface CabinetFeatures {
   readonly cabinetB640: boolean;
+  /** B642: запись и расшифровка разговоров включены на сервере. */
+  readonly interviewRecording: boolean;
 }
 
 export interface AuthPrincipal {
@@ -44,6 +46,8 @@ export interface AuthPrincipal {
   emailVerified?: boolean;
   emailVerificationEmailSent?: boolean;
   emailVerificationResendAfterSeconds?: number;
+  /** B401: сессию открыл администратор «войти как кандидат»; защиту входа она не меняет. */
+  impersonatedBy?: string;
 }
 
 export interface RegistrationProfile {
@@ -73,6 +77,8 @@ export interface AccountSnapshot {
     createdAt: string;
     lastSeenAt: string;
     expiresAt: string;
+    /** B754: «iPhone · Safari»; `null` — устройство не распознано. */
+    deviceLabel: string | null;
   }>;
 }
 
@@ -89,6 +95,22 @@ export interface PasswordResetDelivery {
   email: string;
   displayName: string | null;
   token: string;
+}
+
+/** B755: письмо о новом ключе входа. */
+/** B755: письмо о входе в приложение через системный лист — какое устройство и когда. */
+export interface AppSignInDelivery {
+  readonly email: string;
+  readonly displayName: string | null;
+  readonly deviceLabel: string;
+  readonly at: Date;
+}
+
+export interface PasskeyAddedDelivery {
+  readonly email: string;
+  readonly displayName: string | null;
+  readonly passkeyId: string;
+  readonly deviceLabel: string | null;
 }
 
 export interface SeedAccount {
@@ -194,6 +216,10 @@ export interface SessionAuth {
   isUsernameTaken(username: string): boolean;
   authenticate(sessionToken: string): AuthPrincipal | null;
   logout(sessionToken: string): void;
+  /** B401: сессия после второго фактора. */
+  issueSessionForUser?(userId: string, clientDeviceId?: string): { principal: AuthPrincipal; sessionToken: string } | null;
+  /** B401: пароль вместо кода при отключении защиты и выдаче новых кодов. */
+  passwordMatches?(userId: string, password: string): Promise<boolean>;
   verifyEmail?(sessionToken: string, code: string): Promise<{ principal: AuthPrincipal; sessionToken: string } | null>;
   resendEmailVerification?(sessionToken: string, clientIp: string): Promise<{ principal: AuthPrincipal; emailVerificationEmailSent: boolean } | null>;
   changeUnverifiedEmail?(sessionToken: string, email: string, currentPassword: string, clientIp: string): Promise<{ principal: AuthPrincipal; emailVerificationEmailSent: boolean } | null>;
@@ -218,12 +244,21 @@ export interface SessionAuth {
     code: string,
   ): Promise<{ principal: AuthPrincipal; sessionToken: string } | null>;
   getAccount?(sessionToken: string): AccountSnapshot | null;
+  labelSession?(sessionToken: string, label: string): void;
+  /** B755: письмо владельцу о новом ключе входа; без почты или без отправителя — ничего. */
+  notifyPasskeyAdded?(userId: string, passkeyId: string, deviceLabel: string | null): Promise<void>;
+  /** B755: сессия приложения по коду из системного листа — с названием «Приложение openqareer · Mac». */
+  issueAppSession?(userId: string, clientDeviceId?: string): { principal: AuthPrincipal; sessionToken: string } | null;
+  /** B755: письмо о входе в приложение; без почты или без отправителя — ничего. */
+  notifyAppSignIn?(userId: string, at: Date): Promise<void>;
   revokeAccountSession?(
     sessionToken: string,
     sessionId: string,
   ): 'revoked' | 'current' | 'not_found' | null;
   /** Server-only recipient lookup for queued candidate email delivery. */
   getCandidateEmail?(candidateId: string): string | null;
+  /** n02: пояс из «Приложения» для 09:00 сводки уведомлений; `null` — не выбран. */
+  getCandidateTimezone?(candidateId: string): string | null;
   /** B173: proof of which published documents the account accepted, and when. */
   recordLegalConsent?(input: {
     userId: string;

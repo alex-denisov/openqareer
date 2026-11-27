@@ -90,7 +90,9 @@ const sources = [
 
 export const matchedVacancies = Array.from({ length: 96 }, (_, index) => {
   const source = sources[index % sources.length];
-  const observedAt = new Date(Date.UTC(2026, 8, 20 - (index % 12), 9, 0, 0)).toISOString();
+  const observedAt = new Date(
+    Date.UTC(2026, 8, 20 - Math.floor(index / 4), 9, 0, 0, 1000 - index),
+  ).toISOString();
   return {
     cluster: {
       id: `cluster-${index}`,
@@ -134,7 +136,7 @@ export const matchedVacancies = Array.from({ length: 96 }, (_, index) => {
   };
 });
 
-/** B546: rows without salary carry a market estimate or an honest thin sample. */
+/** B546: rows without salary carry the openqareer estimate or nothing. */
 function marketSalaryFixture(index: number) {
   const computedAt = '2026-10-05T03:00:00.000Z';
   if (index % 3 === 1) {
@@ -143,21 +145,17 @@ function marketSalaryFixture(index: number) {
         low: 480_000,
         high: 560_000,
         currency: 'RUR',
-        sampleSize: 41,
-        basis: 'city',
+        period: 'month',
+        tax: 'unknown',
         computedAt,
       },
     };
-  }
-  if (index % 6 === 2) {
-    return { marketSalary: { currency: 'RUR', sampleSize: 3, basis: 'region', computedAt } };
   }
   return {};
 }
 
 /** Подбор едет страницами по 50 (INC-029, B211). */
-export function matchedVacancyPage(offset: number, total = matchedVacancies.length) {
-  const pageSize = 50;
+export function matchedVacancyPage(offset: number, total = matchedVacancies.length, pageSize = 50) {
   const pool = Array.from({ length: total }, (_, index) => {
     const source = matchedVacancies[index % matchedVacancies.length]!;
     if (index < matchedVacancies.length) return source;

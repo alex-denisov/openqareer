@@ -3,7 +3,10 @@ import type { CandidateStatusToday, TodayStatusModule } from '../../../../shared
 import { pluralRu } from '../../../../shared/pluralRu';
 import { useTodayDay, type TodayDay } from './useTodayDay';
 import type { B640Node } from '../routes';
-import { BlockError, BlockSkeleton } from './parts';
+import { BlockError, BlockSkeleton, LeadQuietContext } from './parts';
+import { useManualQueue } from '../responses/data/manualQueue';
+import { responseEvents } from './responseEventsModel';
+import { ResponseEventsBlock } from './ResponseEventsBlock';
 import {
   OnboardingPlanModule,
   ProfessionFitModule,
@@ -16,10 +19,12 @@ import {
   NextActionModule,
   ProfileQuestionModule,
 } from './searchModules';
+import { listApplicationsPool, type ApplicationView } from '../../applications/applicationsApi';
+import { funnelLine } from './funnelLineModel';
 import { getStatusToday } from './statusApi';
 import { StatusSignalBlock } from './StatusSignalBlock';
 import { StatusStrip } from './StatusStrip';
-import { funnelLine, moduleLayout } from './todayModel';
+import { moduleLayout, withoutEvents } from './todayModel';
 import { useLoad } from './useLoad';
 
 function weeklyTitle(today: TodayDay, fallback: string): string {
@@ -64,6 +69,10 @@ function TodayModule({ module, status, today, lead }: ModuleProps) {
   }
 }
 
+async function loadApplications(signal: AbortSignal): Promise<readonly ApplicationView[]> {
+  return (await listApplicationsPool({}, signal)).items;
+}
+
 interface TodayBodyProps {
   readonly status: CandidateStatusToday;
   readonly today: TodayDay;
@@ -73,36 +82,54 @@ interface TodayBodyProps {
 
 function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps) {
   const layout = moduleLayout(status.status, status.modules);
+  // Сбой чтения откликов строку пути прячет: она второстепенна, а «Отклики» покажут ошибку сами.
+  const applications = useLoad(loadApplications);
+  const items = applications.state === 'ready' ? applications.data : null;
+  const manual = useManualQueue();
+  const events = items ? responseEvents(items, new Date(), manual) : [];
+  const { snapshot } = today;
+  const shown = new Set(events.map((event) => event.id));
+  const day = snapshot ? { ...today, snapshot: withoutEvents(snapshot, shown) } : today;
+  const funnel = items ? funnelLine(items, status.since) : null;
   // Макет s04: при «Присматриваюсь» вопрос стоит над колонками, иначе — в правой (s05b).
   const wideSignal = status.status === 'looking' || layout.side.length === 0;
-  const signal = <StatusSignalBlock statusTitle={status.title} wide={wideSignal} />;
+  const [signalShown, setSignalShown] = useState(false);
+  const questionOnTop = wideSignal && signalShown;
+  const signal = (
+    <StatusSignalBlock statusTitle={status.title} wide={wideSignal} onShown={setSignalShown} />
+  );
   const modules = (list: readonly TodayStatusModule[], withLead: boolean) =>
     list.map((module, index) => (
       <TodayModule
         key={module.key}
         module={module}
         status={status}
-        today={today}
+        today={day}
         lead={withLead && index === 0}
       />
     ));
   return (
-    <>
+    <LeadQuietContext.Provider value={events.length > 0 || questionOnTop}>
       <StatusStrip
         status={status}
-        progress={funnelLine(today.snapshot?.funnel)}
         revertedTitle={revertedTitle}
         onReverted={onReverted}
+        funnel={funnel}
+        withoutRow={questionOnTop}
       />
       {wideSignal ? signal : null}
-      <div className="col">{modules(layout.main, true)}</div>
+      <div className="col">
+        {/* Макет s05b: события откликов первыми в левой колонке; нет событий — блока нет. */}
+        <ResponseEventsBlock events={events} />
+        {modules(layout.main, true)}
+      </div>
       {layout.side.length > 0 ? (
         <div className="col">
           {wideSignal ? null : signal}
           {modules(layout.side, false)}
         </div>
       ) : null}
-    </>
+    </LeadQuietContext.Provider>
   );
 }
 

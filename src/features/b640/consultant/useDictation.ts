@@ -8,9 +8,22 @@ const DENIED_TOAST_MS = 4000;
 // Макет рисует один исход сбоя диктовки (K3b): строка о микрофоне и возврат к тексту.
 const FAILED: readonly VoiceInputState[] = ['denied', 'unsupported', 'error'];
 
-function speechSupported(): boolean {
+export function speechSupported(): boolean {
   if (typeof window === 'undefined') return false;
   return typeof (window as SpeechRecognitionScope).SpeechRecognition?.available === 'function';
+}
+
+/** Чем кончилась диктовка (I2): нет микрофона — кнопка гаснет, не распознали — строка с повтором. */
+export type DictationFailure = 'mic' | 'speech' | null;
+
+export interface FieldDictation extends ComposerDictation {
+  readonly failure: DictationFailure;
+}
+
+function failureOf(state: VoiceInputState): DictationFailure {
+  if (state === 'denied' || state === 'unsupported') return 'mic';
+  if (state === 'unrecognized' || state === 'error') return 'speech';
+  return null;
 }
 
 /** Строка о микрофоне гаснет сама через четыре секунды. */
@@ -22,13 +35,22 @@ function useExpiry(shown: boolean, setShown: (shown: boolean) => void): void {
   }, [shown, setShown]);
 }
 
+/** Прошлая диктовка закончена или сорвалась: машина возвращается в начало, текст не трогает. */
+function begin(voice: VoiceInputController, currentText: string): void {
+  voice.sent();
+  voice.request();
+  voice.approve(currentText);
+}
+
 /** Диктовка в поле ввода: распознанный текст приходит в `onText` по мере речи. */
-export function useDictation(onText: (text: string) => void): ComposerDictation {
+export function useDictation(onText: (text: string) => void): FieldDictation {
   const [supported] = useState(speechSupported);
   const [state, setState] = useState<VoiceInputState>('idle');
   const [denied, setDenied] = useState(false);
   const handler = useRef(onText);
   const controller = useRef<VoiceInputController | null>(null);
+  // Эффект дочернего компонента идёт раньше нашего: запрос до готовности ждёт контроллер (B681).
+  const queued = useRef<string | null>(null);
 
   useEffect(() => {
     handler.current = onText;
@@ -47,6 +69,9 @@ export function useDictation(onText: (text: string) => void): ComposerDictation 
     });
     created.activate();
     controller.current = created;
+    const waiting = queued.current;
+    queued.current = null;
+    if (waiting !== null) begin(created, waiting);
     return () => {
       created.dispose();
       controller.current = null;
@@ -57,11 +82,8 @@ export function useDictation(onText: (text: string) => void): ComposerDictation 
 
   const start = useCallback((currentText: string) => {
     const voice = controller.current;
-    if (!voice) return;
-    // Прошлая диктовка закончена или сорвалась: машина возвращается в начало, текст не трогает.
-    voice.sent();
-    voice.request();
-    voice.approve(currentText);
+    if (voice) begin(voice, currentText);
+    else queued.current = currentText;
   }, []);
   const stop = useCallback(() => controller.current?.finish(), []);
 
@@ -70,6 +92,7 @@ export function useDictation(onText: (text: string) => void): ComposerDictation 
     recording: state === 'starting' || state === 'recording',
     settling: state === 'finishing',
     denied,
+    failure: failureOf(state),
     start,
     stop,
   };

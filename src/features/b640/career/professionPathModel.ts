@@ -6,6 +6,40 @@ export interface ProfessionRequirement {
   readonly inProfile: boolean;
 }
 
+/** Падежные формы профессии: «продакт-менеджеры», «продакта», «продактом». */
+export interface ProfessionForms {
+  readonly toBecome: string;
+  readonly genitive: string;
+  readonly instrumental: string;
+}
+
+export interface ProfessionTexts {
+  readonly path: string;
+  readonly owned: string;
+  readonly check: string;
+  readonly responses: string;
+}
+
+/** B669: тексты пути склоняют профессию; без форм — общие тексты с её названием. */
+export function professionTexts(
+  target: string,
+  forms: ProfessionForms | null | undefined,
+): ProfessionTexts {
+  if (!forms)
+    return {
+      path: `Путь в профессию «${target}»`,
+      owned: 'Что уже есть для новой профессии',
+      check: 'Проверка навыков профессии',
+      responses: 'Отклики в новой профессии',
+    };
+  return {
+    path: `Путь в ${forms.toBecome}`,
+    owned: `Что уже есть для ${forms.genitive}`,
+    check: `Проверка навыков ${forms.genitive}`,
+    responses: `Отклики ${forms.instrumental}`,
+  };
+}
+
 const key = (value: string): string => value.trim().toLocaleLowerCase('ru');
 
 function requirementWord(total: number): string {
@@ -21,15 +55,37 @@ export function requirementsMeta(requirements: readonly ProfessionRequirement[])
 }
 
 /**
+ * Общие навыки управления есть почти у любой руководящей роли (B741): по ним
+ * COO оказывался «ближе всех» к продакт-менеджеру. В счёт общих требований
+ * они не идут.
+ */
+const GENERAL_MANAGEMENT = new Set(
+  [
+    'Управление командой',
+    'Управление рисками',
+    'Стратегическое планирование',
+    'P&L',
+    'OKR',
+    'KPI',
+    'OKR/KPI',
+    'Team management',
+    'Risk management',
+    'Strategic planning',
+  ].map(key),
+);
+
+/**
  * Промежуточная роль: роль по профилю с вакансиями, у которой больше всего общих
- * требований с целевой профессией. Без общих требований промежуточной роли нет.
+ * требований с целевой профессией, не считая общих навыков управления. Без общих требований промежуточной роли нет.
  */
 export function bridgeRole(
   rows: readonly RoleRow[],
   target: string,
   requirements: readonly ProfessionRequirement[],
 ): RoleRow | null {
-  const wanted = new Set(requirements.map((item) => key(item.name)));
+  const wanted = new Set(
+    requirements.map((item) => key(item.name)).filter((name) => !GENERAL_MANAGEMENT.has(name)),
+  );
   const scored = rows
     .filter((row) => key(row.title) !== key(target) && (row.vacancies ?? 0) > 0)
     .map((row) => ({

@@ -1,4 +1,5 @@
 import { CITY_NAMES } from '../../../../shared/locationGazetteer';
+import { MEMORY_TEXT_MAX } from '../../../../shared/factCorrection';
 import type { CandidateMemory } from '../../coach/coachApi';
 import { experienceConfirmation } from '../../resume/ExperienceConfirmation';
 import { monthInputValue } from '../../resume/experienceDate';
@@ -17,10 +18,24 @@ export interface ExperienceForm {
   readonly workplaceType: WorkplaceType | null;
   readonly teamSize: string;
   readonly skills: readonly string[];
+  /** «Что делали»; `null` — запись есть, но её текст не прочитан: поле не показываем. */
+  readonly description: string | null;
+  readonly results: readonly ResultRow[];
+  /** Записи, убранные из «Результатов»: место работы на них больше не ссылается. */
+  readonly removed: readonly string[];
 }
 
+/** Строка «Результаты»: запись профиля или новая, ещё не сохранённая. */
+export interface ResultRow {
+  readonly key: string;
+  readonly memoryId: string | null;
+  readonly text: string;
+}
+
+export const RESULT_MAX_LENGTH = 1_000;
+
 export type ExperienceFormErrors = Partial<
-  Record<'employer' | 'title' | 'period' | 'city' | 'teamSize', string>
+  Record<'employer' | 'title' | 'period' | 'city' | 'teamSize' | 'description', string>
 >;
 
 export const TEXT_MAX_LENGTH = 200;
@@ -31,7 +46,11 @@ const CITIES: readonly string[] = [...new Set(Object.values(CITY_NAMES))].sort((
 );
 const CITY_KEYS = new Set(CITIES.map((city) => city.toLocaleLowerCase('ru')));
 
-export function formOf(entry: ResumeExperienceInput): ExperienceForm {
+export function formOf(
+  entry: ResumeExperienceInput,
+  statements: ReadonlyMap<string, string> = new Map(),
+): ExperienceForm {
+  const { descriptionMemoryId } = entry;
   return {
     employer: entry.employer ?? '',
     title: entry.title ?? '',
@@ -42,6 +61,12 @@ export function formOf(entry: ResumeExperienceInput): ExperienceForm {
     workplaceType: entry.workplaceType ?? null,
     teamSize: entry.teamSize ? String(entry.teamSize) : '',
     skills: entry.skills ?? [],
+    description: descriptionMemoryId ? (statements.get(descriptionMemoryId) ?? null) : '',
+    results: entry.bulletMemoryIds.flatMap((id) => {
+      const text = statements.get(id);
+      return text === undefined ? [] : [{ key: id, memoryId: id, text }];
+    }),
+    removed: [],
   };
 }
 
@@ -90,9 +115,21 @@ function teamError(form: ExperienceForm): string | undefined {
   return /^\d+$/u.test(text) && Number(text) <= MAX_TEAM_SIZE ? undefined : 'Только число';
 }
 
+/** Кандидат переписал «Что делали»; прежний текст, даже длинный, не трогаем. */
+export function editedDescription(initial: ExperienceForm, form: ExperienceForm): string | null {
+  const text = form.description?.trim();
+  return text && text !== initial.description?.trim() ? text : null;
+}
+
+function descriptionError(initial: ExperienceForm, form: ExperienceForm): string | undefined {
+  const length = editedDescription(initial, form)?.length ?? 0;
+  return length > MEMORY_TEXT_MAX ? `Не длиннее 1000 знаков, сейчас ${length}` : undefined;
+}
+
 export function validateForm(
   form: ExperienceForm,
   original: ResumeExperienceInput,
+  initial: ExperienceForm = formOf(original),
 ): ExperienceFormErrors {
   const errors: ExperienceFormErrors = {
     employer: form.employer.trim() ? undefined : 'Укажите компанию',
@@ -100,6 +137,7 @@ export function validateForm(
     period: periodError(form, original),
     city: cityError(form, original),
     teamSize: teamError(form),
+    description: descriptionError(initial, form),
   };
   return Object.fromEntries(Object.entries(errors).filter(([, message]) => message));
 }
@@ -144,6 +182,7 @@ function patched(entry: ResumeExperienceInput, form: ExperienceForm): ResumeExpe
     workplaceType: form.workplaceType ?? undefined,
     teamSize: team ? Number(team) : undefined,
     skills: form.skills.length > 0 ? [...form.skills] : undefined,
+    bulletMemoryIds: rest.bulletMemoryIds.filter((id) => !form.removed.includes(id)),
   };
   return Object.fromEntries(
     Object.entries(next).filter(([, value]) => value !== undefined),
@@ -164,6 +203,21 @@ export function applyForm(draft: ResumeDraft, entryId: string, form: ExperienceF
     ...draft,
     experience: draft.experience.map((entry) =>
       entry.id === entryId ? patched(entry, form) : entry,
+    ),
+  };
+}
+
+/** Новый черновик, где «Что делали» места — эта запись; без записи черновик прежний. */
+export function withDescription(
+  draft: ResumeDraft,
+  entryId: string,
+  descriptionMemoryId: string | null,
+): ResumeDraft {
+  if (!descriptionMemoryId) return draft;
+  return {
+    ...draft,
+    experience: draft.experience.map((entry) =>
+      entry.id === entryId ? { ...entry, descriptionMemoryId } : entry,
     ),
   };
 }

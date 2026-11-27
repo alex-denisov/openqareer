@@ -595,8 +595,9 @@ describe('computeTodayFunnel (block 0 funnel stages)', () => {
     const recent = '2026-10-01T00:00:00.000Z';
     const funnel = computeTodayFunnel(
       [
-        application({ id: 's1', stage: 'saved', stageChangedAt: '2026-01-01T00:00:00.000Z' }),
-        application({ id: 's2', stage: 'saved' }),
+        application({ id: 's1', stage: 'saved', starred: true, stageChangedAt: '2026-01-01T00:00:00.000Z' }),
+        application({ id: 's2', stage: 'saved', starred: true }),
+        application({ id: 'draft', stage: 'saved' }),
         application({ id: 'r1', stage: 'responded', stageChangedAt: recent }),
         application({ id: 'i1', stage: 'interview', stageChangedAt: recent }),
         application({ id: 'o1', stage: 'offer', stageChangedAt: recent }),
@@ -612,7 +613,7 @@ describe('computeTodayFunnel (block 0 funnel stages)', () => {
     const snapshot = buildTodaySnapshot({
       ...BASE_INPUT,
       now,
-      applications: [application({ stage: 'saved' })],
+      applications: [application({ stage: 'saved', starred: true })],
       newVacancies: [],
     });
     expect(snapshot.funnel).toEqual({
@@ -642,10 +643,11 @@ describe('computeTodayFunnel (block 0 funnel stages)', () => {
 
 describe('today queue order and copy (block 0 mockup)', () => {
   const now = '2026-10-07T09:12:00.000Z';
-  it('puts the overdue reminder first, then interviews, then drafts waiting for approval', () => {
+  it('puts the overdue reminder first, then unchecked letters, interviews and approved letters', () => {
     const snapshot = buildTodaySnapshot({
       ...BASE_INPUT,
       now,
+      approvedLetterIds: new Set(['approved']),
       newVacancies: [],
       applications: [
         application({
@@ -655,7 +657,14 @@ describe('today queue order and copy (block 0 mockup)', () => {
           vacancy: { title: 'CTO', company: 'Гринкод', url: '', source: '' },
           materials: { coverLetter: true, resume: false },
         }),
-        application({ id: 'favorite', stage: 'saved', whoseTurn: 'candidate' }),
+        application({
+          id: 'unchecked',
+          stage: 'saved',
+          whoseTurn: 'candidate',
+          vacancy: { title: 'Head', company: 'Optimal', url: '', source: '' },
+          materials: { coverLetter: false, resume: false },
+        }),
+        application({ id: 'approved', stage: 'saved', whoseTurn: 'candidate' }),
         application({
           id: 'interview',
           stage: 'interview',
@@ -677,14 +686,22 @@ describe('today queue order and copy (block 0 mockup)', () => {
     });
     expect(snapshot.queue.map((item) => item.applicationId)).toEqual([
       'overdue',
+      'unchecked',
       'interview',
       'draft',
     ]);
-    expect(snapshot.queue[1].eyebrow).toBeNull();
-    expect(snapshot.queue[2]).toMatchObject({
+    // B801 (?4): письмо на проверку — первое из остальных дел.
+    expect(snapshot.queue[1]).toMatchObject({
+      material: 'letter_draft',
+      title: 'Head',
+      company: 'Optimal',
+    });
+    expect(snapshot.queue[2].eyebrow).toBeNull();
+    expect(snapshot.queue[3]).toMatchObject({
       kind: 'candidate_turn',
       material: 'cover_letter',
-      eyebrow: 'Черновик, ничего не отправлено',
+      // B717: письмо привязывается к отклику только одобрением — это не черновик.
+      eyebrow: 'Письмо одобрено, ничего не отправлено',
     });
   });
 });

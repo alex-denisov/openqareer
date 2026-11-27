@@ -62,6 +62,8 @@ test.describe('B670: «Карьера» при «Работаю» (S12)', () => 
     await expect(
       screen.getByRole('heading', { name: 'Повышение в компании «Вектор Банк»' }),
     ).toBeVisible();
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
+    await expect(screen).toHaveCSS('padding-top', phone ? '12px' : '16px');
     const steps = screen.locator('.steps > li');
     await expect(steps).toHaveCount(3);
     await expect(steps.nth(0).locator('.tag')).toHaveText('есть');
@@ -88,6 +90,7 @@ test.describe('B670: «Карьера» при «Работаю» (S12)', () => 
       growthAfter: READY,
     });
     const pick = node(page, 's12a');
+    await expect(pick).toHaveCSS('padding-top', '16px');
     await expect(
       pick.getByRole('heading', { name: 'Что для вас дальше в компании «Вектор Банк»?' }),
     ).toBeVisible();
@@ -100,22 +103,13 @@ test.describe('B670: «Карьера» при «Работаю» (S12)', () => 
     expect(calls.growthGoals).toEqual([{ goal: 'promotion' }]);
   });
 
-  test('смена цели — тот же выбор на месте', async ({ page }) => {
-    const calls = await openCareer(page, '/app/career/growth', {
-      ...WORKING,
-      growthAfter: { ...READY, goal: { kind: 'raise', chosenAt: '2026-11-19T09:00:00.000Z' } },
-    });
-    const screen = node(page, 's12');
-    await screen.getByRole('button', { name: 'Сменить цель' }).click();
-    await expect(screen.getByRole('button', { name: 'Повышение в должности' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await screen.getByRole('button', { name: 'Прибавка в той же роли' }).click();
-    await expect(
-      screen.getByRole('heading', { name: 'Прибавка в компании «Вектор Банк»' }),
-    ).toBeVisible();
-    expect(calls.growthGoals).toEqual([{ goal: 'raise' }]);
+  test('S12 по макету: одна кнопка «Подготовить разговор о повышении», смены цели нет', async ({
+    page,
+  }) => {
+    await openCareer(page, '/app/career/growth', WORKING);
+    const actions = node(page, 's12').locator('section.lead .actions');
+    await expect(actions.locator('.btn')).toHaveText(['Подготовить разговор о повышении']);
+    await expect(node(page, 's12').getByRole('button', { name: 'Сменить цель' })).toHaveCount(0);
   });
 
   test('мало вакансий с зарплатой — «мало данных», не число', async ({ page }) => {

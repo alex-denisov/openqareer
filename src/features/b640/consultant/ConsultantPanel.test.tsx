@@ -456,11 +456,14 @@ describe('панель консультанта: все разговоры (K5)'
     expect(root.querySelector('.vl-foot')).toBeNull();
   });
 
-  it('пусто (K5b): одна строка и «Начать»', async () => {
+  it('пусто (K5b): одна строка, в шапке только ×, «Начать» открывает новый разговор', async () => {
     api.fetchConversationPage.mockResolvedValueOnce({ items: [], nextCursor: null });
     const root = await open({ kind: 'history' });
     expect(root.querySelector('.vl-empty-t')?.textContent).toBe('Разговоров пока нет');
+    expect(root.querySelector('.ph-new')).toBeNull();
     click(root.querySelector('.vl-empty .btn.is-primary'));
+    await settle();
+    expect(api.closeCurrentConversation).toHaveBeenCalledTimes(1);
     expect(onView).toHaveBeenCalledWith({ kind: 'dialog' });
   });
 
@@ -538,6 +541,8 @@ describe('адреса видов панели', () => {
       '/app/consultant?conversation=c%201',
     );
     expect(panelPath({ kind: 'history' })).toBe('/app/consultant/history');
+    expect(panelViewOf('k01', '?resume=m%201')).toEqual({ kind: 'dialog', resumeFactId: 'm 1' });
+    expect(panelPath({ kind: 'dialog', resumeFactId: 'm 1' })).toBe('/app/consultant?resume=m%201');
     expect(panelPath({ kind: 'dialog' })).toBe('/app/consultant');
   });
 });

@@ -5,6 +5,8 @@ import { companyLookupKey } from '../../../vacancies/vacancyScreenCollections';
 import { Icon, InfoTip } from '../../kit';
 import { DetailRow } from './DetailRow';
 import { SORT_COLUMNS, type SortKey, type SortState } from './sortModel';
+import { appliedOn } from '../vacancyLinks';
+import { RowBoundary } from './RowBoundary';
 import { VacancyRow, type RowEnv, type RowPick } from './VacancyRow';
 import type { MenuView, RowMenuActions } from './RowMenu';
 
@@ -55,8 +57,48 @@ function SortHead({ column, sort, onSort, tip }: { column: (typeof SORT_COLUMNS)
 }
 
 /** Таблица подборки; на 390 стили макета сами перестраивают её в карточки. */
+/**
+ * Строка вакансии и её раскрытие, каждое под защитой: сбой одной вакансии (кривые данные
+ * источника) заменяет только её строку названием, а не роняет таблицу.
+ */
+function rowsOf(item: MatchedVacancyItem, props: VacancyTableProps): ReactNode[] {
+  const { env, openId, menu } = props;
+  const id = item.cluster.id;
+  const title = item.cluster.canonicalTitle;
+  const open = openId === id;
+  const application = props.byCluster.get(id);
+  const row = (
+    <RowBoundary key={id} title={title}>
+      <VacancyRow
+        item={item}
+        env={env}
+        application={application}
+        wanted={props.wantedKeys.has(companyLookupKey(item.cluster.canonicalCompany ?? ''))}
+        open={open}
+        menuView={menu?.id === id ? menu.view : null}
+        menuActions={props.actionsFor(item)}
+        pick={props.pickFor?.(item)}
+        onToggleOpen={() => props.onToggleOpen(id)}
+        onToggleSaved={() => props.onToggleSaved(item)}
+        onMenu={(view) => props.onMenu(id, view)}
+        onCloseMenu={props.onCloseMenu}
+      />
+    </RowBoundary>
+  );
+  if (!open) return [row];
+  return [
+    row,
+    <RowBoundary key={`${id}-detail`} title={title}>
+      <DetailRow
+        item={item}
+        env={env}
+        responseId={appliedOn(application) ? application?.id : undefined}
+      />
+    </RowBoundary>,
+  ];
+}
+
 export function VacancyTable(props: VacancyTableProps) {
-  const { items, env, openId, menu } = props;
   return (
     <div className="vt-scroll">
       <table className="vt">
@@ -74,28 +116,7 @@ export function VacancyTable(props: VacancyTableProps) {
         {props.own}
         {props.hidden}
         <tbody>
-          {items.flatMap((item) => {
-            const id = item.cluster.id;
-            const open = openId === id;
-            const row = (
-              <VacancyRow
-                key={id}
-                item={item}
-                env={env}
-                application={props.byCluster.get(id)}
-                wanted={props.wantedKeys.has(companyLookupKey(item.cluster.canonicalCompany ?? ''))}
-                open={open}
-                menuView={menu?.id === id ? menu.view : null}
-                menuActions={props.actionsFor(item)}
-                pick={props.pickFor?.(item)}
-                onToggleOpen={() => props.onToggleOpen(id)}
-                onToggleSaved={() => props.onToggleSaved(item)}
-                onMenu={(view) => props.onMenu(id, view)}
-                onCloseMenu={props.onCloseMenu}
-              />
-            );
-            return open ? [row, <DetailRow key={`${id}-detail`} item={item} env={env} />] : [row];
-          })}
+          {props.items.flatMap((item) => rowsOf(item, props))}
         </tbody>
       </table>
     </div>

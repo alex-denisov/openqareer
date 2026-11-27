@@ -1,0 +1,44 @@
+/* Профиль LinkedIn (a03): только то, чего нет в стилях макета; атрибут style в кабинете запрещён. */
+@layer b640.sections {
+  .b640 .li-cur,
+  .b640 .li-offer .li-new {
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+  }
+  /* «Выполнено» на месте кнопки: кандидат вставил текст в LinkedIn. */
+  .b640 .li-done {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--career-space-1);
+    min-block-size: var(--career-target-min);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+  }
+  .b640 .li-done .ico {
+    inline-size: var(--career-icon-sm);
+    block-size: var(--career-icon-sm);
+    color: var(--career-accent);
+  }
+  @media (max-width: 767px) {
+    /* Листание вариантов и действия не помещаются в строку 390 — переносятся. */
+    .b640 .li-offer-a {
+      flex-wrap: wrap;
+    }
+    .b640 .li-done {
+      margin-inline-start: auto;
+    }
+  }
+
+  /* a03 (М6-1): листание вариантов — под текстом, чтобы строка действий не сжимала предложение. */
+  @media (min-width: 768px) {
+    .b640 .li-offer > .var-sw {
+      grid-column: 1;
+      grid-row: 2;
+      justify-self: start;
+    }
+    .b640 .li-offer > .li-offer-a {
+      grid-column: 2;
+      grid-row: 1;
+    }
+  }
+}

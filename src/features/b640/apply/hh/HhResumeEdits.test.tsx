@@ -11,6 +11,9 @@ vi.mock('./hhDesktop', () => desktop);
 vi.mock('./hhResumeReading', () => reading);
 vi.mock('./hhEditPace', () => pace);
 
+const variantApi = vi.hoisted(() => ({ listHhEditVariants: vi.fn(), createHhEditVariant: vi.fn() }));
+vi.mock('../hhEditVariantApi', () => variantApi);
+
 const { HhResumeEdits } = await import('./HhResumeEdits');
 
 const edits: HhResumeEdit[] = [
@@ -36,6 +39,7 @@ afterEach(() => {
 });
 beforeEach(() => {
   vi.clearAllMocks();
+  variantApi.listHhEditVariants.mockResolvedValue({ variants: [], remaining: 3 });
   desktop.applyHhResumeEditInSession.mockResolvedValue({ outcome: 'applied', failureCode: null });
 });
 
@@ -110,8 +114,11 @@ describe('B678, срез 3: «Применить» на hh.ru', () => {
     click(buttons('Применить все на hh.ru')[0]!);
     await settle();
     expect(desktop.applyHhResumeEditInSession).not.toHaveBeenCalled();
-    expect(document.body.textContent).toContain('изменит: Должность, Опыт по местам, Навыки, О себе');
-    click(buttons('Изменить')[0]!);
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.querySelector('h2')!.textContent).toBe('Применить все на hh.ru?');
+    expect(dialog.querySelector('.hh-ok-d')!.textContent).toMatch(/^Резюме «.+» изменится на hh\.ru для всех работодателей\.$/);
+    expect([...dialog.querySelectorAll('.pf-df button')].map((item) => item.textContent?.trim())).toEqual(['Применить', 'Отмена']);
+    click(document.querySelector('.pf-df button.is-primary')!);
     await settle();
     await settle();
     await settle();
@@ -124,9 +131,53 @@ describe('B678, срез 3: «Применить» на hh.ru', () => {
     render();
     click(buttons('Применить все на hh.ru')[0]!);
     await settle();
-    click(buttons('Изменить')[0]!);
+    click(document.querySelector('.pf-df button.is-primary')!);
     await settle();
     expect(desktop.applyHhResumeEditInSession).toHaveBeenCalledTimes(1);
     expect(view!.container.querySelector('.hh2-err')?.textContent).toContain('не робот');
+  });
+});
+
+describe('B682: «Другой вариант» правки (a01c)', () => {
+  const variantOf = { vacancyId: 'v', subjectId: 's1' };
+  const withVariants = edits.map((edit) => (edit.section === 'skills' ? { ...edit, variantOf } : edit));
+  const list = {
+    variants: [{ id: 'x', position: 1, text: 'dbt, Airflow, SQL', payload: { added: ['dbt', 'Airflow'] }, wish: { chips: [], text: '' }, createdAt: '' }],
+    remaining: 2,
+  };
+  const icons = () => document.querySelectorAll<HTMLButtonElement>('[aria-label="Другой вариант"]');
+  async function open() {
+    view = mount(<HhResumeEdits resumeId="abc1" resumeTitle="CDO" edits={withVariants} onBack={vi.fn()} />);
+    await settle();
+  }
+
+  it('значок только у правок с вариантами; новый вариант встаёт в строку, применяется он, назад — листанием', async () => {
+    variantApi.createHhEditVariant.mockResolvedValue(list);
+    await open();
+    expect(icons()).toHaveLength(1);
+    click(icons()[0]!);
+    await settle();
+    expect(variantApi.createHhEditVariant).toHaveBeenCalledWith('v', 's1');
+    const row = icons()[0]!.closest('.hh2-r')!;
+    expect(row.textContent).toContain('dbt, Airflow, SQL');
+    expect(row.querySelector('.var-sw .num')?.textContent).toBe('2 из 2');
+    click(row.querySelector('[aria-label="Предыдущий вариант"]'));
+    expect(row.querySelector('.hh2-now')?.textContent).toContain('SQL, dbt');
+    click(row.querySelector('[aria-label="Следующий вариант"]'));
+    click([...row.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Применить')!);
+    await settle();
+    expect(desktop.applyHhResumeEditInSession).toHaveBeenCalledWith({ resumeId: 'abc1', section: 'skills', text: '', skills: ['dbt', 'Airflow'] });
+  });
+
+  it('предел — значок выключен; сбой — строка под правкой, текст прежний', async () => {
+    variantApi.createHhEditVariant.mockRejectedValue(new Error('x'));
+    await open();
+    click(icons()[0]!);
+    await settle();
+    expect(document.querySelector('.hh2-err')?.textContent).toContain('не собрался');
+    view!.unmount();
+    variantApi.listHhEditVariants.mockResolvedValue({ ...list, remaining: 0 });
+    await open();
+    expect(icons()[0]!.disabled).toBe(true);
   });
 });

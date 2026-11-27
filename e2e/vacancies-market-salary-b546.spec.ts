@@ -17,9 +17,7 @@ async function shownCount(page: Page): Promise<number> {
   return Number((match?.[1] ?? '').replace(/\D/gu, ''));
 }
 
-test('B546: rows without salary show the market estimate or «мало данных»', async ({
-  page,
-}, testInfo) => {
+test('B546: rows without salary show the openqareer estimate', async ({ page }, testInfo) => {
   const mobile = testInfo.project.name === 'mobile-390';
   await mockSignedInCabinet(page);
   await openVacancies(page);
@@ -42,16 +40,9 @@ test('B546: rows without salary show the market estimate or «мало данн�
   await page.setViewportSize({ width, height: mobile ? 844 : 900 });
   if (mobile) {
     await expect(estimate.first().locator('.vacancy-screen-money-short')).toHaveText('оценка');
-    await expect(
-      page.locator('.vacancy-screen-money-narrow', { hasText: 'без зарплаты' }).first(),
-    ).toBeVisible();
     return;
   }
-  await expect(estimate.first()).toContainText('оценка рынка');
-  await expect(estimate.first()).toContainText('по 41 вакансии, 05.10');
-  const thin = page.locator('.vacancies-screen-cell--salary', { hasText: 'мало данных' }).first();
-  await expect(thin).toContainText('нет зарплаты, оценка по 3 вакансиям, 05.10');
-  await expect(thin).not.toContainText('≈');
+  await expect(estimate.first()).toContainText('Оценка openqareer, 05.10');
 });
 
 test('B546: salary toggles change the number of shown vacancies', async ({ page }, testInfo) => {

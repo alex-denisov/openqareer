@@ -1,5 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { resolvePoolVacancyCluster } from '../vacancies/poolVacancyCluster';
+import type { ApplyTarget } from '../../shared/applyTarget';
+import { applyRedirects } from '../vacancies/applyRedirect';
+import { resolveVacancyApplyTarget } from '../vacancies/vacancyApplyTarget';
+import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepository';
+import type { VacancyCluster } from '../domain/unifiedVacancy';
+import { withHhAttempt } from '../vacancies/hhAttemptHold';
+import { resolveRowVacancyCluster } from '../vacancies/poolVacancyCluster';
 import { matchCandidateWithVacancy } from '../vacancies/vacancyMatcher';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { readB640ListContext, sessionCandidate } from './b640VacancyContext';
@@ -11,9 +17,18 @@ import { withMarketSalary } from './matchedVacancyRoutes';
 const BASE = '/api/v1/candidate/b640/vacancies';
 const ID_MAX = 200;
 
+type VacancyCard = MatchedVacancyItem & { readonly applyTarget: ApplyTarget | null };
+
+type CardDeps = RouteDeps & { readonly hh: SqliteHhSessionRepository };
+
+function cardCluster(deps: CardDeps, candidateId: string, id: string): VacancyCluster | undefined {
+  const cluster = resolveRowVacancyCluster(deps.multiSourceEngine, id);
+  return cluster && withHhAttempt(cluster, deps.hh.vacancyInProgress(candidateId, id, new Date()));
+}
+
 /** Объяснение совпадения для одной вакансии — тем же сравнением, что и строка подборки. */
-function cardItem(deps: RouteDeps, candidateId: string, clusterId: string): MatchedVacancyItem | undefined {
-  const cluster = resolvePoolVacancyCluster(deps.multiSourceEngine, clusterId);
+function cardItem(deps: CardDeps, candidateId: string, clusterId: string): VacancyCard | undefined {
+  const cluster = cardCluster(deps, candidateId, clusterId);
   if (!cluster) return undefined;
   const context = readB640ListContext(deps, candidateId);
   const explanation = matchCandidateWithVacancy(
@@ -27,14 +42,19 @@ function cardItem(deps: RouteDeps, candidateId: string, clusterId: string): Matc
     cluster,
   );
   const [item] = withMarketSalary(deps, [{ cluster, explanation }]);
-  return item;
+  return (
+    item && {
+      ...item,
+      applyTarget: resolveVacancyApplyTarget(deps.multiSourceEngine, cluster, applyRedirects.peek),
+    }
+  );
 }
 
 /**
  * B715: карточка v04 для вакансии, которой нет в загруженной подборке кандидата — ссылка hh.ru
  * из «Своей вакансии» (`in_pool`), вакансия после отклика, переход по прямому адресу.
  */
-function getVacancyCard(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+function getVacancyCard(deps: CardDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireCabinetB640(request, reply, deps);
   if (!principal) return reply;
   const candidate = sessionCandidate(request, reply, principal.candidate);
@@ -48,6 +68,65 @@ function getVacancyCard(deps: RouteDeps, request: FastifyRequest, reply: Fastify
   return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
 }
 
+async function openedClusterGone(
+  deps: CardDeps,
+  request: FastifyRequest,
+  cluster: VacancyCluster,
+): Promise<boolean> {
+  try {
+    return (await deps.multiSourceEngine.openedVacancyGone?.(cluster)) ?? false;
+  } catch (error: unknown) {
+    // Сбой сверки карточку не закрывает: следующее открытие спросит снова.
+    const errorName = error instanceof Error ? error.name : 'UnknownError';
+    request.log.warn({ errorName }, 'opened-vacancy-check-failed');
+    return false;
+  }
+}
+
+/** B797: открытая карточка сверяется с площадкой своим запросом, пока кандидат её уже читает. */
+async function postVacancyLiveness(deps: CardDeps, request: FastifyRequest, reply: FastifyReply) {
+  const principal = requireCabinetB640(request, reply, deps);
+  if (!principal) return reply;
+  const candidate = sessionCandidate(request, reply, principal.candidate);
+  if (!candidate) return reply;
+  const id = (request.params as { id?: string }).id ?? '';
+  const cluster = id && id.length <= ID_MAX ? cardCluster(deps, candidate.id, id) : undefined;
+  if (!cluster && !(id && deps.multiSourceEngine.isKnownVacancyGone?.(id))) {
+    return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+  }
+  const closed = cluster
+    ? await openedClusterGone(deps, request, { ...cluster, id })
+    : (deps.multiSourceEngine.detachedRowGone?.(id) ?? true);
+  return { data: { closed }, meta: { requestId: request.id } };
+}
+
+/** B787: кандидат открыл отклик — адрес трекера раскрывается одним переходом и запоминается. */
+async function postApplyTarget(deps: CardDeps, request: FastifyRequest, reply: FastifyReply) {
+  const principal = requireCabinetB640(request, reply, deps);
+  if (!principal) return reply;
+  const candidate = sessionCandidate(request, reply, principal.candidate);
+  if (!candidate) return reply;
+  const id = (request.params as { id?: string }).id ?? '';
+  const cluster = id && id.length <= ID_MAX ? cardCluster(deps, candidate.id, id) : undefined;
+  if (!cluster)
+    return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+  const read = () =>
+    resolveVacancyApplyTarget(deps.multiSourceEngine, cluster, applyRedirects.peek);
+  const target = read();
+  if (target?.needsRedirect && (await applyRedirects.resolve(target.url, candidate.id))) {
+    return { data: { applyTarget: read() }, meta: { requestId: request.id } };
+  }
+  return { data: { applyTarget: target }, meta: { requestId: request.id } };
+}
+
 export function registerB640VacancyCardRoutes(app: FastifyInstance, deps: RouteDeps): void {
-  app.get(`${BASE}/:id`, withDeps(deps, getVacancyCard));
+  const hh = new SqliteHhSessionRepository({
+    databasePath: deps.config.databasePath,
+    encryptionKey: deps.config.dataEncryptionKey,
+  });
+  app.addHook('onClose', async () => hh.close());
+  const bound: CardDeps = { ...deps, hh };
+  app.post(`${BASE}/:id/apply-target`, withDeps(bound, postApplyTarget));
+  app.post(`${BASE}/:id/liveness`, withDeps(bound, postVacancyLiveness));
+  app.get(`${BASE}/:id`, withDeps(bound, getVacancyCard));
 }

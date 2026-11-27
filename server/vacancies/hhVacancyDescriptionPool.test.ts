@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
-import { expireClusterSources, MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
+import {
+  expireClusterSources,
+  MultiSourceVacancyEngine,
+  type VacancyDescriptionLoader,
+} from './multiSourceVacancyEngine';
 import { createClusterFromVacancy } from './vacancyDeduplicator';
 import { HhVacancyDescriptionLoader } from './hhVacancyDescription';
 import { matchCandidateWithVacancy } from './vacancyMatcher';
@@ -326,7 +330,7 @@ describe('hh full-description on demand', () => {
   it('01.11: stored text without skills is cached after a restart, not fetched again', async () => {
     const pool = new MemoryVacancyPoolStore();
     pool.mergeSourceSlice(source.id, [
-      { ...vacancy, description: '', fullDescription: 'Текст без навыков', requiredSkills: [] },
+      { ...vacancy, description: '', fullDescription: 'Текст без навыков. '.repeat(20), requiredSkills: [] },
     ]);
     const load = vi.fn();
     const engine = new MultiSourceVacancyEngine({
@@ -338,6 +342,47 @@ describe('hh full-description on demand', () => {
       status: 'cached',
     });
     expect(load).not.toHaveBeenCalled();
+  });
+});
+
+describe('B794: a cut hh text is read once more', () => {
+  const stub = { ...vacancy, description: '', fullDescription: 'Обязанности:', requiredSkills: ['1С'] };
+  const full = 'Обязанности: вести проекты. '.repeat(20);
+  const engineWith = (pool: MemoryVacancyPoolStore, load: VacancyDescriptionLoader['load']) =>
+    new MultiSourceVacancyEngine({ sources: [source], pool, descriptionLoader: { load } });
+
+  it('replaces the stored stub with the whole text', async () => {
+    const pool = new MemoryVacancyPoolStore();
+    pool.mergeSourceSlice(source.id, [stub]);
+    pool.requestHhTextPriority([vacancy.id]);
+    expect(pool.peekHhTextPriority(5)).toEqual([vacancy.id]);
+    const engine = engineWith(pool, vi.fn().mockResolvedValue({ description: full, skills: [] }));
+    await expect(engine.loadVacancyDescription(vacancy.id)).resolves.toMatchObject({ status: 'loaded' });
+    expect(pool.getVacancy(vacancy.id)?.fullDescription).toBe(full);
+    expect(pool.peekHhTextPriority(5)).toEqual([]);
+  });
+
+  it('asks a card that really is short once, after a restart and a new search slice too', async () => {
+    const pool = new MemoryVacancyPoolStore();
+    pool.mergeSourceSlice(source.id, [stub]);
+    const load = vi.fn().mockResolvedValue({ description: 'Обязанности:', skills: [] });
+    const engine = engineWith(pool, load);
+    await engine.loadVacancyDescription(vacancy.id);
+    await expect(engine.loadVacancyDescription(vacancy.id)).resolves.toMatchObject({ status: 'cached' });
+    pool.mergeSourceSlice(source.id, [{ ...vacancy, description: '', fullDescription: '' }]);
+    pool.requestHhTextPriority([vacancy.id]);
+    expect(pool.peekHhTextPriority(5)).toEqual([]);
+    await expect(
+      engineWith(pool, load).loadVacancyDescription(vacancy.id),
+    ).resolves.toMatchObject({ status: 'cached' });
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the stored text when the page is not read', async () => {
+    const pool = new MemoryVacancyPoolStore();
+    pool.mergeSourceSlice(source.id, [stub]);
+    await engineWith(pool, vi.fn().mockRejectedValue(new Error('net'))).loadVacancyDescription(vacancy.id);
+    expect(pool.getVacancy(vacancy.id)?.fullDescription).toBe('Обязанности:');
   });
 });
 

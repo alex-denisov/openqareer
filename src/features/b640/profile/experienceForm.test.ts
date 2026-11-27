@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ResumeDraft, ResumeExperienceInput } from '../../resume/resumeTypes';
+import { editedTexts } from './experienceResults';
 import {
   applyForm,
   citySuggestions,
@@ -8,6 +9,7 @@ import {
   monthLabel,
   reviewRows,
   validateForm,
+  withDescription,
 } from './experienceForm';
 
 const ENTRY: ResumeExperienceInput = {
@@ -44,6 +46,9 @@ describe('b640 profile: форма места работы', () => {
       workplaceType: 'remote',
       teamSize: '18',
       skills: ['Go', 'PostgreSQL'],
+      description: '',
+      results: [],
+      removed: [],
     });
     expect(
       formOf({ ...ENTRY, startDate: 'март 2018', teamSize: undefined, workplaceType: undefined }),
@@ -52,6 +57,33 @@ describe('b640 profile: форма места работы', () => {
       teamSize: '',
       workplaceType: null,
     });
+  });
+
+  it('B801: «Что делали» есть и у места без описания; новая запись встаёт в это место', () => {
+    expect(formOf({ ...ENTRY, descriptionMemoryId: 'd9' }).description).toBeNull();
+    const draft = { ...DRAFT, experience: [ENTRY] };
+    expect(withDescription(draft, ENTRY.id, 'd1').experience[0].descriptionMemoryId).toBe('d1');
+    expect(withDescription(draft, ENTRY.id, null)).toBe(draft);
+  });
+
+  it('результаты и описание берутся из записей; убранный результат уходит из места работы', () => {
+    const entry = { ...ENTRY, descriptionMemoryId: 'd1', bulletMemoryIds: ['m1', 'm2'] };
+    const statements = new Map([
+      ['d1', 'Вела бэкенд'],
+      ['m1', 'Маржа 80 %'],
+      ['m2', 'SLA 99 %'],
+    ]);
+    const form = formOf(entry, statements);
+    expect(form.description).toBe('Вела бэкенд');
+    expect(form.results.map(({ text }) => text)).toEqual(['Маржа 80 %', 'SLA 99 %']);
+    const draft = { ...DRAFT, experience: [entry] };
+    const next = applyForm(draft, 'e2', { ...form, removed: ['m1'] });
+    expect(next.experience[0].bulletMemoryIds).toEqual(['m2']);
+    const edited = {
+      ...form,
+      results: form.results.map((row) => ({ ...row, text: row.text.replace('80', '40') })),
+    };
+    expect(editedTexts(entry, form, edited)).toEqual([{ memoryId: 'm1', text: 'Маржа 40 %' }]);
   });
 
   it('месяц подписывается словами', () => {
@@ -78,6 +110,23 @@ describe('b640 profile: форма места работы', () => {
       teamSize: 'Только число',
     });
     expect(validateForm({ ...form, city: '', teamSize: '' }, ENTRY)).toEqual({});
+  });
+
+  it('B801: старое описание длиннее 1000 не мешает сохранить другие поля, новая правка — ошибка', () => {
+    const entry = { ...ENTRY, descriptionMemoryId: 'd1' };
+    const old = `${'а'.repeat(3_000)}\n`;
+    const initial = formOf(entry, new Map([['d1', old]]));
+    const other = { ...initial, title: 'CTO' };
+    expect(validateForm(other, entry, initial)).toEqual({});
+    expect(editedTexts(entry, initial, other)).toEqual([]);
+    const edited = { ...initial, description: 'б'.repeat(1_200) };
+    expect(validateForm(edited, entry, initial)).toEqual({
+      description: 'Не длиннее 1000 знаков, сейчас 1200',
+    });
+    const fresh = { ...formOf(ENTRY), description: 'в'.repeat(1_001) };
+    expect(validateForm(fresh, ENTRY).description).toBe('Не длиннее 1000 знаков, сейчас 1001');
+    const short = { ...initial, description: 'б'.repeat(1_000) };
+    expect(validateForm(short, entry, initial)).toEqual({});
   });
 
   it('прежний город вне справочника не мешает сохранить другие поля', () => {

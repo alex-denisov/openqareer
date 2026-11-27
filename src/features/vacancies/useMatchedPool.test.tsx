@@ -2,12 +2,13 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getMatchedVacancyPage } from '../coach/coachApi';
+import { getMatchedVacancyFacets, getMatchedVacancyPage } from '../coach/coachApi';
 import type { MatchedVacancyPage } from '../coach/matchedVacancyApi';
 import { useMatchedPool, type MatchedPool } from './useMatchedPool';
 
 vi.mock('../coach/coachApi', () => ({
   getMatchedVacancyPage: vi.fn(),
+  getMatchedVacancyFacets: vi.fn().mockResolvedValue(undefined),
   getVacancySources: vi.fn().mockResolvedValue([]),
 }));
 const initial: MatchedPool = {
@@ -60,11 +61,11 @@ describe('B338 изолированное чтение фильтров', () => 
     expect(getMatchedVacancyPage).not.toHaveBeenCalled();
     await act(async () => pool.setFilters?.(selected));
     await act(async () => pool.setFilters?.({ ...selected, remoteOnly: true }));
-    expect(getMatchedVacancyPage).toHaveBeenNthCalledWith(1, 0, expect.any(AbortSignal), selected);
+    expect(getMatchedVacancyPage).toHaveBeenNthCalledWith(1, 0, expect.any(AbortSignal), selected, 'rows');
     expect(getMatchedVacancyPage).toHaveBeenNthCalledWith(2, 0, expect.any(AbortSignal), {
       ...selected,
       remoteOnly: true,
-    });
+    }, 'rows');
     await act(async () => latest.resolve(page(2)));
     expect(pool.total).toBe(2);
     await act(async () => old.resolve(page(7)));
@@ -76,7 +77,7 @@ describe('B338 изолированное чтение фильтров', () => 
     expect(getMatchedVacancyPage).toHaveBeenNthCalledWith(3, 0, expect.any(AbortSignal), {
       ...selected,
       regions: [],
-    });
+    }, 'rows');
     expect(pool.total).toBe(9);
     await act(async () => root.unmount());
   });
@@ -136,6 +137,47 @@ describe('B338 изолированное чтение фильтров', () => 
     expect(pool.loading).toBe(true);
     expect(pool.total).toBe(5);
     await act(async () => second.resolve(page(5)));
+    await act(async () => root.unmount());
+  });
+});
+
+describe('B725: фасеты отдельным запросом', () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it('B760: фасеты просятся после страницы 0 — строки не делят с ними цикл сервера', async () => {
+    const rows = deferred();
+    vi.mocked(getMatchedVacancyPage).mockReturnValueOnce(rows.promise);
+    vi.mocked(getMatchedVacancyFacets).mockResolvedValueOnce({ ...initial.facets!, total: 4 });
+    let pool!: MatchedPool;
+    function Reader() {
+      pool = useMatchedPool(initial);
+      return null;
+    }
+    const root = createRoot(document.createElement('div'));
+    await act(async () => root.render(<Reader />));
+    await act(async () => pool.setFilters?.(selected));
+    expect(getMatchedVacancyPage).toHaveBeenCalledWith(0, expect.any(AbortSignal), selected, 'rows');
+    expect(getMatchedVacancyFacets).not.toHaveBeenCalled();
+    await act(async () => rows.resolve({ items: [], total: 4, nextOffset: null }));
+    expect(getMatchedVacancyFacets).toHaveBeenCalledWith(expect.any(AbortSignal), selected);
+    expect(pool.facets?.total).toBe(4);
+    expect(pool.total).toBe(4);
+    await act(async () => root.unmount());
+  });
+
+  it('неудача фасетов не роняет список', async () => {
+    vi.mocked(getMatchedVacancyPage).mockResolvedValueOnce({ items: [], total: 3, nextOffset: null });
+    vi.mocked(getMatchedVacancyFacets).mockRejectedValueOnce(new Error('down'));
+    let pool!: MatchedPool;
+    function Reader() {
+      pool = useMatchedPool(initial);
+      return null;
+    }
+    const root = createRoot(document.createElement('div'));
+    await act(async () => root.render(<Reader />));
+    await act(async () => pool.setFilters?.(selected));
+    expect(pool.failed).toBe(false);
+    expect(pool.total).toBe(3);
     await act(async () => root.unmount());
   });
 });

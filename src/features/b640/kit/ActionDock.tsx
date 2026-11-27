@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
 
 export interface ActionDockProps {
   /** Одна залитая кнопка. */
@@ -24,9 +24,8 @@ const CLASS_OF = {
  * Закреплённая главная кнопка. На 390 полоса стоит над нижней навигацией;
  * высоту отдаём корню `.b640` в `--career-m-commit-h`, по ней `main` оставляет отступ.
  */
-export function ActionDock({ primary, secondary, kind = 'dock' }: ActionDockProps) {
-  const ref = useRef<HTMLDivElement>(null);
-
+/** Высота закреплённой полосы уходит корню `.b640`: `main` оставляет под ней отступ. */
+export function useDockHeight(ref: RefObject<HTMLElement | null>): void {
   useEffect(() => {
     const element = ref.current;
     const root = element?.closest<HTMLElement>('.b640');
@@ -40,7 +39,12 @@ export function ActionDock({ primary, secondary, kind = 'dock' }: ActionDockProp
       observer?.disconnect();
       root.style.removeProperty(HEIGHT_VAR);
     };
-  }, []);
+  }, [ref]);
+}
+
+export function ActionDock({ primary, secondary, kind = 'dock' }: ActionDockProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  useDockHeight(ref);
 
   const className = CLASS_OF[kind];
   return (

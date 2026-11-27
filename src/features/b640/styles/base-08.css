@@ -275,8 +275,10 @@
     .b640 main .actions:has(> .is-primary):not(.m-commit):not(:is([role="dialog"], [aria-modal="true"], li, tr, article, .row, .card, .src, .cn-row, .pg) *) > :not(.is-primary) {
       flex: 0 1 auto; min-inline-size: 0; min-block-size: var(--career-target-min); padding-inline: var(--career-space-2); border-color: transparent; background: none;
     }
-    div.b640:has(main .actions:has(> .is-primary):not(.m-commit):not(:is([role="dialog"], [aria-modal="true"], li, tr, article, .row, .card, .src, .cn-row, .pg) *)) main {
-      padding-block-end: calc(var(--career-target-min) + var(--career-space-4));
+    /* B720: :has внутри :has недопустим — правило с ним браузер отбрасывал целиком, и низ
+       страницы уходил под панель. Отступ = высота панели (кнопка, поля, рамка) и зазор. */
+    div.b640:has(main .actions:not(.m-commit):not(:is([role="dialog"], [aria-modal="true"], li, tr, article, .row, .card, .src, .cn-row, .pg) *) > .is-primary) main {
+      padding-block-end: calc(var(--career-target-min) + 2 * var(--career-space-2) + var(--career-border-width) + var(--career-space-4));
     }
   }
   @media (max-width: 767px) {
@@ -292,7 +294,7 @@
   .b640 main .actions:has(> .va-popwrap > .is-primary) > .va-popwrap { flex: 0 1 auto; min-inline-size: 50%; min-block-size: var(--career-target-min); justify-content: center; }
     .b640 main .actions:has(> .va-popwrap > .is-primary) > .va-popwrap > .is-primary { inline-size: 100%; justify-content: center; }
     .b640 main :is(.au2-state-a, .vz-act, .vt-pop-foot):has(> .is-primary) > :not(.is-primary) { flex: 0 1 auto; min-inline-size: 0; min-block-size: var(--career-target-min); padding-inline: var(--career-space-2); border-color: transparent; background: none; }
-    div.b640:has(main :is(.au2-state-a, .vz-act, .vt-pop-foot):has(> .is-primary), main .actions:has(> .va-popwrap > .is-primary)) main { padding-block-end: calc(var(--career-target-min) + var(--career-space-4)); }
+    div.b640:has(main :is(.au2-state-a, .vz-act, .vt-pop-foot) > .is-primary, main .actions:not(.m-commit) > .va-popwrap > .is-primary) main { padding-block-end: calc(var(--career-target-min) + 2 * var(--career-space-2) + var(--career-border-width) + var(--career-space-4)); }
   }
   @media (max-width: 767px) {
     .b640 main .lk-next > .va-popwrap:has(> .is-primary) {
@@ -326,8 +328,9 @@
   .b640 main :is(.au2-state-a, .vz-act, .vt-pop-foot):has(> .is-primary) > :not(.is-primary) {
       flex-shrink: 0;
     }
-    div.b640:has(main .actions:has(> .is-primary):has(> :nth-child(3)):not(.m-commit):not(:is([role="dialog"], [aria-modal="true"], li, tr, article, .row, .card, .src, .cn-row, .pg) *)) main {
-      padding-block-end: calc(var(--career-target-min) * 2 + var(--career-space-4));
+    /* Три кнопки — панель в два ряда. B720: без вложенного :has — «есть главная и третья кнопка». */
+    div.b640:has(main .actions:not(.m-commit):not(:is([role="dialog"], [aria-modal="true"], li, tr, article, .row, .card, .src, .cn-row, .pg) *) > .is-primary ~ :nth-child(3), main .actions:not(.m-commit):not(:is([role="dialog"], [aria-modal="true"], li, tr, article, .row, .card, .src, .cn-row, .pg) *) > .is-primary:nth-child(n + 3)) main {
+      padding-block-end: calc(var(--career-target-min) * 2 + 2 * var(--career-space-2) + var(--career-border-width) + var(--career-space-4));
     }
   }
   .b640 .ln-open { display: block; min-inline-size: 0; color: inherit; text-decoration: none; }
@@ -408,6 +411,7 @@
   .b640 .mi-lead:has(#mi-st-rec:checked) .mi-ans-e { display: block; }
   .b640 .mi-lead:has(#mi-st-mic:checked) .mi-mic-off { display: contents; }
   .b640 .mi-lead:has(#mi-st-rec:checked) .mi-rec-err { display: inline-flex; }
+  .b640 .mi-rec-err.is-on { display: inline-flex; }
   .b640 .mi-lead:has(#mi-st-mic:checked) .mi-send,
   .b640 .mi-lead:has(#mi-st-rec:checked) .mi-send { display: inline-flex; }
   @media (max-width: 767px) { .b640 .lead-head:has(#ln-title) > .tip { display: none; } }
@@ -651,7 +655,7 @@
   @media (min-width: 768px) { .b640 .v4-act > .v4-act-main { display: contents; } }
   @container main (max-width: 1179px) { .b640 .v4-act { gap: var(--career-space-2); } .b640 .v4-act .btn { padding-inline: var(--career-space-3); } }
   .b640 .v4-reqs-box { border: var(--career-border-width) solid var(--career-line); border-radius: var(--career-radius-ctl); overflow: hidden; min-inline-size: 0; }
-  .b640 .v4-reqs-box > .v4-req-row { border: 0; border-radius: 0; }
+  .b640 .v4-reqs-box > .v4-req-row { border: 0; border-radius: 0; padding-block: 0; }
   .b640 .v4-reqs-box > .v4-req-row:focus-visible { outline-offset: -2px; }
   .b640 .v4-reqs-box > .v4-reqs-open { border-block-start: var(--career-border-width) solid var(--career-line); padding: var(--career-space-1) var(--career-space-3) var(--career-space-2); }
   .b640 .v4-reqs-open .vg-rl li:has(.v4-req-go) { grid-template-columns: var(--career-target-min) minmax(0, 1fr) auto; }

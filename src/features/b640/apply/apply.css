@@ -1,5 +1,35 @@
 /* Единый экран отклика: только то, чего нет в стилях макета. */
 @layer b640.sections {
+  /* B787: код из письма на «Отправке». */
+  .b640 .ap-code-form { display: grid; gap: var(--career-space-4); }
+  .b640 .ap-code small.is-err { display: flex; gap: var(--career-space-1); align-items: center; color: var(--career-danger); font-weight: 600; }
+  /* Д4: «Скачать» в строке ручной отправки — справа, как соседние кнопки. */
+  .b640 .cb-item > .cv-dl { order: 0; flex: none; inline-size: auto; margin-inline-start: auto; }
+  .b640 .cb-item > .cv-dl > .icon-btn { inline-size: var(--career-target-min); block-size: var(--career-target-min); }
+  /* Д7: кнопка полосы анкеты стоит на вертикали карточки готовности. */
+  .b640 .act-dock.qa-dock { padding-inline-start: calc(var(--career-space-4) + var(--career-border-width)); }
+  @media (min-width: 768px) {
+    .b640 .page:has(> .act-dock.qa-dock) { padding-block-end: 0; }
+  }
+  /* Д6: действие и ссылка анкеты на 390 — в один ряд. */
+  @media (max-width: 767px) {
+    .b640 .lead > .actions.m-commit.m-commit.m-commit.qa-mob:has(> .row-act) {
+      flex-flow: row nowrap;
+      justify-content: flex-start;
+    }
+    .b640 .lead > .actions.m-commit.m-commit.m-commit.qa-mob:has(> .row-act) > .btn.btn.btn {
+      flex: 1 1 auto;
+      order: 0;
+      min-inline-size: 0;
+    }
+    .b640 .qa-mob:has(> .row-act) .qa-must {
+      position: absolute;
+      inline-size: 1px;
+      block-size: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+  }
   /* Письмо можно править на месте: поле выглядит как текст письма из макета. */
   .b640 textarea.ap-letter {
     inline-size: 100%;
@@ -18,8 +48,13 @@
   }
   /* Резюме текстом: строки одна под другой, как в файле. */
   .b640 .cv-page > p { margin: 0 0 var(--career-space-2); }
+  /* B641: поиск по вариантам анкеты — как поиск в фильтрах, во всю ширину поля ответа. */
+  .b640 .field > .search { box-sizing: border-box; max-inline-size: none; font-weight: 400; }
+  .b640 .field > .search input[type="search"] { block-size: auto; font-family: inherit; }
   /* B704: лист выбора резюме без подвала — «Прочитать снова» под строкой, отступ до края окна. */
   .b640 .hh2-sheet .pf-db:last-child { padding-block-end: var(--career-dlg-pad, var(--career-space-6)); }
+  /* B708: подтверждение отклика — текст не прижат к линии подвала. */
+  .b640 .hh-ask .pf-db { padding-block-end: var(--career-dlg-pad, var(--career-space-4)); }
   /* B678: сверка резюме с вакансией справа от названия; длинный список недостающего переносится. */
   .b640 .hh2-st {
     display: inline-flex;
@@ -32,6 +67,31 @@
   }
   /* B678: строки текста раздела hh.ru одна под другой, как на hh.ru. */
   .b640 .hh2-line { display: block; }
+  /* B678, a01: название резюме открывает лист выбора и выглядит как название строки макета. */
+  .b640 .ap-parts .ap-pick {
+    position: relative;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    line-height: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+  .b640 .ap-parts .ap-pick:hover { color: var(--career-accent); }
+  .b640 .ap-parts .ap-pick:only-child::after,
+  .b640 .ap-parts .ap-pick:has(+ .ap-lines)::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    inset-block: calc(-1 * var(--career-space-3));
+  }
+  /* B678, a01c: разбор занимает всю ширину страницы, пустой второй колонки нет. */
+  .b640 .page.two > .col:has(> .lead > .hh2-top) { grid-column: 1 / -1; }
+  .b640 .page.two > .col:has(> .lead > .hh2-top) + .col:empty { display: none; }
+  /* B678, a01c: сегмент по названию резюме: в макете на 390 оно обрезано третью ширины. */
+  .b640 .hh2-top .seg-ctl { inline-size: 100%; grid-template-columns: fit-content(100%); }
+  .b640 .hh2-top .seg-ctl span { padding-inline: var(--career-space-3); white-space: normal; overflow-wrap: anywhere; }
   /* B678: отказ hh.ru применить правку — под строкой правки, текст остаётся для копирования. */
   .b640 .hh2-err {
     margin: var(--career-space-2) 0 0;
@@ -40,5 +100,15 @@
     background: var(--career-danger-soft);
     color: var(--career-text);
     font-size: var(--career-text-sm);
+  }
+  /* B645: абзацы письма в карточке «Сопроводительное письмо» — как в тексте. */
+  .b640 .cb-item .cb-t { white-space: pre-line; }
+  /* B645: длинный текст вакансии прокручивается внутри и не растягивает страницу. */
+  @media (min-width: 768px) {
+    .b640 .vac-col .vac-text {
+      max-block-size: calc(100dvh - var(--career-space-8) * 5);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
   }
 }

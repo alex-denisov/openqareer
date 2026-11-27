@@ -78,6 +78,8 @@ export interface CareerDiaryWorkplace {
   readonly startDate: string;
   readonly endDate: string | null;
   readonly sourceExperienceId: string | null;
+  /** d01: «Что от вас ждут» — задачи из оффера или вакансии; план строится по ним. */
+  readonly expectations?: string | null;
   readonly status: CareerDiaryWorkplaceStatus;
   readonly isPrimary: boolean;
   readonly createdAt: string;
@@ -144,6 +146,7 @@ export interface CareerDiaryWorkplaceInput {
   readonly startDate: string;
   readonly endDate?: string | null;
   readonly sourceExperienceId?: string | null;
+  readonly expectations?: string | null;
 }
 
 export type CareerDiaryWorkplacePatch = Partial<CareerDiaryWorkplaceInput>;
@@ -184,6 +187,46 @@ function reachedTarget(current: CareerDiaryValue, target: CareerDiaryValue, base
     return current === target;
   }
   return target >= baseline ? current >= target : current <= target;
+}
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+function weeksWord(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'неделя';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'недели';
+  return 'недель';
+}
+
+interface PaceInput {
+  readonly start: number;
+  readonly due: number;
+  readonly asOf: number;
+  readonly measuredAt: number;
+  readonly current: number;
+  readonly baseline: number;
+  readonly target: number;
+  readonly unit: string;
+}
+
+/**
+ * B742 «Почему отстаёт»: сколько недель до срока и сколько нужно при темпе от исходного
+ * значения до последнего замера. Темп нулевой или в обратную сторону — так и пишем.
+ */
+function paceForecast(input: PaceInput): string {
+  const remaining = Math.abs(input.target - input.current);
+  const left = Math.ceil((input.due - input.asOf) / WEEK_MS);
+  if (left <= 0) {
+    return `Срок прошёл, до цели осталось ${Math.round(remaining * 100) / 100} ${input.unit}.`;
+  }
+  const head = `До срока ${left} ${weeksWord(left)}`;
+  const direction = Math.sign(input.target - input.baseline);
+  const moved = (input.current - input.baseline) * direction;
+  const weeks = (input.measuredAt - input.start) / WEEK_MS;
+  if (moved <= 0 || weeks <= 0) return `${head}, значение не сдвинулось с начала цели.`;
+  const need = Math.ceil(remaining / (moved / weeks));
+  return `${head}, при нынешнем темпе до цели ещё ${need} ${weeksWord(need)}.`;
 }
 
 export function evaluateCareerGoalRisk(
@@ -250,12 +293,23 @@ export function evaluateCareerGoalRisk(
   const progress = (current - goal.baselineValue) / (goal.targetValue - goal.baselineValue);
   const expected = Math.round(expectedValue * 100) / 100;
   const status = progress < elapsed ? 'at_risk' : 'on_track';
+  const linear =
+    'По линейному плану на ' + asOf + ': ожидаем ' + expected + ' ' + goal.unit +
+    ', последнее значение — ' + current + ' ' + goal.unit + '.';
+  const pace = {
+    start,
+    due,
+    asOf: asOfDate,
+    measuredAt,
+    current,
+    baseline: goal.baselineValue,
+    target: goal.targetValue,
+    unit: goal.unit,
+  };
   return {
     status,
     rule: 'linear_progress_v1',
-    explanation:
-      'По линейному плану на ' + asOf + ': ожидаем ' + expected + ' ' + goal.unit +
-      ', последнее значение — ' + current + ' ' + goal.unit + '.',
+    explanation: status === 'at_risk' ? paceForecast(pace) : linear,
     expectedValue: expected,
     actualValue: current,
   };

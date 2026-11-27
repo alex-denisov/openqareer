@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { labelDevice, startSession } from './sessionDevice';
 import type { RouteDeps } from './deps';
+import { registerAppCodeRoutes } from './appCodeRoutes';
+import { registerPasskeyLoginRoutes } from './passkeyLoginRoutes';
+import { registerPasskeyAccountRoutes } from './passkeyRoutes';
+import { registerTwoFactorRoutes } from './twoFactorRoutes';
+import { twoFactorLoginGate, twoFactorStoreFor } from './twoFactorAccess';
 import {
   authenticateSession,
   clearSessionCookie,
@@ -55,6 +61,7 @@ import {
   toRegistrationFingerprintLog,
 } from '../auth/registrationAntiAbuse';
 import type { EmailVerificationDeliveryFailure } from '../auth/emailVerification';
+import { IMPERSONATED_CODE, IMPERSONATED_MESSAGE } from './twoFactorRoutes';
 import { defaultPasswordResetRequestRateLimiter } from '../auth/passwordResetRequestLimiter';
 
 function registrationValidationError(
@@ -105,7 +112,7 @@ async function handleRegister(deps: RouteDeps, request: FastifyRequest, reply: F
       versionId: body.legalConsent.versionId,
       documents: LEGAL_DOC_SLUGS,
     });
-    setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
+    startSession(deps, request, reply, authenticated.sessionToken);
     return reply.code(201).send({
       data: {
         ...publicPrincipal(authenticated.principal, deps.config),
@@ -180,7 +187,9 @@ async function handleLogin(deps: RouteDeps, request: FastifyRequest, reply: Fast
   if (!authenticated) {
     return sendError(reply, request, 401, 'invalid_credentials', 'Неверный логин или пароль.', false);
   }
-  setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
+  const gated = twoFactorLoginGate(deps, request, reply, authenticated, deviceId ?? null);
+  if (gated) return gated;
+  startSession(deps, request, reply, authenticated.sessionToken);
   return {
     data: {
       ...publicPrincipal(authenticated.principal, deps.config),
@@ -250,7 +259,7 @@ async function handleVerifyEmail(deps: RouteDeps, request: FastifyRequest, reply
     if (!authenticated) {
       return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
     }
-    setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
+    startSession(deps, request, reply, authenticated.sessionToken);
     return {
       data: { ...publicPrincipal(authenticated.principal, deps.config), sessionToken: authenticated.sessionToken },
       meta: { requestId: request.id },
@@ -275,7 +284,7 @@ async function handleResendEmailVerification(
     if (!result) {
       return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
     }
-    setSessionCookie(reply, sessionToken, deps.config.secureCookies);
+    startSession(deps, request, reply, sessionToken);
     return {
       data: {
         ...publicPrincipal(result.principal, deps.config),
@@ -311,7 +320,7 @@ async function handleChangeUnverifiedEmail(
     if (!result) {
       return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
     }
-    setSessionCookie(reply, sessionToken, deps.config.secureCookies);
+    startSession(deps, request, reply, sessionToken);
     return {
       data: {
         ...publicPrincipal(result.principal, deps.config),
@@ -332,6 +341,7 @@ async function handleAuthMe(deps: RouteDeps, request: FastifyRequest, reply: Fas
   if (!principal) {
     return { data: null, meta: { requestId: request.id } };
   }
+  labelDevice(deps, request);
   // Сервер уже продлил сессию; браузерная cookie продлевается здесь же, иначе
   // она умирала бы по своему сроку при живой серверной сессии (PRB-038).
   if (sessionCameFromCookie(request, deps.config)) {
@@ -359,6 +369,7 @@ async function handleGetAccount(deps: RouteDeps, request: FastifyRequest, reply:
     return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
   }
   if (!requireVerifiedEmail(request, reply, principal)) return undefined;
+  labelDevice(deps, request);
   const account = deps.authService.getAccount?.(sessionToken) ?? null;
   if (!account) {
     return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
@@ -406,6 +417,30 @@ async function handleUpdateProfile(deps: RouteDeps, request: FastifyRequest, rep
   }
 }
 
+type SecondFactorRefusal = { readonly status: number; readonly code: string; readonly message: string };
+
+/**
+ * B401: при включённой защите смена пароля требует код приложения или резервный код. Пароль
+ * проверяется раньше кода: неверный пароль не тратит код и не считается попыткой кода.
+ */
+async function passwordChangeSecondFactor(
+  deps: RouteDeps,
+  userId: string,
+  currentPassword: string,
+  code: string | undefined,
+): Promise<SecondFactorRefusal | null> {
+  const store = twoFactorStoreFor(deps);
+  if (!store.isEnabled(userId)) return null;
+  if (!(await deps.authService.passwordMatches?.(userId, currentPassword))) {
+    return { status: 400, code: 'current_password_invalid', message: 'Текущий пароль указан неверно.' };
+  }
+  const check = code ? store.verify(userId, code, new Date(), 'session') : 'invalid';
+  if (check === 'ok') return null;
+  return check === 'locked'
+    ? { status: 429, code: 'two_factor_locked', message: 'Слишком много попыток. Попробуйте через 15 минут.' }
+    : { status: 400, code: 'two_factor_invalid', message: 'Код не подошёл.' };
+}
+
 async function handleChangePassword(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
   const sessionToken = extractSessionToken(request, deps.config);
@@ -414,7 +449,10 @@ async function handleChangePassword(deps: RouteDeps, request: FastifyRequest, re
     return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
   }
   if (!requireVerifiedEmail(request, reply, principal)) return undefined;
+  if (principal.impersonatedBy) return sendError(reply, request, 403, IMPERSONATED_CODE, IMPERSONATED_MESSAGE, false);
   const body = passwordChangeSchema.parse(request.body);
+  const secondFactor = await passwordChangeSecondFactor(deps, principal.userId, body.currentPassword, body.twoFactorCode);
+  if (secondFactor) return sendError(reply, request, secondFactor.status, secondFactor.code, secondFactor.message, false);
   try {
     const authenticated =
       (await deps.authService.changePassword?.(
@@ -425,7 +463,8 @@ async function handleChangePassword(deps: RouteDeps, request: FastifyRequest, re
     if (!authenticated) {
       return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
     }
-    setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
+    twoFactorStoreFor(deps).dropChallenges(principal.userId);
+    startSession(deps, request, reply, authenticated.sessionToken);
     return {
       data: publicPrincipal(authenticated.principal, deps.config),
       meta: { requestId: request.id },
@@ -532,7 +571,7 @@ async function handleCreateAccountEmailChange(
         meta: { requestId: request.id },
       });
     }
-    setSessionCookie(reply, result.sessionToken, deps.config.secureCookies);
+    startSession(deps, request, reply, result.sessionToken);
     return {
       data: {
         status: result.status,
@@ -590,7 +629,7 @@ async function handleVerifyAccountEmailChange(
     if (!authenticated) {
       return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
     }
-    setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
+    startSession(deps, request, reply, authenticated.sessionToken);
     return {
       data: publicPrincipal(authenticated.principal, deps.config),
       meta: { requestId: request.id },
@@ -644,7 +683,10 @@ async function handlePasswordReset(deps: RouteDeps, request: FastifyRequest, rep
   try {
     const authenticated = await deps.authService.resetPassword?.(body.token, body.newPassword);
     if (!authenticated) throw new AuthInvalidResetTokenError();
-    setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
+    twoFactorStoreFor(deps).dropChallenges(authenticated.principal.userId);
+    const gated = twoFactorLoginGate(deps, request, reply, authenticated, clientDeviceIdFrom(request) ?? null);
+    if (gated) return gated;
+    startSession(deps, request, reply, authenticated.sessionToken);
     return {
       data: {
         ...publicPrincipal(authenticated.principal, deps.config),
@@ -700,6 +742,10 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: RouteDeps):
   );
   app.get('/api/v1/auth/me', withDeps(deps, handleAuthMe));
   app.post('/api/v1/auth/logout', withDeps(deps, handleLogout));
+  registerTwoFactorRoutes(app, deps);
+  registerPasskeyAccountRoutes(app, deps);
+  registerPasskeyLoginRoutes(app, deps);
+  registerAppCodeRoutes(app, deps);
 
   registerEmailVerificationRoutes(app, deps);
 

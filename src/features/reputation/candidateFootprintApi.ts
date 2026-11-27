@@ -4,17 +4,28 @@ import type {
   CandidateFootprintAudit,
   CandidateFootprintConsentState,
   FootprintReview,
-  FootprintAdapterId,
 } from '../../../shared/candidateFootprint';
+import type { FootprintStep, FootprintStepStatus } from '../../../shared/footprintSteps';
 import type { PublicFootprintQueryPlanItem } from '../../../server/osint/candidateFootprintQueryPlan';
 import { apiFetch, readData } from '../coach/apiClient';
 
 export interface CandidateFootprintPlanResponse {
   readonly plan: readonly PublicFootprintQueryPlanItem[];
   readonly unidentifiedEmployers?: readonly string[];
-  readonly sourceAvailability: Readonly<Record<FootprintAdapterId, boolean>>;
+  /** B740: готовность по кодам шагов; инструменты поиска остаются на сервере. */
+  readonly sourceAvailability: Readonly<Partial<Record<FootprintStep, boolean>>>;
   readonly consent: CandidateFootprintConsentState;
   readonly audit: CandidateFootprintAudit | null;
+}
+
+/**
+ * B740: сервер отдаёт состояния с кодом шага в `adapterId`; общий тип аудита описывает
+ * хранение на сервере, поэтому клиент читает состояния через этот тип.
+ */
+export function stepStatuses(
+  audit: CandidateFootprintAudit | null,
+): readonly FootprintStepStatus[] {
+  return (audit?.adapterStatuses ?? []) as unknown as readonly FootprintStepStatus[];
 }
 
 export async function getCandidateFootprintPlan(
@@ -110,7 +121,9 @@ export async function revokeCandidateFootprintConsent(): Promise<void> {
   await readData<{ granted: false; revoked: true }>(response);
 }
 
-export function statusMessage(status: CandidateFootprintAdapterStatus): string {
+export function statusMessage(
+  status: Pick<CandidateFootprintAdapterStatus, 'state' | 'findingsCount'>,
+): string {
   switch (status.state) {
     case 'pending':
       return 'проверяется';

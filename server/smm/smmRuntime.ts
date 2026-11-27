@@ -3,9 +3,10 @@ import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import type { ResumeCandidateInput } from '../domain/resumeDraft';
 import { SmmAgent } from './smmAgent';
 import { SmmBot } from './smmBot';
+import { backgroundStep } from '../observability/backgroundSteps';
 import { createSmmModel } from './smmModel';
 import { SmmStore } from './smmStore';
-import { createSmmTelegram } from './smmTelegram';
+import { createSmmTelegram, type TelegramUpdate } from './smmTelegram';
 
 const TICK_MS = 5 * 60_000;
 const BRIEF_TTL_MS = 60 * 60_000;
@@ -79,7 +80,22 @@ function cachedOwnerBrief(database: DatabaseSync, deps: SmmRuntimeDeps): () => s
   };
 }
 
-export function startSmmAssistant(deps: SmmRuntimeDeps): () => void {
+/** Запущенный SMM: обновления своего чата он получает с общего вебхука бота (B732). */
+export interface SmmAssistant {
+  readonly chatId: string;
+  readonly handle: (update: unknown) => void;
+  readonly stop: () => void;
+}
+
+function isTelegramUpdate(update: unknown): update is TelegramUpdate {
+  return (
+    typeof update === 'object' &&
+    update !== null &&
+    Number.isSafeInteger((update as { update_id?: unknown }).update_id)
+  );
+}
+
+export function startSmmAssistant(deps: SmmRuntimeDeps): SmmAssistant {
   const database = new DatabaseSync(deps.databasePath);
   database.exec('PRAGMA journal_mode = WAL;');
   applySqliteBusyTimeout(database);
@@ -100,18 +116,21 @@ export function startSmmAssistant(deps: SmmRuntimeDeps): () => void {
     now: Date.now,
     log: deps.log,
   });
-  void bot.poll();
+  // B776: такт ассистента виден журналу задержек веб-процесса под своим именем.
   const timer = setInterval(() => {
-    bot
-      .tick()
+    backgroundStep('web:smm-tick', () => bot.tick())
       .catch((error: unknown) =>
         deps.log('smm-tick-failed', { error: error instanceof Error ? error.name : 'unknown' }),
       );
   }, TICK_MS);
   timer.unref();
   deps.log('smm-assistant-started');
-  return () => {
-    clearInterval(timer);
-    bot.stop();
+  return {
+    chatId: deps.config.chatId,
+    handle: (update) => {
+      if (!isTelegramUpdate(update)) return;
+      void bot.receive(update);
+    },
+    stop: () => clearInterval(timer),
   };
 }

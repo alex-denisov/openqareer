@@ -1,6 +1,7 @@
 import type {
   ResumeAdditionalInput,
   ResumeCandidateInput,
+  ResumeCertificationInput,
   ResumeCourseInput,
   ResumeEducationInput,
   ResumeExperienceInput,
@@ -103,6 +104,7 @@ export function buildResumeStudioProjection(
   const projects = projectProjects(input.projects, context);
   const skills = input.skills ?? [];
   const courses = input.courses ?? [];
+  const certified = confirmedCertifications(input.certifications, context);
   const tests = input.tests ?? [];
   const recommendations = input.recommendations ?? [];
   const about = clean(input.candidate.about);
@@ -111,7 +113,7 @@ export function buildResumeStudioProjection(
   addSectionUnknowns(experience, education, languages, context.unknowns);
   const masterUnknowns = [...context.unknowns];
   return {
-    master: document(
+    master: { ...document(
       'master',
       null,
       contact,
@@ -128,7 +130,7 @@ export function buildResumeStudioProjection(
       additional,
       masterUnknowns,
       estimateLength(contact, experience, education, languages),
-    ),
+    ), ...certified },
     germanyVariant: germanyDocument(input.targetRole, contact, {
       about,
       photoUrl,
@@ -455,6 +457,18 @@ function projectProjects(
       },
     ];
   });
+}
+
+/** Сертификат попадает в резюме только вместе со своим фактом профиля. */
+function confirmedCertifications(
+  input: readonly ResumeCertificationInput[] | undefined,
+  context: ProjectionContext,
+): Pick<ResumeDocument, 'certifications'> {
+  const certifications = (input ?? []).filter(
+    ({ evidenceMemoryId, id, name }) =>
+      Boolean(evidenceMemoryId && clean(name)) && resolveEvidence(evidenceMemoryId!, context, id),
+  );
+  return certifications.length > 0 ? { certifications } : {};
 }
 
 function addSectionUnknowns(

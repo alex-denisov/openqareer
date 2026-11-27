@@ -7,6 +7,7 @@ import type {
   B640ContactState,
 } from '../../shared/b640Contacts';
 import { candidateCompanyKey, type ConnectionCircleWorkplace } from './candidateCompanies';
+import { cleanPersonName, looksLikeOrganization, plausibleCompanyName, shortRoleTitle } from './contactDisplay';
 import { hiringRank } from './contactHiringRole';
 
 /** Контакт кандидата в том виде, что читает список: без почты и телефона. */
@@ -103,16 +104,18 @@ function toRows(input: B640ContactListInput): Row[] {
   // B645: the screen is «люди, которые нанимают»; the others still count as introducers above.
   return input.contacts.flatMap((contact) => {
     const rank = hiringRank(contact.roleTitle);
-    if (rank === null) return [];
+    const fullName = cleanPersonName(contact.fullName);
+    if (rank === null || !fullName || looksLikeOrganization(fullName)) return [];
     const stored = input.statuses.get(contact.id);
+    const companyName = plausibleCompanyName(contact.companyName);
     return [{
       id: contact.id,
-      fullName: contact.fullName,
-      roleTitle: contact.roleTitle,
-      companyName: contact.companyName,
+      fullName,
+      roleTitle: shortRoleTitle(contact.roleTitle),
+      companyName,
       ...linkOf(contact, own, introducers),
       status: stored ? { state: stored.state, at: stored.at } : { state: 'none', at: null },
-      inSelection: contact.companyName !== '' && input.selectionKeys.has(candidateCompanyKey(contact.companyName)),
+      inSelection: companyName !== '' && input.selectionKeys.has(candidateCompanyKey(companyName)),
       updatedAt: contact.updatedAt,
       rank,
     }];

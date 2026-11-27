@@ -7,7 +7,9 @@ import {
   normalizeSalaryCurrency,
   vacancyFormat,
 } from '../../../vacancies/vacancyScreenCriteria';
+import type { ServerMoney } from '../b640Api';
 import type { MoneyCurrency } from '../format';
+import { roleLabel, type RoleTitlesRu } from '../../career/roleLabel';
 
 export type FilterKind = 'roles' | 'locations' | 'formats' | 'money' | 'dates';
 export type DateId = 'any' | 'today' | '7' | '30' | '90';
@@ -48,6 +50,7 @@ export const CURRENCY_OPTIONS: ReadonlyArray<{
   { code: 'RUB', label: '₽', aria: 'рубли' },
   { code: 'USD', label: '$', aria: 'доллары' },
   { code: 'EUR', label: '€', aria: 'евро' },
+  { code: 'AED', label: 'AED', aria: 'дирхамы' },
   { code: 'ORIG', label: 'Как в вакансии' },
 ];
 
@@ -79,7 +82,8 @@ export function dateLabel(id: DateId): string {
 }
 
 export function currencySymbol(currency: MoneyCurrency): string {
-  return currency === 'ORIG' || currency === 'RUB' ? '₽' : currency === 'USD' ? '$' : '€';
+  if (currency === 'ORIG' || currency === 'RUB') return '₽';
+  return currency === 'USD' ? '$' : currency === 'EUR' ? '€' : 'AED';
 }
 
 function currencyWord(currency: MoneyCurrency): string {
@@ -121,10 +125,14 @@ export interface FilterChip {
 
 export const CHIP_LIMIT = 3;
 
-export function chipsOf(filters: ListFilters, currency: MoneyCurrency): readonly FilterChip[] {
+export function chipsOf(
+  filters: ListFilters,
+  currency: MoneyCurrency,
+  titlesRu: RoleTitlesRu = {},
+): readonly FilterChip[] {
   const symbol = currencySymbol(currency);
   return [
-    ...filters.roles.map((id) => ({ kind: 'roles' as const, id, label: id })),
+    ...filters.roles.map((id) => ({ kind: 'roles' as const, id, label: roleLabel(id, titlesRu) })),
     ...filters.locations.map((id) => ({ kind: 'locations' as const, id, label: id })),
     ...filters.formats.map((id) => ({ kind: 'formats' as const, id, label: formatLabel(id) })),
     ...(filters.moneyFrom === null
@@ -201,8 +209,19 @@ function salaryState(filters: ListFilters, currency: MoneyCurrency): VacanciesSc
   return {
     ...base,
     salaryMinimum: filters.moneyFrom * 1000,
+    // B645 s07: a vacancy without a salary stays in the list as «не указана», as in the mockup.
+    includeMissingSalary: true,
     salaryCurrency: normalizeSalaryCurrency(currency === 'ORIG' ? 'RUB' : currency),
   };
+}
+
+/**
+ * B765 (B645 s07): «Зарплата от» в серверном порядке режет и считает сервер — то же правило, что у
+ * клиента (shared/monthlySalaryMinimum), и «Показать N» знает число сразу. Без порога — `null`.
+ */
+export function serverMoney(filters: ListFilters, currency: MoneyCurrency): ServerMoney | null {
+  if (filters.moneyFrom === null) return null;
+  return { from: filters.moneyFrom * 1000, currency: currency === 'ORIG' ? 'RUB' : currency };
 }
 
 /** Фильтры, которые считает клиент по загруженным строкам; роли читает сервер. */
@@ -231,15 +250,24 @@ export interface Blocker {
   readonly label: string;
 }
 
-function activeKinds(filters: ListFilters, currency: MoneyCurrency): readonly Blocker[] {
-  const quoted = (name: string, values: readonly string[]) => `${name} «${values.join(', ')}»`;
+/** Одно значение — словами, несколько — числом, как у секций фильтров («Роли · 11»). */
+function blockerLabel(one: string, many: string, values: readonly string[]): string {
+  return values.length === 1 ? `${one} «${values[0]}»` : `${many} · ${values.length}`;
+}
+
+function activeKinds(
+  filters: ListFilters,
+  currency: MoneyCurrency,
+  titlesRu: RoleTitlesRu = {},
+): readonly Blocker[] {
+  const roles = filters.roles.map((id) => roleLabel(id, titlesRu));
   return [
-    ...(filters.roles.length ? [{ kind: 'roles' as const, label: quoted('Роль', filters.roles) }] : []),
+    ...(filters.roles.length ? [{ kind: 'roles' as const, label: blockerLabel('Роль', 'Роли', roles) }] : []),
     ...(filters.locations.length
-      ? [{ kind: 'locations' as const, label: quoted('Локация', filters.locations) }]
+      ? [{ kind: 'locations' as const, label: blockerLabel('Локация', 'Локации', filters.locations) }]
       : []),
     ...(filters.formats.length
-      ? [{ kind: 'formats' as const, label: quoted('Формат', filters.formats.map(formatLabel)) }]
+      ? [{ kind: 'formats' as const, label: `Формат «${filters.formats.map(formatLabel).join(', ')}»` }]
       : []),
     ...(filters.reloc ? [{ kind: 'reloc' as const, label: 'Релокация' }] : []),
     ...(filters.moneyFrom !== null
@@ -253,12 +281,21 @@ function activeKinds(filters: ListFilters, currency: MoneyCurrency): readonly Bl
 export function blockersOf(
   items: readonly MatchedVacancyItem[],
   filters: ListFilters,
-  context: { readonly currency: MoneyCurrency; readonly rates?: CurrencyRates; readonly now: Date },
+  context: {
+    readonly currency: MoneyCurrency;
+    readonly rates?: CurrencyRates;
+    readonly now: Date;
+    readonly titlesRu?: RoleTitlesRu;
+    /** Строки уже срезаны сервером по деньгам и дате: что вернёт их снятие, клиент не видит. */
+    readonly serverCut?: boolean;
+  },
 ): readonly Blocker[] {
-  const active = activeKinds(filters, context.currency);
+  const active = activeKinds(filters, context.currency, context.titlesRu);
+  const unseen = (kind: Blocker['kind']) =>
+    kind === 'roles' || (context.serverCut === true && (kind === 'money' || kind === 'dates'));
   const freeing = active.filter(
     (entry) =>
-      entry.kind === 'roles' ||
+      unseen(entry.kind) ||
       applyFilters(items, withoutKind(filters, entry.kind), context).length > 0,
   );
   return freeing.length > 0 ? freeing : active;

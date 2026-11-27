@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import type { VacancyFitView } from '../../shared/vacancyFit';
 import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
 import { expectGates } from './gates';
+import { LADOGA_ID, mockLadoga, type LadogaOptions } from './vacancyCardFixture';
 
 const SHOTS = process.env.B640_SHOTS;
 const CARD_PATH = '/app/vacancies/cluster-0';
@@ -67,6 +68,15 @@ const DETAIL = {
   truncated: false,
   skills: [],
   responsibilities: [],
+  brief: {
+    duties: [
+      'Руководить развитием платёжной платформы и антифрода',
+      'Нанимать и растить руководителей групп',
+    ],
+    requirements: ['Go и PostgreSQL', 'Kubernetes', 'Найм руководителей', 'English C1'],
+    conditions: ['Гибрид, 2 дня в офисе в Москве', 'ДМС, оплата обучения'],
+    opening: 'Команда платежей, 40 человек.',
+  },
 };
 
 async function openCard(page: Page, remaining: number | null = 3): Promise<void> {
@@ -102,7 +112,7 @@ test.describe('B654: карточка вакансии нового кабине
     await openCard(page);
     await expect(page.locator('.r6-steps [aria-current="page"]')).toHaveText('Вакансия');
     await expect(page.locator('.v4-head .lead-title')).toBeVisible();
-    await expect(page.locator('.v4-req-row')).toContainText('Требования: 2 из 4 есть в профиле');
+    await expect(page.locator('.v4-req-row')).toHaveText('Требования: 2 из 4 есть в профиле');
     await expect(page.getByRole('link', { name: 'Откликнуться' }).first()).toBeVisible();
   });
 
@@ -118,14 +128,70 @@ test.describe('B654: карточка вакансии нового кабине
     await expect(dialog).toBeHidden();
   });
 
-  test('«Текст вакансии» показывает текст и закрывается', async ({ page }) => {
+  test('B800 v04: «Требования: N из M» под процентом — размеры как в макете', async ({ page }) => {
     await openCard(page);
-    await page.getByRole('button', { name: 'Текст вакансии' }).click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.locator('.v4-tx-h').first()).toHaveText('О вакансии');
-    await expect(dialog).toContainText('Команда платежей, 40 человек.');
-    await dialog.getByRole('button', { name: 'Закрыть' }).click();
-    await expect(dialog).toBeHidden();
+    const row = page.locator('.v4-head2 .v4-req-row');
+    await expect(row).toHaveText('Требования: 2 из 4 есть в профиле');
+    await expect(row).toHaveAttribute('aria-expanded', 'false');
+    // Замер макета v04 (16.11): рамка во всю колонку, строка 44, 14/21, поля 12, до кнопок 12.
+    const m = await page.evaluate(() => {
+      const box = document.querySelector('.v4-head2 .v4-reqs-box')!.getBoundingClientRect();
+      const act = document.querySelector('.v4-head2 .v4-act')!.getBoundingClientRect();
+      const fit = document.querySelector('.v4-head2 .v4-fit')!.getBoundingClientRect();
+      const node = document.querySelector('.v4-head2 .v4-req-row')!;
+      const css = getComputedStyle(node);
+      const frame = getComputedStyle(node.parentElement!);
+      return {
+        box: { x: box.x, w: box.width, h: box.height, top: box.top, bottom: box.bottom },
+        act: { x: act.x, w: act.width, top: act.top },
+        fitBottom: fit.bottom,
+        row: {
+          h: node.getBoundingClientRect().height,
+          font: css.fontSize,
+          line: css.lineHeight,
+          padStart: css.paddingInlineStart,
+        },
+        frame: { radius: frame.borderTopLeftRadius, border: frame.borderTopWidth },
+      };
+    });
+    expect(m.box.h).toBe(46);
+    expect(m.row).toEqual({ h: 44, font: '14px', line: '21px', padStart: '12px' });
+    expect(m.frame).toEqual({ radius: '12px', border: '1px' });
+    if ((page.viewportSize()?.width ?? 0) < 768) {
+      // На 390 «Откликнуться» закреплена внизу (B700): рамка — во всю ширину колонки, как в макете.
+      expect({ x: m.box.x, w: m.box.w }).toEqual({ x: 16, w: 358 });
+    } else {
+      expect({ x: m.box.x, w: m.box.w }).toEqual({ x: m.act.x, w: m.act.w });
+      expect(Math.round(m.act.top - m.box.bottom)).toBe(12);
+    }
+    expect(m.box.top).toBeGreaterThan(m.fitBottom);
+
+    await row.click();
+    await expect(row).toHaveAttribute('aria-expanded', 'true');
+    const open = page.locator('.v4-head2 .v4-reqs-open');
+    const items = open.locator('.v4-fd-l li');
+    await expect(items).toHaveCount(4);
+    for (const item of await items.all()) await expect(item.locator('svg').first()).toBeVisible();
+    await expect(open.locator('.is-part')).toContainText('частично');
+    await expect(open.locator('.v4-fd-src')).toHaveText(
+      /^Требования — из текста вакансии, .+, 11\.11 · 4 требования$/,
+    );
+    await expectGates(page);
+  });
+
+  test('B800: задачи, требования и условия под «Откликнуться»', async ({ page }) => {
+    await openCard(page);
+    const text = page.getByRole('region', { name: 'Вакансия', exact: true });
+    await expect(text.locator('h4')).toHaveText(['Задачи', 'Требования', 'Условия']);
+    await expect(text.locator('li').filter({ hasText: 'Найм руководителей' })).toContainText(
+      'Найм руководителей · частично',
+    );
+    await expect(text.locator('.miss')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Текст вакансии' })).toHaveCount(0);
+    const money = await page.locator('.v4-money').boundingBox();
+    const box = await text.boundingBox();
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
+    if (phone) expect(box!.y).toBeLessThan(money!.y);
   });
 
   test('«Сохранить» отмечает вакансию', async ({ page }) => {
@@ -163,9 +229,14 @@ test.describe('B654: карточка вакансии нового кабине
   test('на 390 «Откликнуться» закреплена внизу', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-390', 'телефон');
     await openCard(page);
-    const apply = page.locator('.m-commit .is-primary');
+    const dock = page.locator('.v4-act-main');
+    const apply = dock.locator('.is-primary');
     await expect(apply).toBeVisible();
     const box = await apply.boundingBox();
+    // Макет v04: кнопка в правой половине (195, 179), полоса 61 px.
+    expect(Math.round(box?.x ?? 0)).toBe(195);
+    expect(Math.round(box?.width ?? 0)).toBe(179);
+    expect(Math.round((await dock.boundingBox())?.height ?? 0)).toBe(61);
     const height = page.viewportSize()?.height ?? 0;
     expect(box && box.y + box.height).toBeLessThanOrEqual(height);
     const hasScroll = await page.evaluate(
@@ -192,5 +263,138 @@ test.describe('B654: карточка вакансии нового кабине
         });
       }
     }
+  });
+});
+
+async function openLadoga(page: Page, options: LadogaOptions = {}): Promise<void> {
+  await mockSignedInCabinet(page, { cabinetB640: true, firstVacancyFitView: FIT_VIEW });
+  await page.route('**/api/v1/candidate/b640/application-quota', (route) =>
+    route.fulfill({
+      json: { data: { plan: 'free', limit: 10, used: 7, remaining: 3, renewsAt: null }, meta: {} },
+    }),
+  );
+  await page.route('**/api/v1/candidate/vacancies/*/detail', (route) =>
+    route.fulfill({ json: { data: DETAIL } }),
+  );
+  await mockLadoga(page, options);
+  await page.goto(`/app/vacancies/${LADOGA_ID}`, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('[data-b640-node="v04"]')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.v4-head .lead-title')).toHaveText('Руководитель разработки');
+}
+
+test.describe('B645: карточка вакансии — способы отклика, компания, знакомые', () => {
+  test('все модули на месте и в порядке макета', async ({ page }) => {
+    await openLadoga(page);
+    const ways = page.locator('.ha-item');
+    await expect(ways).toHaveCount(3);
+    await expect(ways.nth(0)).toContainText('Через знакомого — Роман Ефимов');
+    await expect(ways.nth(0)).toContainText('Рекомендуем');
+    await expect(ways.nth(0)).toContainText('1-й круг · ваша связь в LinkedIn');
+    await expect(ways.nth(0).getByRole('button', { name: 'Написать Роману' })).toBeVisible();
+    await expect(ways.nth(1)).toContainText('hh.ru — письмо и ваше резюме');
+    await expect(ways.nth(2)).toContainText('Сайт компании — анкета из 3 вопросов');
+    const about = page.locator('.v4-about-co');
+    // На 390 «О компании» свёрнута, на 1440 раскрыта: раскрываем, если свёрнута.
+    if (!(await about.evaluate((node) => (node as HTMLDetailsElement).open)))
+      await about.locator('summary').click();
+    await expect(about).toContainText('Банки');
+    await expect(about).toContainText('Алина Громова · технический рекрутер');
+    await expect(about.getByRole('link', { name: 'Откликнуться напрямую' })).toBeVisible();
+    await expect(about.locator('.v4-co-more')).toContainText('Ещё 2 вакансии · 3 знакомых');
+    await expect(page.locator('.v4-money')).toContainText('Ваши ожидания внутри вилки');
+    const order = [
+      '.v4-money',
+      '.v4-about-co',
+      '.v4-fold:has-text("Знакомые в компании · 3")',
+      '.v4-fold:has-text("Письмо и резюме")',
+    ];
+    const tops: number[] = [];
+    for (const selector of order) {
+      const box = await page.locator(selector).first().boundingBox();
+      tops.push(box?.y ?? -1);
+    }
+    expect(tops.every((top, index) => top >= 0 && (index === 0 || top > tops[index - 1]!))).toBe(
+      true,
+    );
+  });
+
+  test('«Написать Роману» открывает шаг «Отклик» с черновиком (a02d)', async ({ page }) => {
+    await openLadoga(page);
+    await page.route('**/api/v1/candidate/b640/contact-messages/m1', (route) =>
+      route.fulfill({ status: 204 }),
+    );
+    await page.getByRole('button', { name: 'Написать Роману' }).click();
+    await expect(page.locator('section.lead .lead-title')).toContainText('Написать Роману Ефимову');
+    await expect(page.locator('.lk-inline .lk-lbl')).toHaveText('Черновик');
+    await expect(page.locator('.lk-inline textarea')).toHaveValue(/Мы работали вместе/u);
+    await expect(page.locator('.r6-steps [aria-current="page"]')).toHaveText('Отклик');
+    await page.getByRole('button', { name: 'Не отправлять' }).click();
+    await expect(page.locator('.ha-item')).toHaveCount(3);
+  });
+
+  test('B682: «Другой вариант» сообщения — «Что поменять», листание, поле 44 (a02d)', async ({
+    page,
+  }, testInfo) => {
+    await openLadoga(page);
+    const variant = {
+      id: 'v1',
+      position: 1,
+      text: 'Роман, привет!',
+      wish: { chips: ['shorter'], text: '' },
+      createdAt: '2026-11-24T10:00:00.000Z',
+      payload: null,
+    };
+    let body: unknown = null;
+    await page.route('**/api/v1/candidate/b640/contact-messages/m1/variants', (route) => {
+      body = route.request().postDataJSON();
+      return route.fulfill({
+        status: 201,
+        json: { data: { variant, variants: [variant], remaining: 2 } },
+      });
+    });
+    await page.getByRole('button', { name: 'Написать Роману' }).click();
+    const button = page.getByRole('button', { name: 'Другой вариант · 3' });
+    await button.click();
+    const pop = page.getByRole('dialog', { name: 'Что поменять' });
+    const wish = await pop.locator('.alt-wish').boundingBox();
+    expect(wish!.height).toBe(44);
+    const box = await pop.boundingBox();
+    if (testInfo.project.name.includes('390')) {
+      expect(box!.x).toBe(0);
+      expect(box!.width).toBe(page.viewportSize()!.width);
+    }
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    await page.screenshot({ path: testInfo.outputPath('message-wish.png') });
+    await pop.getByRole('button', { name: 'Короче' }).click();
+    await pop.getByRole('button', { name: 'Сделать вариант' }).click();
+    const field = page.locator('.lk-inline textarea.lk-draft');
+    await expect(field).toHaveValue('Роман, привет!');
+    expect(body).toMatchObject({ wish: { chips: ['shorter'], text: '' } });
+    const sw = page.getByRole('group', { name: 'Варианты сообщения' });
+    await expect(sw).toContainText('2 из 2');
+    await page.screenshot({ path: testInfo.outputPath('message-variant.png') });
+    await sw.getByRole('button', { name: 'Предыдущий вариант' }).click();
+    await expect(field).toHaveValue(/Мы работали вместе/u);
+    // Ушли и открыли снова: тот же черновик, вариант и остаток на месте.
+    await page.route('**/api/v1/candidate/text-variants?kind=message&subjectId=m1', (route) =>
+      route.fulfill({ json: { data: { variants: [variant], remaining: 2 } } }),
+    );
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Написать Роману' }).click();
+    await expect(sw).toContainText('1 из 2');
+    await expect(page.getByRole('button', { name: 'Другой вариант · 2' })).toBeVisible();
+    await expectGates(page);
+  });
+
+  test('знакомых нет: «Как откликнуться» остаётся с hh.ru и сайтом', async ({ page }) => {
+    await openLadoga(page, { noPeople: true });
+    const ways = page.locator('.ha-item');
+    await expect(ways).toHaveCount(2);
+    await expect(ways.nth(0)).toContainText('hh.ru');
+    await expect(ways.nth(1)).toContainText('Сайт компании');
+    await expect(page.getByText('Через знакомого')).toHaveCount(0);
+    await expect(page.locator('.v4-fold-s', { hasText: 'Знакомые в компании' })).toHaveCount(0);
+    await expect(page.locator('.v4-about-co')).toContainText('Алина Громова');
   });
 });

@@ -1,3 +1,4 @@
+import type { FootprintRemoval } from './footprintRemoval';
 /**
  * B667: сводка цифрового следа глазами работодателя. Пять категорий макета,
  * у каждой находки — уровень словом и одно действие. Составного балла нет.
@@ -16,7 +17,15 @@ export const FOOTPRINT_RISK_LEVELS = ['high', 'important', 'low', 'useful'] as c
 export type FootprintRiskLevel = (typeof FOOTPRINT_RISK_LEVELS)[number];
 
 export type FootprintRiskActionKind =
-  'close_account' | 'check_now' | 'ask_to_fix' | 'hide' | 'add_to_profile';
+  | 'close_account'
+  | 'check_now'
+  | 'ask_to_fix'
+  | 'hide'
+  | 'add_to_profile'
+  /** B727: страница найдена по нику — открыть её и решить «моё / не моё». */
+  | 'confirm_owner'
+  /** B382: полезная страница, которую в профиль не перенести, — только «Это не моё». */
+  | 'not_mine';
 
 export interface FootprintRiskAction {
   readonly kind: FootprintRiskActionKind;
@@ -35,6 +44,8 @@ export interface FootprintRiskItem {
   readonly category: FootprintRiskCategoryId;
   readonly level: FootprintRiskLevel;
   readonly levelLabel: string;
+  /** Почему такой уровень: «номер находят по имени» (B645 f03b); нет — старый ответ. */
+  readonly levelReason?: string;
   readonly title: string;
   readonly detail: string;
   readonly url: string | null;
@@ -45,6 +56,8 @@ export interface FootprintRiskItem {
   /** Находка следа, к которой относится расхождение; `null` — страница не среди находок. */
   readonly findingId: string | null;
   readonly mismatch: FootprintRiskMismatch | null;
+  /** B382: запрос на удаление и итог повторной проверки; нет — запроса не было. */
+  readonly removal?: FootprintRemoval;
 }
 
 export interface FootprintRiskCategory {

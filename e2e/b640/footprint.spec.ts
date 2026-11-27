@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { expectGates } from './gates';
-import { fid, finishSearch, openFootprint, type FootprintCase } from './footprintFixture';
+import { fid, finishSearch, NICK_URL, openFootprint, type FootprintCase } from './footprintFixture';
 
 const SHOTS = process.env.B640_SHOTS;
 /** Узел адреса без варианта или вариант экрана (f01 до поиска, f04 «ничего рискового»). */
@@ -47,7 +47,13 @@ test.describe('B652: «Цифровой след»', () => {
     await expect(screen.locator('.fp-find')).toHaveCount(6);
     await expect(screen.getByText('Согласие дано 10.11 ·')).toBeVisible();
     await expect(screen.getByRole('link', { name: 'В профиль' })).toHaveCount(0);
-    await expect(screen.getByRole('button', { name: 'В профиль' })).toHaveCount(2);
+    // B382: доклад — «В профиль», профиль GitHub — только «Это не моё».
+    await expect(screen.getByRole('button', { name: 'В профиль' })).toHaveCount(1);
+    await expect(
+      screen
+        .locator('.fp-find', { hasText: 'Профиль на GitHub' })
+        .getByRole('button', { name: 'Это не моё' }),
+    ).toBeVisible();
     expect(await screen.innerText()).not.toMatch(HIDDEN);
     await expectGates(page);
   });
@@ -63,6 +69,54 @@ test.describe('B652: «Цифровой след»', () => {
         { id: fid(1), review: 'hidden' },
         { id: fid(1), review: 'unreviewed' },
       ]);
+  });
+
+  test('B727: страница по нику — «Нужно проверить», «Проверить» ведёт на f03b, «Это не моё» убирает', async ({
+    page,
+  }) => {
+    const calls = await openFootprint(page, '/app/profile/footprint', 'nick');
+    const screen = node(page, 'p02');
+    const row = screen.locator('.fp-find', { hasText: 'Duolingo' });
+    await expect(row).toContainText('важно');
+    await expect(row).not.toContainText('владение нужно подтвердить');
+    await expect(row.getByRole('button', { name: 'В профиль' })).toHaveCount(0);
+    // B382 (макет p02): из списка внешних ссылок нет — «Проверить» ведёт на f03b.
+    const check = row.getByRole('link', { name: 'Проверить' });
+    await expect(check).toHaveAttribute('href', `/app/profile/footprint/findings/${fid(7)}`);
+    await expect(check).not.toHaveAttribute('target', '_blank');
+    await expect(screen.locator('.fp-cat', { hasText: 'Полезные доказательства' })).toContainText(
+      '2 находки',
+    );
+    await expect(screen.locator('.fp-cat', { hasText: 'Нужно проверить сейчас' })).toContainText(
+      '2 находки',
+    );
+    await row.getByRole('button', { name: 'Это не моё' }).click();
+    await expect.poll(() => calls.reviews).toEqual([{ id: fid(7), review: 'not_self' }]);
+    await expect(screen.locator('.fp-find', { hasText: 'Duolingo' })).toHaveCount(0);
+  });
+
+  test('B382: f03b страницы по нику — сама страница открывается здесь, «Это моё» подтверждает', async ({
+    page,
+  }) => {
+    const calls = await openFootprint(page, '/app/profile/footprint', 'nick');
+    await node(page, 'p02')
+      .locator('.fp-find', { hasText: 'Duolingo' })
+      .getByRole('link', { name: 'Проверить' })
+      .click();
+    const finding = node(page, 'f03b');
+    const open = finding.getByRole('link', { name: /Открыть страницу Duolingo/u });
+    await expect(open).toHaveAttribute('href', NICK_URL);
+    await expect(open).toHaveAttribute('target', '_blank');
+    // Пока неизвестно, чья страница, письма о удалении нет.
+    await expect(finding.locator('.fp-letter')).toHaveCount(0);
+    // B645 (и): три действия не выходят за колонку ни на 1440, ни на 390.
+    const edge = await finding.locator('.lead').evaluate((el) => el.getBoundingClientRect().right);
+    for (const name of ['Это моё', 'Это не моё']) {
+      const box = await finding.getByRole('button', { name, exact: true }).boundingBox();
+      expect(box!.x + box!.width).toBeLessThanOrEqual(edge + 0.5);
+    }
+    await finding.getByRole('button', { name: 'Это моё' }).click();
+    await expect.poll(() => calls.reviews).toEqual([{ id: fid(7), review: 'confirmed_self' }]);
   });
 
   test('разбор F3 → находка F3б: письмо, формы поисковиков, путь назад; гейты', async ({
@@ -96,8 +150,10 @@ test.describe('B652: «Цифровой след»', () => {
     await expect(node(page, 'f03')).toBeVisible();
   });
 
-  test('расхождение с резюме: письмо просит исправить, отметок нет', async ({ page }) => {
-    await openFootprint(
+  test('расхождение с резюме: письмо просит исправить; «Это не проблема» без «Это не я»', async ({
+    page,
+  }) => {
+    const calls = await openFootprint(
       page,
       `/app/profile/footprint/findings/${encodeURIComponent('mismatch:m1')}`,
       'ready',
@@ -105,16 +161,80 @@ test.describe('B652: «Цифровой след»', () => {
     const finding = node(page, 'f03b');
     await expect(finding.locator('.fp-letter')).toContainText('«руководитель группы разработки»');
     await expect(finding.getByRole('button', { name: 'Это не я' })).toHaveCount(0);
+    await finding.getByRole('button', { name: 'Это не проблема' }).click();
+    await expect.poll(() => calls.mismatches).toEqual([{ id: 'mismatch:m1', review: 'hidden' }]);
+  });
+
+  test('B645 p02: «Это не проблема» у расхождения — уходит из сводки, «Отменить» возвращает', async ({
+    page,
+  }) => {
+    const calls = await openFootprint(page, '/app/profile/footprint', 'ready');
+    const screen = node(page, 'p02');
+    const row = screen.locator('li.fp-find', { hasText: 'Должность на сайте конференции' });
+    await expect(row.getByRole('link', { name: 'Попросить исправить' })).toBeVisible();
+    await row.getByRole('button', { name: 'Это не проблема' }).click();
+    await expect(row).toHaveCount(0);
+    expect(calls.mismatches).toEqual([{ id: 'mismatch:m1', review: 'hidden' }]);
+    await page.getByRole('button', { name: 'Отменить' }).click();
+    await expect(row).toBeVisible();
+    expect(calls.mismatches.at(-1)).toEqual({ id: 'mismatch:m1', review: 'unreviewed' });
+    await expectGates(page);
   });
 
   test('«Проверить снова» с находки: новый поиск и ход виден в «Цифровом следе»', async ({
     page,
   }) => {
-    const calls = await openFootprint(page, `/app/profile/footprint/findings/${fid(4)}`, 'ready');
+    const calls = await openFootprint(
+      page,
+      `/app/profile/footprint/findings/${encodeURIComponent('mismatch:m1')}`,
+      'ready',
+    );
     await node(page, 'f03b').getByRole('button', { name: 'Проверить снова' }).click();
     await expect(node(page, 'f01').locator('progress.pf-prog')).toBeVisible();
     expect(calls.started).toHaveLength(1);
     expect(calls.granted).toEqual([]);
+  });
+
+  test('B382 путь удаления: «Письмо отправлено» → «Проверить находку» → «Удалено»; гейты', async ({
+    page,
+  }) => {
+    const calls = await openFootprint(page, `/app/profile/footprint/findings/${fid(1)}`, 'ready');
+    const finding = node(page, 'f03b');
+    const dock = finding.locator('.fp-dock');
+    await dock.getByRole('button', { name: 'Письмо отправлено' }).click();
+    await expect(dock.getByText('Письмо отправлено 18.11')).toBeVisible();
+    expect(calls.removals).toEqual([fid(1)]);
+    await expectGates(page);
+    await dock.getByRole('button', { name: 'Проверить находку' }).click();
+    await expect(
+      finding.getByRole('status').filter({ hasText: 'Удалено · проверено 19.11' }),
+    ).toBeVisible();
+    expect(calls.rechecks).toEqual([fid(1)]);
+    await expectGates(page);
+    // B645 p02: итог проверки — в «Проверках и запросах» сводки.
+    await page.goto('/app/profile/footprint', { waitUntil: 'domcontentloaded' });
+    const checks = page.locator('section', { has: page.locator('#fp-sum') });
+    await expect(checks.getByRole('heading', { name: 'Проверки и запросы' })).toBeVisible();
+    await expect(checks.locator('dd').first()).toContainText(/ · Удалено: .+$/u);
+    await expect(checks.getByText('Жалоба отправлена')).toHaveCount(0);
+  });
+
+  test('B382: находка ещё на месте — итог проверки у кнопки, проверить можно снова', async ({
+    page,
+  }) => {
+    await openFootprint(page, `/app/profile/footprint/findings/${fid(2)}`, 'ready', 'still_there');
+    const dock = node(page, 'f03b').locator('.fp-dock');
+    await dock.getByRole('button', { name: 'Письмо отправлено' }).click();
+    await dock.getByRole('button', { name: 'Проверить находку' }).click();
+    await expect(dock.getByText('Ещё на месте · проверено 19.11')).toBeVisible();
+    await expect(dock.getByRole('button', { name: 'Проверить находку' })).toBeEnabled();
+    await expect(page.getByText(/Удалено · проверено/u)).toHaveCount(0);
+    // B645 p02: запрос не закрыт удалением — строка «Жалоба отправлена» в сводке.
+    await page.goto('/app/profile/footprint', { waitUntil: 'domcontentloaded' });
+    const checks = page.locator('section', { has: page.locator('#fp-sum') });
+    await expect(checks.locator('dd').first()).toContainText(/ · Ещё на месте: .+$/u);
+    await expect(checks.locator('dt', { hasText: 'Жалоба отправлена' })).toHaveCount(1);
+    await expect(checks.locator('dd').nth(1)).toContainText(/ — сайту 18\.11$/u);
   });
 
   test('F4: рискового нет — честная строка и «Искать со ссылками»', async ({ page }) => {
@@ -128,7 +248,7 @@ test.describe('B652: «Цифровой след»', () => {
   test('сбой поиска: строка ошибки с «Повторить» на месте', async ({ page }) => {
     const calls = await openFootprint(page, '/app/profile/footprint', 'failed');
     const screen = node(page, 'f01');
-    await expect(screen.getByRole('alert')).toContainText('Проверили не всё');
+    await expect(screen.getByRole('alert')).toContainText(/категори[яий] не проверен/u);
     await screen.getByRole('button', { name: 'Повторить' }).click();
     await expect(screen.locator('progress.pf-prog')).toBeVisible();
     expect(calls.started).toHaveLength(1);
@@ -141,6 +261,10 @@ test.describe('B652: «Цифровой след»', () => {
     await screen.getByRole('button', { name: 'Оставить' }).click();
     expect(calls.revoked).toBe(0);
     await screen.locator('.revoke summary').click();
+    // Отзыв удаляет проверки и находки — диалог говорит это прямо.
+    await expect(screen.locator('.revoke-q')).toHaveText(
+      'Отозвать согласие? Проверки и находки удалятся.',
+    );
     await screen
       .getByRole('group', { name: 'Отозвать согласие?' })
       .getByRole('button', { name: 'Отозвать' })

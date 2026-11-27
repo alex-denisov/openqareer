@@ -7,6 +7,7 @@ import { formatVacancyMechanicsStats } from '../server/domain/vacancyMechanicsSt
 import { vacancyMechanicsLanes } from '../server/domain/vacancyMechanicsLanes';
 import { createJsonLineLog } from '../server/maintenance/jsonLineLog';
 import { watchWriteHolds } from '../server/observability/sqliteWriteHolds';
+import { runSupersededPurge } from '../server/domain/supersededFitPurge';
 
 const BATCH_LOG_MS = 60_000;
 const log = createJsonLineLog();
@@ -30,12 +31,25 @@ const runtime = new VacancyMechanicsRuntime(
 );
 const bulk = createBulkLlmRuntime({ databasePath: path });
 let stopping = false;
-process.once('SIGTERM', () => {
+const stopped = new AbortController();
+const stop = () => {
   stopping = true;
-});
-process.once('SIGINT', () => {
-  stopping = true;
-});
+  stopped.abort();
+};
+process.once('SIGTERM', stop);
+process.once('SIGINT', stop);
+/** A wait that a stop ends at once, so an hourly pause never holds the worker's exit. */
+const stoppableSleep = (ms: number) =>
+  new Promise<void>((resolve) => {
+    if (stopped.signal.aborted) return resolve();
+    const timer = setTimeout(done, ms);
+    function done() {
+      clearTimeout(timer);
+      stopped.signal.removeEventListener('abort', done);
+      resolve();
+    }
+    stopped.signal.addEventListener('abort', done, { once: true });
+  });
 try {
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   if (process.argv.includes('--once')) await runtime.runNext(bulk.client);
@@ -56,7 +70,17 @@ try {
         if (line) console.info(line);
       }
     };
-    await Promise.all(Array.from({ length: WORKER_LANES }, () => lane()));
+    const purge = runSupersededPurge({
+      batch: () => runtime.purgeSupersededFitBatch(),
+      sleep: stoppableSleep,
+      stopping: () => stopping,
+      log: (removed) => console.info(`vacancy-mechanics: removed superseded fit jobs=${removed}`),
+      warn: (error) =>
+        console.warn(
+          `vacancy-mechanics: superseded fit purge paused until the next hour: ${error instanceof Error ? error.message : 'unknown'}`,
+        ),
+    });
+    await Promise.all([...Array.from({ length: WORKER_LANES }, () => lane()), purge]);
   }
 } finally {
   bulk.close();

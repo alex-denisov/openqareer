@@ -33,7 +33,10 @@ function audit(
     candidateId: 'c',
     state: 'completed',
     selectedQueryIds: [],
-    adapterStatuses: [{ adapterId: 'hibp', state: hibp, sourcesChecked: 1, findingsCount: 0 }],
+    // B740: клиент получает код шага «leaks», а не название инструмента.
+    adapterStatuses: [
+      { adapterId: 'leaks' as never, state: hibp, sourcesChecked: 1, findingsCount: 0 },
+    ],
     findings,
     ownershipConfirmedAt: '2026-10-05T09:00:00.000Z',
     startedAt: '2026-10-06T09:00:00.000Z',
@@ -91,6 +94,24 @@ describe('buildFootprintChecklist (B544)', () => {
     expect(byId.old_accounts).toMatchObject({ done: true, status: 'Сделано' });
     expect(byId.artifacts).toMatchObject({ done: false, remaining: 1, findingIds: ['4'] });
     expect(list.done).toBe(2);
+  });
+
+  it('B382: a contact-data broker page is not an artifact to move into the profile', () => {
+    const list = buildFootprintChecklist(
+      audit(
+        [
+          finding('4', { kind: 'mention', review: 'confirmed_self' }),
+          finding('6', {
+            kind: 'mention',
+            review: 'confirmed_self',
+            url: 'https://aeroleads.com/people/maria-sokolova',
+          }),
+        ],
+        'checked',
+      ),
+    );
+    const artifacts = list.items.find((item) => item.id === 'artifacts');
+    expect(artifacts).toMatchObject({ remaining: 1, findingIds: ['4'] });
   });
 
   it('marks leaks done only after HIBP answered with nothing found', () => {

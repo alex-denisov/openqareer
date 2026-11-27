@@ -1,14 +1,23 @@
 import { convertAmount, type CurrencyRates } from '../../../../shared/currencyRates';
+import { marketSalaryLabel } from '../../../../shared/marketSalaryEstimate';
+import {
+  monthlyAmount,
+  salaryPeriodOf,
+  type SalaryPeriod,
+} from '../../../../shared/monthlyRubSalary';
 import type { VacancyFitTier } from '../../../../shared/vacancyFitPercent';
 import { workFormatLabel } from '../../../../shared/vacancyWorkFormat';
 import type { MatchedVacancyItem } from '../../coach/cabinetTypes';
 import { compactPlaceLabel } from '../../vacancies/VacancyScreenRowCells';
-import { formatCompensationCompact } from '../../vacancies/vacancyCompensation';
-import { vacancyRemoteLabel } from '../../vacancies/vacancyRemoteLabel';
+import {
+  formatCompensationCompact,
+  formatPeriodAmounts,
+} from '../../vacancies/vacancyCompensation';
+import { hasRemoteMark, vacancyRemoteLabel } from '../../vacancies/vacancyRemoteLabel';
 import { vacancyFormat } from '../../vacancies/vacancyScreenCriteria';
 
 /** Валюта показа денег: рубли, доллары, евро или «Как в вакансии». */
-export type MoneyCurrency = 'RUB' | 'USD' | 'EUR' | 'ORIG';
+export type MoneyCurrency = 'RUB' | 'USD' | 'EUR' | 'AED' | 'ORIG';
 
 export interface MoneyOptions {
   readonly currency: MoneyCurrency;
@@ -23,6 +32,8 @@ export interface MoneyView {
   readonly unit?: string;
   /** Подсказка с исходной суммой и курсом — только у пересчитанных денег. */
   readonly title?: string;
+  /** B803: вакансия без зарплаты, показана оценка openqareer. */
+  readonly estimate?: boolean;
 }
 
 const TIER_WORDS: Readonly<Record<VacancyFitTier, string>> = {
@@ -85,6 +96,8 @@ export function remoteLabel(cluster: {
 export function rowGeo(item: MatchedVacancyItem): string {
   const { cluster } = item;
   if (cluster.isRemote && vacancyFormat(item) === 'remote') return remoteLabel(cluster);
+  // B764: «Remote» в месте — подпись удалёнки по-русски, даже если формат указан иначе.
+  if (hasRemoteMark(cluster.canonicalLocation)) return remoteLabel(cluster);
   if (cluster.canonicalLocation) return compactPlaceLabel(cluster.canonicalLocation);
   return cluster.isRemote ? 'Удалённо' : 'Не указана';
 }
@@ -102,41 +115,95 @@ function splitRouble(text: string): MoneyView {
   return text.endsWith(' ₽') ? { text, amount: text.slice(0, -2), unit: '₽' } : { text };
 }
 
-function ratesNote(rates: CurrencyRates): string {
+const RATE_SIGN: Readonly<Record<string, string>> = { USD: '$', EUR: '€', AED: 'AED' };
+
+/** Курс ЦБ к рублю: доллар и евро всегда, дирхам — когда в нём показываем. */
+function ratesNote(rates: CurrencyRates, target: MoneyCurrency): string {
   const [, month, day] = rates.date.split('-');
-  const pairs = (['USD', 'EUR'] as const)
+  const codes = target === 'AED' ? ['USD', 'EUR', 'AED'] : ['USD', 'EUR'];
+  const pairs = codes
     .filter((code) => rates.rubPerUnit[code] !== undefined)
     .map((code) => {
       const rate = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(
         rates.rubPerUnit[code],
       );
-      return `1 ${code === 'USD' ? '$' : '€'} = ${rate} ₽`;
+      return `1 ${RATE_SIGN[code]} = ${rate} ₽`;
     });
   return `курс ЦБ на ${day}.${month}${pairs.length > 0 ? `: ${pairs.join(', ')}` : ''}`;
 }
 
+type ClusterSalary = NonNullable<MatchedVacancyItem['cluster']['salary']>;
+
+/** B765: колонка — в месяц (правило периода общее с сервером), ставка в час — как есть. */
+function shownAmounts(salary: ClusterSalary, period: SalaryPeriod): ClusterSalary {
+  if (period === 'hour') return salary;
+  return {
+    ...salary,
+    from: monthlyAmount(salary.from, period),
+    to: monthlyAmount(salary.to, period),
+  };
+}
+
 /** Деньги строки и карточки: в выбранной валюте по курсу ЦБ, без курса — как в вакансии. */
 export function moneyView(item: MatchedVacancyItem, options: MoneyOptions): MoneyView {
+  return salaryMoneyView(item.cluster.salary, options);
+}
+
+/**
+ * B803: строка списка — вилка вакансии, а без неё оценка openqareer в том же пересчёте, всегда
+ * с «≈» и подсказкой «Оценка openqareer, дата».
+ */
+export function rowMoneyView(item: MatchedVacancyItem, options: MoneyOptions): MoneyView {
   const salary = item.cluster.salary;
-  const original = formatCompensationCompact(salary);
-  if (!salary || (salary.from === undefined && salary.to === undefined)) return { text: original };
+  const market = item.explanation.marketSalary;
+  if ((salary && (salary.from !== undefined || salary.to !== undefined)) || !market)
+    return moneyView(item, options);
+  const { low, high, currency, period } = market;
+  const view = salaryMoneyView({ from: low, to: high, currency, period }, options);
+  const text = view.text.startsWith('≈') ? view.text : `≈ ${view.text}`;
+  const amount = view.amount && !view.amount.startsWith('≈') ? `≈ ${view.amount}` : view.amount;
+  const label = marketSalaryLabel(market.computedAt);
+  return {
+    ...view,
+    text,
+    ...(amount ? { amount } : {}),
+    title: view.title
+      ? `${label}. ${view.title.replace(/^В вакансии /u, 'В валюте оценки ')}`
+      : label,
+    estimate: true,
+  };
+}
+
+/** То же правило для суммы без строки подборки — у своей вакансии кандидата (B676). */
+export function salaryMoneyView(
+  salary: ClusterSalary | undefined,
+  options: MoneyOptions,
+): MoneyView {
+  if (!salary || (salary.from === undefined && salary.to === undefined))
+    return { text: formatCompensationCompact(salary) };
+  const period = salaryPeriodOf(salary, options.rates);
+  const original = formatPeriodAmounts(salary, period);
   const target = options.currency;
   const source = salary.currency ?? '';
-  if (target === 'ORIG' || !source) return splitRouble(original);
-  if (target === 'RUB' && isRouble(source)) return splitRouble(original);
-  const from =
-    salary.from === undefined ? undefined : convertAmount(salary.from, source, target, options.rates);
-  const to =
-    salary.to === undefined ? undefined : convertAmount(salary.to, source, target, options.rates);
+  // Период неизвестен — сумма как в вакансии: пересчёт в месяц и в ₽ был бы выдумкой.
+  if (target === 'ORIG' || !source || period === 'unknown') return splitRouble(original);
+  if (target === 'RUB' && isRouble(source) && period === 'month') return splitRouble(original);
+  const shown = shownAmounts(salary, period);
+  const convert = (amount: number | undefined) =>
+    amount === undefined ? undefined : convertAmount(amount, source, target, options.rates);
+  const from = convert(shown.from);
+  const to = convert(shown.to);
   const missing =
-    (salary.from !== undefined && from === undefined) ||
-    (salary.to !== undefined && to === undefined);
+    (shown.from !== undefined && from === undefined) ||
+    (shown.to !== undefined && to === undefined);
   if (missing || !options.rates) return splitRouble(original);
-  const converted = formatCompensationCompact({ ...salary, from, to, currency: target });
+  const suffix = period === 'hour' ? ' в час' : '';
+  const converted = `${formatCompensationCompact({ ...salary, from, to, currency: target })}${suffix}`;
   if (converted === original) return splitRouble(original);
+  const view = suffix ? { text: `≈ ${converted}` } : splitRouble(`≈ ${converted}`);
   return {
-    ...splitRouble(`≈ ${converted}`),
-    title: `В вакансии ${original}; ${ratesNote(options.rates)}`,
+    ...view,
+    title: `В вакансии ${original}; ${ratesNote(options.rates, target)}`,
   };
 }
 

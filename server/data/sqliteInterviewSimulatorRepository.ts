@@ -2,6 +2,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { InterviewSession } from '../domain/interviewSimulator';
 import type { SealedText } from './sealedText';
 import { interviewSessionAssociatedData } from './interviewSimulatorSchema';
+import { SqliteInterviewReviewHelpfulRepository } from './sqliteInterviewReviewHelpfulRepository';
+import { SqliteInterviewDesignSchemaRepository } from './sqliteInterviewDesignSchemaRepository';
+import { SqliteInterviewDesignTaskRepository } from './sqliteInterviewDesignTaskRepository';
 
 interface InterviewSessionRow {
   readonly candidate_id: string;
@@ -14,10 +17,21 @@ interface InterviewSessionRow {
 }
 
 export class SqliteInterviewSimulatorRepository {
+  /** B681: «разбор помог» по вопросу тренировки нового кабинета. */
+  readonly reviewHelpful: SqliteInterviewReviewHelpfulRepository;
+  /** B647: исправленная кандидатом схема System Design по вопросу. */
+  readonly designSchemas: SqliteInterviewDesignSchemaRepository;
+  /** B750: задача System Design по отклику — та же при повторном открытии. */
+  readonly designTasks: SqliteInterviewDesignTaskRepository;
+
   constructor(
     private readonly database: DatabaseSync,
     private readonly sealedText: SealedText,
-  ) {}
+  ) {
+    this.reviewHelpful = new SqliteInterviewReviewHelpfulRepository(database);
+    this.designSchemas = new SqliteInterviewDesignSchemaRepository(database, sealedText);
+    this.designTasks = new SqliteInterviewDesignTaskRepository(database, sealedText);
+  }
 
   getCurrent(candidateId: string): InterviewSession | null {
     const row = this.database
@@ -83,6 +97,28 @@ export class SqliteInterviewSimulatorRepository {
         expectedVersion,
       );
     return result.changes === 1 ? this.get(candidateId, id) : null;
+  }
+
+  /**
+   * B750 3b: дописать отзыв модели в фоне, не сдвигая версию — иначе следующее
+   * действие кандидата упрётся в конфликт версии. Пишет, только если с чтения
+   * тренировка не менялась.
+   */
+  replaceBodyAtVersion(
+    candidateId: string,
+    id: string,
+    version: number,
+    session: InterviewSession,
+  ): boolean {
+    const next = { ...session, version };
+    const result = this.database
+      .prepare(
+        `UPDATE candidate_interview_sessions
+         SET body_cipher = ?
+         WHERE candidate_id = ? AND id = ? AND version = ?`,
+      )
+      .run(this.seal(candidateId, next), candidateId, id, version);
+    return result.changes === 1;
   }
 
   replaceCompleted(

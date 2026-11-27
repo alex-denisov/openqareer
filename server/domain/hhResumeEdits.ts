@@ -1,9 +1,12 @@
-import type { HhResumeEdit, HhResumeSections } from '../../shared/hhCandidateSession';
+import { hhAboutText, plainEmployer, sourcedLines } from './hhAboutCleanup';
+import { correctedText, factEdits } from './hhResumeFactEdits';
+import { isPositionTerms } from '../../shared/hhPositionTerms';
+import { hhSectionsRead, type HhResumeEdit, type HhResumeSections } from '../../shared/hhCandidateSession';
 
 /**
  * B678: правки резюме hh.ru «было → станет». Платформа ничего не придумывает: «станет» — то, что
  * она уже написала и кандидат подтвердил: пункты места работы мастер-резюме (с фактами консультанта),
- * «о себе», навыки, которые подтверждает профиль, и название вакансии для должности. Текст на другом
+ * «о себе» и навыки, которые подтверждает факт профиля. Должность не меняется. Текст на другом
  * языке помечен своим языком: его переводят до показа, непереведённое не показывается.
  */
 export type HhEditLanguage = 'ru' | 'en';
@@ -18,14 +21,17 @@ export interface HhPlatformPlace {
 
 export interface HhEditsInput {
   readonly resume: { readonly id: string; readonly title: string; readonly sections: HhResumeSections };
-  /** Заголовки остальных резюме кандидата: hh.ru требует уникальных. */
-  readonly otherTitles: readonly string[];
-  readonly vacancy: { readonly title: string; readonly requirements: readonly string[] };
+  readonly vacancy: {
+    readonly title: string;
+    readonly requirements: readonly string[];
+  };
   readonly platform: {
     readonly about: string | null;
     readonly places: readonly HhPlatformPlace[];
     /** Тексты подтверждённых фактов профиля: навык добавляется, только если он здесь есть. */
     readonly facts: readonly string[];
+    /** B787: подтверждённые кандидатом факты профиля — по ним правка «исправить факт» сверяет числа. */
+    readonly confirmed?: readonly string[];
   };
 }
 
@@ -36,7 +42,6 @@ export interface HhEditDraft extends HhResumeEdit {
 }
 
 const PLACE_LINES_MAX = 8;
-const TITLE_MAX = 100;
 /** Короче трёх символов ключ работодателя совпадает с чужими названиями («IT», «A»). */
 const EMPLOYER_KEY_MIN = 3;
 /** Навык длиннее — не навык, а фраза из описания вакансии. */
@@ -79,14 +84,6 @@ function samePlace(hhEmployer: string, place: HhPlatformPlace): boolean {
   });
 }
 
-function titleEdit(input: HhEditsInput): HhEditDraft[] {
-  const was = input.resume.sections.title || input.resume.title;
-  const now = input.vacancy.title.trim().slice(0, TITLE_MAX);
-  const taken = input.otherTitles.some((title) => normalized(title) === normalized(now));
-  if (!now || taken || contains(was, now)) return [];
-  return [{ id: 'title', section: 'title', was, now, language: languageOf(now) }];
-}
-
 /** Каждое место профиля платформы достаётся не больше чем одному месту hh.ru: первому совпавшему. */
 function matchedPlaces(input: HhEditsInput): ReadonlyArray<HhPlatformPlace | undefined> {
   return input.resume.sections.places.reduce<{ readonly used: ReadonlySet<string>; readonly found: Array<HhPlatformPlace | undefined> }>(
@@ -101,11 +98,27 @@ function matchedPlaces(input: HhEditsInput): ReadonlyArray<HhPlatformPlace | und
   ).found;
 }
 
+const escaped = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+
+/** B787: в русском резюме компания называется так, как в нём самом («Россети Цифра»), а не латиницей профиля. */
+export function withResumeEmployer(line: string, hhEmployer: string, place: HhPlatformPlace): string {
+  if (languageOf(hhEmployer) !== 'ru') return line;
+  return [place.employer, ...place.aliases]
+    .map((name) => name.trim())
+    .filter((name) => name.length >= EMPLOYER_KEY_MIN && languageOf(name) === 'en')
+    .sort((a, b) => b.length - a.length)
+    .reduce((text, name) => text.replace(new RegExp(`(?<![\\p{L}\\p{N}])${escaped(name)}(?![\\p{L}\\p{N}])`, 'giu'), hhEmployer), line);
+}
+
 function experienceEdits(input: HhEditsInput): HhEditDraft[] {
   const sources = matchedPlaces(input);
   return input.resume.sections.places.flatMap((place, index) => {
     const source = sources[index];
-    const lines = (source?.bullets ?? []).map((line) => line.trim()).filter(Boolean).slice(0, PLACE_LINES_MAX);
+    const lines = (source?.bullets ?? [])
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, PLACE_LINES_MAX)
+      .map((line) => (source ? withResumeEmployer(line, plainEmployer(place.employer), source) : line));
     const now = lines.join('\n');
     if (lines.length === 0 || normalized(now) === normalized(place.text)) return [];
     return [
@@ -141,13 +154,46 @@ function skillsEdit(input: HhEditsInput): HhEditDraft[] {
   return [{ id: 'skills', section: 'skills', was, now, language: hhResumeLanguage(sections), added: trimmed }];
 }
 
+/** Числу в «станет» нужен источник: подтверждённый факт профиля или текст самого резюме hh.ru (B787). */
+function numberSources(input: HhEditsInput): string[] | null {
+  const { sections } = input.resume;
+  // Без списка подтверждённых фактов сверять не с чем: правка строится, как прежде.
+  if (!input.platform.confirmed) return null;
+  return [...input.platform.confirmed, sections.about, ...sections.places.map((place) => place.text)];
+}
+
 function aboutEdit(input: HhEditsInput): HhEditDraft[] {
-  const now = input.platform.about?.trim() ?? '';
-  const was = input.resume.sections.about;
-  if (!now || normalized(now) === normalized(was)) return [];
+  const employers = input.resume.sections.places.map((place) => place.employer);
+  const now = hhAboutText(input.platform.about?.trim() ?? '', employers, numberSources(input));
+  const { about: was, aboutRead } = input.resume.sections;
+  // Непрочитанный раздел не правим: «станет» затёрло бы текст, которого мы не видели.
+  if (aboutRead !== true || !now || isPositionTerms(was) || normalized(now) === normalized(was)) return [];
   return [{ id: 'about', section: 'about', was, now, language: languageOf(now) }];
 }
 
+/**
+ * B787: число старого резюме исправляется по подтверждённому факту, затем строка без источника числа
+ * выпадает; правка без строк не строится.
+ */
+function sourcedEdit(edit: HhEditDraft, facts: readonly string[], sources: readonly string[] | null): HhEditDraft[] {
+  if (!edit.lines) {
+    const now = correctedText(edit.now, facts);
+    return [{ ...edit, now }];
+  }
+  const corrected = edit.lines.map((line) => correctedText(line, facts));
+  const lines = sources ? sourcedLines(corrected, sources) : corrected;
+  if (lines.length === 0 || normalized(lines.join('\n')) === normalized(edit.was)) return [];
+  return [{ ...edit, lines, now: lines.join('\n') }];
+}
+
 export function draftHhResumeEdits(input: HhEditsInput): HhEditDraft[] {
-  return [...titleEdit(input), ...experienceEdits(input), ...skillsEdit(input), ...aboutEdit(input)];
+  if (!hhSectionsRead(input.resume.sections)) return [];
+  // B787: «станет» из профиля тоже сверяется с подтверждёнными фактами: старое число из резюме не переносим.
+  const facts = input.platform.confirmed ?? [];
+  const numberSourceTexts = numberSources(input);
+  const drafted = [...experienceEdits(input), ...skillsEdit(input), ...aboutEdit(input)].flatMap((edit) =>
+    edit.section === 'skills' ? [edit] : sourcedEdit(edit, facts, numberSourceTexts),
+  );
+  const covered = new Set(drafted.map((edit) => edit.id));
+  return [...drafted, ...factEdits(input.resume.sections, facts, covered)];
 }

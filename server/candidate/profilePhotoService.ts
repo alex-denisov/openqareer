@@ -26,6 +26,13 @@ export class ProfileMissingError extends Error {
   }
 }
 
+/** Фото из LinkedIn нет: профиль не импортировали из LinkedIn или там не было фото. */
+export class LinkedinPhotoMissingError extends Error {
+  constructor() {
+    super('Фото из LinkedIn нет.');
+  }
+}
+
 export interface ProfilePhotoResult {
   readonly photoMediaId: string | null;
 }
@@ -101,4 +108,23 @@ export function removeProfilePhoto(
   saveDraft(deps, candidateId, { ...draft, candidate });
   logChange(deps, candidateId, 'фото', 'без фото', now);
   return { photoMediaId: null };
+}
+
+/** p08 «Взять из LinkedIn»: снова ставит фото из последнего импорта LinkedIn. */
+export function takeLinkedinPhoto(
+  deps: ProfilePhotoDeps,
+  candidateId: string,
+  now: Date,
+): ProfilePhotoResult {
+  const draft = deps.store.getSnapshot(candidateId).resume?.draft;
+  const linkedinPhoto = draft?.candidate.linkedinPhotoMediaId;
+  if (!draft || !linkedinPhoto) throw new LinkedinPhotoMissingError();
+  if (draft.candidate.photoMediaId === linkedinPhoto) return { photoMediaId: linkedinPhoto };
+  const hadPhoto = Boolean(draft.candidate.photoMediaId);
+  saveDraft(deps, candidateId, {
+    ...draft,
+    candidate: { ...draft.candidate, photoMediaId: linkedinPhoto },
+  });
+  logChange(deps, candidateId, hadPhoto ? 'прежнее фото' : '', 'фото из LinkedIn', now);
+  return { photoMediaId: linkedinPhoto };
 }

@@ -63,6 +63,11 @@ export class SqliteCandidateDraftRepository {
     return (this.database.prepare(`SELECT * FROM candidate_drafts WHERE candidate_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?`)
       .all(candidateId, bounded) as DraftRow[]).map(fromRow);
   }
+  find(candidateId: string, id: string): CandidateDraft | null {
+    const row = this.database.prepare(`SELECT * FROM candidate_drafts WHERE candidate_id = ? AND id = ?`)
+      .get(candidateId, id) as DraftRow | undefined;
+    return row ? fromRow(row) : null;
+  }
   countForDay(candidateId: string, localDate: string, kind: CandidateDraftKind): number {
     return (this.database.prepare(`SELECT COUNT(*) AS count FROM candidate_drafts WHERE candidate_id = ? AND local_date = ? AND kind = ?`)
       .get(candidateId, localDate, kind) as { count: number }).count;

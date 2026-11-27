@@ -8,10 +8,15 @@ import {
 } from '../../automation/automationApi';
 import { apiErrorMessage } from '../../coach/apiClient';
 import { Button, Dialog, Icon, Link, SegControl, StatusLine } from '../kit';
+import { loadCampaign } from '../career/careerApi';
+import { DateInput } from '../kit/DateInput';
 import { buildNodePath } from '../routes';
+import { useAsync } from './data/useAsync';
+import { automationRoleOptions, type AutomationRoleOption } from './model/automationRoles';
 import {
   DAY_LIMIT_MAX,
   PLATFORM_LABELS,
+  consentsToGrant,
   pauseDays,
   splitDayLimit,
   type AutomationPlatform,
@@ -44,10 +49,16 @@ export interface AutomationDraft {
   readonly dayLimit: string;
   readonly letter: LetterMode;
   readonly pauseUntil: string;
+  /** Отметка согласия; нужна, только пока согласий нет (B645). */
+  readonly consent: boolean;
 }
 
 /** Что не так в настройках; null — можно сохранять. */
-export function validateAutomationDraft(draft: AutomationDraft, hasRoles: boolean): string | null {
+export function validateAutomationDraft(
+  draft: AutomationDraft,
+  hasRoles: boolean,
+  needsConsent = false,
+): string | null {
   if (hasRoles && draft.roles.length === 0) return 'Оставьте хотя бы одну роль.';
   if (draft.platforms.length === 0) return 'Выберите хотя бы одну площадку.';
   const limit = Number(draft.dayLimit);
@@ -57,6 +68,7 @@ export function validateAutomationDraft(draft: AutomationDraft, hasRoles: boolea
   if (draft.pauseUntil && pauseDays(draft.pauseUntil) === null) {
     return 'Дата паузы — с завтрашнего дня и не дальше года.';
   }
+  if (needsConsent && !draft.consent) return 'Отметьте согласие, чтобы включить автоотклики.';
   return null;
 }
 
@@ -78,6 +90,8 @@ async function saveAutomation(
   if (view.canSendAtOnce && settings.enabled && draft.letter !== settings.mode) {
     await enableCandidateAutomation({ mode: draft.letter, consentKeys: view.consentKeys });
   }
+  const grant = consentsToGrant(view, draft.consent);
+  if (grant) await enableCandidateAutomation({ mode: 'approval_required', consentKeys: grant });
   const days = draft.pauseUntil ? pauseDays(draft.pauseUntil) : null;
   if (days !== null) await pauseCandidateAutomation(days);
 }
@@ -124,7 +138,7 @@ interface FieldsProps {
   readonly id: string;
   readonly draft: AutomationDraft;
   readonly setDraft: (draft: AutomationDraft) => void;
-  readonly roles: readonly string[];
+  readonly roles: readonly AutomationRoleOption[];
   readonly canSendAtOnce: boolean;
 }
 
@@ -155,7 +169,7 @@ function SheetFields({ id, draft, setDraft, roles, canSendAtOnce }: FieldsProps)
         <CheckList
           idPrefix={`${id}-r`}
           legend="Роли"
-          options={roles.map((role) => ({ value: role, label: role }))}
+          options={roles}
           selected={draft.roles}
           onChange={(next) => setDraft({ ...draft, roles: next })}
         />
@@ -184,12 +198,11 @@ function SheetFields({ id, draft, setDraft, roles, canSendAtOnce }: FieldsProps)
         <label className="au3-l" htmlFor={`${id}-pause`}>
           Пауза до <span className="au3-opt">необязательно</span>
         </label>
-        <input
+        <DateInput
           className="au3-in"
           id={`${id}-pause`}
-          type="date"
           value={draft.pauseUntil}
-          onChange={(event) => setDraft({ ...draft, pauseUntil: event.currentTarget.value })}
+          onChange={(pauseUntil) => setDraft({ ...draft, pauseUntil })}
         />
       </div>
     </>
@@ -241,6 +254,29 @@ function SaveFooter({ busy, onSave, onClose }: FooterProps) {
   );
 }
 
+/** Согласие на автоотклики: без него включить нельзя (B645). */
+function ConsentCheck({ id, draft, setDraft }: Pick<FieldsProps, 'id' | 'draft' | 'setDraft'>) {
+  return (
+    <label className="vt-opt" htmlFor={`${id}-consent`}>
+      <input
+        type="checkbox"
+        id={`${id}-consent`}
+        checked={draft.consent}
+        onChange={(event) => setDraft({ ...draft, consent: event.currentTarget.checked })}
+      />
+      <span className="vt-opt-t">
+        Разрешаю готовить отклики, отправлять их после моего одобрения и присылать уведомления
+      </span>
+    </label>
+  );
+}
+
+/** Роли поиска не прочитались — остаются роли правил. */
+function useRoleOptions(ruleRoles: readonly string[]): readonly AutomationRoleOption[] {
+  const campaign = useAsync(loadCampaign, '').state.data;
+  return automationRoleOptions(ruleRoles, campaign?.roles.value ?? [], campaign?.titlesRu);
+}
+
 function RulesSheet({ open, snapshot, view, onClose, onSaved, onFailed }: AutomationSheetProps) {
   const id = useId();
   const { settings } = snapshot;
@@ -250,12 +286,14 @@ function RulesSheet({ open, snapshot, view, onClose, onSaved, onFailed }: Automa
     dayLimit: String(view.dayLimit || settings.rules.platforms.length),
     letter: settings.mode === 'automatic' ? 'automatic' : 'approval_required',
     pauseUntil: '',
+    consent: false,
   }));
+  const roles = useRoleOptions(settings.rules.roles);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
-    const problem = validateAutomationDraft(draft, settings.rules.roles.length > 0);
+    const problem = validateAutomationDraft(draft, roles.length > 0, !view.consented);
     setError(problem);
     if (problem) return;
     setBusy(true);
@@ -281,9 +319,10 @@ function RulesSheet({ open, snapshot, view, onClose, onSaved, onFailed }: Automa
         id={id}
         draft={draft}
         setDraft={setDraft}
-        roles={settings.rules.roles}
+        roles={roles}
         canSendAtOnce={view.canSendAtOnce}
       />
+      {view.consented ? null : <ConsentCheck id={id} draft={draft} setDraft={setDraft} />}
       {error ? <StatusLine state="err" text={error} /> : null}
     </Dialog>
   );

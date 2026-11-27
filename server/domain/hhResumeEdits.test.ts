@@ -8,6 +8,7 @@ const input: HhEditsInput = {
     sections: {
       title: 'Операционный директор',
       about: 'Руковожу операциями 10 лет.',
+      aboutRead: true,
       skills: ['Управление проектами', 'ITIL'],
       places: [
         { employer: 'АО «Россети Цифра»', title: 'Директор по поддержке', period: 'апр 2023 — окт 2025', text: 'Отвечал за поддержку продуктов.' },
@@ -16,7 +17,6 @@ const input: HhEditsInput = {
       ],
     },
   },
-  otherTitles: ['Руководитель ИТ'],
   vacancy: { title: 'COO в ИТ-компанию', requirements: ['ITIL', 'Бюджетирование', 'Kubernetes'] },
   platform: {
     about: 'Строю операционные функции ИТ-компаний.',
@@ -34,11 +34,10 @@ const input: HhEditsInput = {
 };
 
 describe('B678: правки резюме hh.ru «было → станет»', () => {
-  it('должность, опыт по местам, навыки и «о себе» — только там, где платформе есть что добавить', () => {
+  it('опыт по местам, навыки и «о себе» — только там, где платформе есть что добавить', () => {
     const edits = draftHhResumeEdits(input);
 
     expect(edits).toEqual([
-      { id: 'title', section: 'title', was: 'Операционный директор', now: 'COO в ИТ-компанию', language: 'ru' },
       {
         id: 'experience:0',
         section: 'experience',
@@ -72,14 +71,13 @@ describe('B678: правки резюме hh.ru «было → станет»', 
     expect(skills?.now).not.toContain('Kubernetes');
   });
 
-  it('должность не повторяет другое резюме кандидата и не меняется, если уже про вакансию', () => {
-    const clash = draftHhResumeEdits({ ...input, otherTitles: ['COO в ИТ-компанию'] });
-    expect(clash.some((edit) => edit.section === 'title')).toBe(false);
-    const same = draftHhResumeEdits({
-      ...input,
-      resume: { ...input.resume, title: 'COO в ИТ-компанию', sections: { ...input.resume.sections, title: 'COO в ИТ-компанию' } },
-    });
-    expect(same.some((edit) => edit.section === 'title')).toBe(false);
+  it('должность в название вакансии не меняется', () => {
+    expect(draftHhResumeEdits(input).some((edit) => edit.section === 'title')).toBe(false);
+  });
+
+  it('по непрочитанным разделам правок нет', () => {
+    const sections = { ...input.resume.sections, places: [] };
+    expect(draftHhResumeEdits({ ...input, resume: { ...input.resume, sections } })).toEqual([]);
   });
 
   it('текст платформы на другом языке помечен языком: его переводят, прежде чем показать', () => {
@@ -97,7 +95,7 @@ describe('B678: правки резюме hh.ru «было → станет»', 
       ...input,
       platform: { ...input.platform, about: 'Руковожу операциями 10 лет.', places: [{ ...input.platform.places[0]!, bullets: ['Отвечал за поддержку продуктов.'] }] },
     });
-    expect(edits.map((edit) => edit.section)).toEqual(['title', 'skills']);
+    expect(edits.map((edit) => edit.section)).toEqual(['skills']);
   });
 
   it('место профиля достаётся одному месту hh.ru, короткий ключ работодателя ни с чем не совпадает', () => {
@@ -127,5 +125,23 @@ describe('B678: правки резюме hh.ru «было → станет»', 
       platform: { ...input.platform, facts: [long] },
     }).find((edit) => edit.section === 'skills');
     expect(skills).toBeUndefined();
+  });
+
+  it('условия поиска из старого снимка не показываются как «О себе»', () => {
+    const about = 'Уровень дохода не указан · Постоянная работа, Подработка · Гибрид, Удалённо · Могу приезжать в командировки';
+    const sections = { ...input.resume.sections, about };
+    const edits = draftHhResumeEdits({ ...input, resume: { ...input.resume, sections } });
+    expect(edits.some((edit) => edit.section === 'about')).toBe(false);
+  });
+
+  it('«О себе» правится только прочитанное: пустое без признака и старый снимок — нет', () => {
+    const aboutOf = (about: string, aboutRead?: boolean) => {
+      const sections = { ...input.resume.sections, about, aboutRead };
+      return draftHhResumeEdits({ ...input, resume: { ...input.resume, sections } }).find((edit) => edit.section === 'about');
+    };
+    expect(aboutOf('')).toBeUndefined();
+    expect(aboutOf('', false)).toBeUndefined();
+    expect(aboutOf('Старый текст')).toBeUndefined();
+    expect(aboutOf('', true)).toMatchObject({ was: '' });
   });
 });

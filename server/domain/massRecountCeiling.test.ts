@@ -27,7 +27,7 @@ describe('mass recount ceiling per UTC day (prod 01-02.11: $9.9 and $13.4 a day)
     const requirements = runtime.database.prepare(`INSERT INTO vacancy_requirements_jobs(id,cache_key,input_json,status,attempts,last_error,created_at,updated_at,requeue_revision)
       VALUES(?,?,?,?,3,'requirements_model_invalid',1,1,1)`);
     for (let index = 0; index < FAILED; index += 1) {
-      fit.run(`k${index}`, 'c', 'cipher', 'failed', '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z', 'profile_changed');
+      fit.run(`k${index}`, 'c', 'cipher', 'failed', '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z', 'assessment_model_unavailable');
       requirements.run(`j${index}`, `rk${index}`, `{"vacancyId":"v${index}","description":"d"}`, 'failed');
     }
     runtime.database.exec('COMMIT');

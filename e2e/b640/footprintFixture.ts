@@ -92,6 +92,7 @@ const RISKY = [
     'Почта на двух старых сервисах',
     'Книжный клуб, 2021 · сервис доставки, 2023',
     ['close_account', 'Закрыть аккаунты'],
+    { levelReason: 'старые аккаунты на эту почту ещё открыты' },
   ),
   item(2, 'needs_check', 'important', 'Профиль под вашим ником', 'Сайт знакомств, 2022', [
     'check_now',
@@ -124,9 +125,10 @@ const RISKY = [
   ),
 ];
 const USEFUL = [
+  // B382: профиль площадки в профиль не переносится — только «Это не моё».
   item(5, 'useful_evidence', 'useful', 'Профиль на GitHub', '14 проектов, последний — 2024', [
-    'add_to_profile',
-    'В профиль',
+    'not_mine',
+    'Это не моё',
   ]),
   item(
     6,
@@ -137,6 +139,20 @@ const USEFUL = [
     ['add_to_profile', 'В профиль'],
   ),
 ];
+
+/** B727: страница по нику без подтверждения — «Нужно проверить», «Проверить» открывает её. */
+export const NICK_URL = 'https://www.duolingo.com/profile/alexey_denisov';
+const NICK = {
+  ...item(
+    7,
+    'needs_check',
+    'important',
+    'Duolingo',
+    'duolingo.com/profile/alexey_denisov · Открытая страница найдена по нику.',
+    ['confirm_owner', 'Проверить'],
+  ),
+  url: NICK_URL,
+};
 
 const TITLES: Record<string, string> = {
   personal_data: 'Личные данные открыты',
@@ -174,11 +190,13 @@ function summary(state: string, items: ReturnType<typeof item>[], headline: stri
   };
 }
 
-export type FootprintCase = 'fresh' | 'ready' | 'nothing' | 'checking' | 'failed';
+export type FootprintCase = 'fresh' | 'ready' | 'nothing' | 'checking' | 'failed' | 'nick';
 
 function caseSummary(kind: FootprintCase) {
   if (kind === 'ready') return summary('ready', [...RISKY, ...USEFUL], '6 находок, 4 стоит убрать');
   if (kind === 'nothing') return summary('ready', USEFUL, '2 находки, ничего рискового');
+  if (kind === 'nick')
+    return summary('ready', [...RISKY, NICK, ...USEFUL], '7 находок, 5 стоит убрать');
   if (kind === 'checking') return summary('checking', [], null);
   if (kind === 'failed') return summary('failed', [], null);
   return summary('not_checked', [], null);
@@ -212,8 +230,64 @@ function caseAudit(kind: FootprintCase) {
 export interface FootprintCalls {
   readonly started: unknown[];
   readonly reviews: Array<{ id: string; review: string }>;
+  /** B645 p02: «Это не проблема» у расхождения с резюме и её отмена. */
+  readonly mismatches: Array<{ id: string; review: string }>;
   readonly granted: string[];
   revoked: number;
+  /** B382: «Письмо отправлено» и «Проверить находку» по id находки. */
+  readonly removals: string[];
+  readonly rechecks: string[];
+}
+
+type Removal = { requestedAt?: string; checkedAt?: string; result?: string };
+
+/** Сводка с сохранённым путём удаления: «удалено» снимает находку из «стоит убрать». */
+function withRemovals(data: ReturnType<typeof caseSummary>, removals: Map<string, Removal>) {
+  const items = data.items.map((entry) => {
+    const removal = removals.get(entry.id);
+    if (!removal) return entry;
+    const resolved = removal.result === 'removed';
+    return { ...entry, removal, resolved, action: resolved ? null : entry.action };
+  });
+  return { ...data, items };
+}
+
+/** «Это не моё» (B727): как на сервере, отвергнутая находка уходит из сводки. */
+function withoutRejected(data: ReturnType<typeof caseSummary>, calls: FootprintCalls) {
+  const last = new Map(calls.reviews.map((entry) => [entry.id, entry.review]));
+  // Как на сервере: отмеченное «Это не проблема» расхождение уходит из сводки до отмены.
+  const mismatch = new Map(calls.mismatches.map((entry) => [entry.id, entry.review]));
+  const items = data.items.filter(
+    (entry) =>
+      last.get(entry.findingId ?? '') !== 'not_self' && mismatch.get(entry.id) !== 'hidden',
+  );
+  return { ...data, items };
+}
+
+async function mockRemoval(
+  page: Page,
+  calls: FootprintCalls,
+  removals: Map<string, Removal>,
+  recheckResult: string,
+): Promise<void> {
+  await page.route(`${API}/candidate/footprint/findings/*/removal-request`, (route) => {
+    const id = route.request().url().split('/').at(-2) ?? '';
+    calls.removals.push(id);
+    const removal = { ...removals.get(id), requestedAt: '2026-11-18T09:00:00.000Z' };
+    removals.set(id, removal);
+    return route.fulfill({ json: { data: { findingId: id, removal } } });
+  });
+  await page.route(`${API}/candidate/footprint/findings/*/recheck`, (route) => {
+    const id = route.request().url().split('/').at(-2) ?? '';
+    calls.rechecks.push(id);
+    const removal = {
+      ...removals.get(id),
+      checkedAt: '2026-11-19T09:00:00.000Z',
+      result: recheckResult,
+    };
+    removals.set(id, removal);
+    return route.fulfill({ json: { data: { findingId: id, removal } } });
+  });
 }
 
 /** Кабинет под флагом с моками маршрутов следа; состояние меняется вызовами экрана. */
@@ -221,8 +295,18 @@ export async function openFootprint(
   page: Page,
   path: string,
   initial: FootprintCase,
+  recheckResult = 'removed',
 ): Promise<FootprintCalls> {
-  const calls: FootprintCalls = { started: [], reviews: [], granted: [], revoked: 0 };
+  const calls: FootprintCalls = {
+    started: [],
+    reviews: [],
+    mismatches: [],
+    granted: [],
+    revoked: 0,
+    removals: [],
+    rechecks: [],
+  };
+  const removals = new Map<string, Removal>();
   let kind = initial;
   let granted = initial !== 'fresh';
   await mockSignedInCabinet(page, { cabinetB640: true });
@@ -239,12 +323,21 @@ export async function openFootprint(
     }),
   );
   await page.route(`${API}/candidate/footprint/risks`, (route) =>
-    route.fulfill({ json: { data: caseSummary(kind) } }),
+    route.fulfill({
+      json: { data: withoutRejected(withRemovals(caseSummary(kind), removals), calls) },
+    }),
   );
+  await mockRemoval(page, calls, removals, recheckResult);
   await page.route(`${API}/candidate/footprint/start`, (route) => {
     calls.started.push(route.request().postDataJSON());
     kind = 'checking';
     return route.fulfill({ status: 202, json: { data: { audit: caseAudit('checking') } } });
+  });
+  await page.route(`${API}/candidate/footprint/mismatches/*`, (route) => {
+    const id = decodeURIComponent(route.request().url().split('/').pop() ?? '');
+    const review = (route.request().postDataJSON() as { review: string }).review;
+    calls.mismatches.push({ id, review });
+    return route.fulfill({ json: { data: { id, review } } });
   });
   await page.route(`${API}/candidate/footprint/findings/*`, (route) => {
     const id = route.request().url().split('/').pop() ?? '';

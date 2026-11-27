@@ -20,7 +20,9 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-async function setup() {
+async function setup(engine?: {
+  getMatchedVacanciesAsync: (query: unknown) => Promise<unknown[]>;
+}) {
   const directory = mkdtempSync(join(tmpdir(), 'oq-profession-'));
   const config = {
     ...baseConfig,
@@ -55,6 +57,7 @@ async function setup() {
     authService,
     coachProvider: {} as never,
     serveStatic: false,
+    ...(engine ? { multiSourceVacancyEngine: engine as never } : {}),
   });
   cleanups.push(
     () => rmSync(directory, { recursive: true, force: true }),
@@ -119,6 +122,42 @@ describe('путь в профессию с флагом B640', () => {
     expect(response.json().data).toEqual({ state: 'no_target' });
     const answer = await call(app, 'PUT', ANSWER, flagged, { answer: 'yes' });
     expect(answer.statusCode).toBe(409);
+  });
+
+  it('выбор профессии сразу строит её срез: первый заход в «Карьеру» не ждёт холодного чтения (B669)', async () => {
+    const getMatchedVacanciesAsync = vi.fn(async () => []);
+    const { app } = await setup({ getMatchedVacanciesAsync });
+    const changed = await call(app, 'PUT', STATUS, flagged, {
+      status: 'changing_profession',
+      targetProfession: 'Продакт-менеджер',
+    });
+    expect(changed.statusCode).toBe(200);
+    await vi.waitFor(() =>
+      expect(getMatchedVacanciesAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ targetRoles: ['Продакт-менеджер'] }),
+      ),
+    );
+  });
+
+  it('статус без профессии срез не строит (B669)', async () => {
+    const getMatchedVacanciesAsync = vi.fn(async () => []);
+    const { app } = await setup({ getMatchedVacanciesAsync });
+    await call(app, 'PUT', STATUS, flagged, { status: 'looking' });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(getMatchedVacanciesAsync).not.toHaveBeenCalled();
+  });
+
+  it('отдаёт падежные формы профессии из словаря, без них — null (B669)', async () => {
+    const { app } = await setup({ getMatchedVacanciesAsync: vi.fn(async () => []) });
+    const read = async (targetProfession: string) => {
+      await call(app, 'PUT', STATUS, flagged, { status: 'changing_profession', targetProfession });
+      return (await call(app, 'GET', PATH, flagged)).json().data;
+    };
+    expect(await read('Продакт-менеджер')).toMatchObject({
+      state: 'too_few',
+      forms: { toBecome: 'продакт-менеджеры', genitive: 'продакта', instrumental: 'продактом' },
+    });
+    expect(await read('Сомелье')).toMatchObject({ state: 'too_few', forms: null });
   });
 
   it('с целевой профессией отдаёт её и принимает ответ о доходе', async () => {

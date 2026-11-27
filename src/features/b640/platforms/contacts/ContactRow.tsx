@@ -1,32 +1,97 @@
 import type { B640Contact } from '../../../../../shared/b640Contacts';
-import { Icon } from '../../kit';
+import { companyLookupKey } from '../../../vacancies/vacancyScreenCollections';
+import { Icon, Link } from '../../kit';
+import { MessageDraft } from '../../messages/MessageDraft';
+import { buildNodePath } from '../../routes';
 import { statusTag } from './contactsFilters';
-import { workLine } from './contactsModel';
 
 /** Мишень имени 24 px, как у ссылки в макете (`.ct-row a.ct-n`); токен отступа. */
-const NAME_BOX = { display: 'block', minBlockSize: 'var(--career-space-6)' } as const;
 
 export interface ContactRowProps {
   readonly contact: B640Contact;
+  readonly open: boolean;
+  readonly onToggle: () => void;
+  /** «Отправил»: время отправки с сервера. */
+  readonly onSent: (at: string) => void;
 }
 
-/** Строка контакта (a02): имя, должность и компания, метка статуса, путь знакомства. Статус меняется в письме. */
-export function ContactRow({ contact }: ContactRowProps) {
+/** Адрес подготовки сообщения: сам экран с якорем, чтобы ссылка открывалась и в новой вкладке. */
+export const writeHref = (id: string): string => `${buildNodePath('a02')}#write-${id}`;
+const panelId = (id: string): string => `ct-write-${id}`;
+
+/** Компания в подписи: цвет наследуется, подчёркивание при наведении и фокусе (contacts.css). */
+function CompanyLink({ name, to }: { readonly name: string; readonly to: string }) {
+  return (
+    <Link to={to} className="ct-co">
+      {name}
+    </Link>
+  );
+}
+
+/** «должность · Компания»: компания — ссылка на карточку v10b, если она есть. */
+function WorkLine({ contact }: { readonly contact: B640Contact }) {
+  const role = contact.roleTitle.trim();
+  const company = contact.companyName.trim();
+  const key = companyLookupKey(company);
+  return (
+    <div className="row-sub ct-w">
+      {role}
+      {role && company ? ' · ' : ''}
+      {key ? (
+        <CompanyLink name={company} to={buildNodePath('v10b', { companyId: key })} />
+      ) : (
+        company
+      )}
+    </div>
+  );
+}
+
+/** Имя открывает подготовку сообщения этому человеку; обычный щелчок не уходит с экрана. */
+function Name({ contact, open, onToggle }: Omit<ContactRowProps, 'onSent'>) {
+  return (
+    <a
+      className="row-title ct-n"
+      href={writeHref(contact.id)}
+      aria-expanded={open}
+      aria-controls={panelId(contact.id)}
+      onClick={(event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        onToggle();
+      }}
+    >
+      {contact.fullName}
+    </a>
+  );
+}
+
+const NO_LINK = 'общих знакомых нет';
+
+/** Строка контакта (a02): имя открывает черновик, должность и компания, метка статуса, путь знакомства. */
+export function ContactRow({ contact, open, onToggle, onSent }: ContactRowProps) {
   const tag = statusTag(contact.status);
-  const note = contact.linkNote?.trim();
+  // B645: третья строка есть всегда — путь знакомства или «общих знакомых нет», как в макете.
+  const note = contact.linkNote?.trim() || NO_LINK;
   return (
     <li className="row ct-row ct-row2">
-      <div className="row-title ct-n" style={NAME_BOX}>
-        {contact.fullName}
-      </div>
-      <div className="row-sub ct-w">{workLine(contact)}</div>
+      <Name contact={contact} open={open} onToggle={onToggle} />
+      <WorkLine contact={contact} />
       <div className="ct-tags">
         <span className={tag.cls}>{tag.text}</span>
       </div>
-      {note ? (
-        <div className="row-sub ct-p">
-          <Icon name="path" />
-          {note}
+      <div className="row-sub ct-p">
+        <Icon name="path" />
+        {note}
+      </div>
+      {open ? (
+        <div id={panelId(contact.id)} className="ct-write">
+          <MessageDraft
+            target={{ contactId: contact.id }}
+            kind={contact.link === 'intro' ? 'ask_introduction' : 'known_contact'}
+            recipientName={contact.fullName}
+            onSent={onSent}
+            onClose={onToggle}
+          />
         </div>
       ) : null}
     </li>

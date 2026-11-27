@@ -19,9 +19,12 @@ import { createCandidateWindowCache } from './candidateWindowCache';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { readCampaign } from './campaignContext';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
+import { VacancyMatchUnavailable } from '../vacancies/vacancyMatchReader';
+import { isJobCommunityName } from '../../shared/jobCommunity';
 import { isPrivateEmployerCluster } from '../vacancies/privateEmployerMask';
 import { readTargetLevel } from './vacancyRoleContext';
 import { companyCoachContextText } from './companyCoachContext';
+import { findCompanyRow } from './b640CompanyModel';
 import {
   listCandidateConnectionViews,
   deriveImportedFactSources,
@@ -41,7 +44,7 @@ import {
   withDeps,
 } from './helpers';
 
-const pageQuerySchema = z.object({
+export const pageQuerySchema = z.object({
   offset: z.coerce.number().int().nonnegative().default(0),
   limit: z.coerce.number().int().positive().max(20).default(20),
   sort: z.enum(['default', 'contacts', 'alphabetical']).default('default'),
@@ -72,6 +75,8 @@ interface CandidateCompanyContext {
     readonly contactsImported: boolean;
   };
   readonly searchConsentGranted: boolean;
+  /** Подборка не прочиталась вовремя: компании без её вакансий, счётчики догрузятся (B645). */
+  readonly vacanciesPending?: boolean;
 }
 
 function safeHttpsUrl(value: string): string {
@@ -99,7 +104,7 @@ function projectVacancyItems(
   return items.flatMap(({ cluster }) => {
     const companyName = (companyNameOverride ?? cluster.canonicalCompany).trim();
     // INC-023: частное лицо — не компания, в «Компаниях» его нет (CPO 26.10).
-    if (!companyName || isPrivateEmployerCluster(cluster)) return [];
+    if (!companyName || isJobCommunityName(companyName) || isPrivateEmployerCluster(cluster)) return [];
     const source = cluster.sources[0];
     return [
       {
@@ -244,11 +249,50 @@ function linkedinStatus(
   return { status: 'disconnected', importedAt: contactsImportedAt, contactsImported };
 }
 
+/**
+ * Сколько маршрут, умеющий ответить «догружается», ждёт подборку. Холодное чтение
+ * пула идёт 12–45 с (прод 19.11): список компаний от него не зависит и приходит сразу.
+ */
+export const PENDING_SELECTION_WAIT_MS = 2_000;
+
+const SELECTION_PENDING = Symbol('selection-pending');
+
+/**
+ * Подборка или, если она не успела за `PENDING_SELECTION_WAIT_MS` или читатель пула
+ * отказал, пустая подборка с отметкой «догружается». Чтение не обрывается: оно
+ * достраивает снимок, и перезапрос экрана получает счётчики.
+ */
+async function readSelectionOrPending(
+  deps: RouteDeps,
+  candidateId: string,
+): Promise<SelectionProjection & { readonly pending: boolean }> {
+  const read = readSelection(deps, candidateId);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<typeof SELECTION_PENDING>((resolve) => {
+    timer = setTimeout(() => resolve(SELECTION_PENDING), PENDING_SELECTION_WAIT_MS);
+  });
+  try {
+    const result = await Promise.race([read, deadline]);
+    if (result !== SELECTION_PENDING) return { ...result, pending: false };
+    // Ответ уже ушёл; отказ позднего чтения не должен стать необработанным.
+    read.catch(() => undefined);
+    return { vacancies: [], pending: true };
+  } catch (error) {
+    if (!(error instanceof VacancyMatchUnavailable)) throw error;
+    return { vacancies: [], pending: true };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function companyContext(
   deps: RouteDeps,
   candidateId: string,
+  options: { readonly allowPendingVacancies?: boolean } = {},
 ): Promise<CandidateCompanyContext> {
-  const { vacancies } = await readSelection(deps, candidateId);
+  const { vacancies, pending } = options.allowPendingVacancies
+    ? await readSelectionOrPending(deps, candidateId)
+    : { ...(await readSelection(deps, candidateId)), pending: false };
   const wants = deps.candidateCompanyWantsRepo?.list(candidateId) ?? [];
   // Макет 13: у компании только вакансии подборки, пул компании не подмешивается (28.10).
   const vacancyCompanyKeys = new Map(
@@ -282,10 +326,11 @@ export async function companyContext(
     vacancies,
     linkedin: linkedinStatus(deps, candidateId, contactsImportedAt),
     searchConsentGranted: deps.searchConsentRepo?.get(candidateId).granted ?? false,
+    ...(pending ? { vacanciesPending: true } : {}),
   };
 }
 
-function filterCounts(rows: CandidateCompanyContext['rows']) {
+export function filterCounts(rows: CandidateCompanyContext['rows']) {
   const knownContacts = rows.filter((row) => row.contactsCount !== null);
   return {
     all: rows.length,
@@ -746,19 +791,22 @@ async function handleSearchRecruiter(
   });
 }
 
-/** Тема консультанта «Компании и люди»: выбранная компания по ключу; `null` — нет такой. */
+/**
+ * Тема консультанта «Компании и люди»: компания кандидата по хеш-ключу списка или по ключу
+ * адреса карточки (B783); `null` — у кандидата такой нет.
+ */
 export async function candidateCompanyCoachContext(
   deps: RouteDeps,
   candidateId: string,
-  companyKey: string,
+  companyId: string,
 ): Promise<string | null> {
   const context = await companyContext(deps, candidateId);
-  const row = context.rows.find((item) => item.key === companyKey);
+  const row = findCompanyRow(context.rows, companyId);
   if (!row) return null;
   return companyCoachContextText(
     row,
     context.vacancies
-      .filter((vacancy) => candidateCompanyKey(vacancy.companyName) === companyKey)
+      .filter((vacancy) => candidateCompanyKey(vacancy.companyName) === row.key)
       .map((vacancy) => ({ title: vacancy.title })),
   );
 }

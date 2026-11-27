@@ -1,6 +1,13 @@
 import { convertAmount, type CurrencyRates } from '../../../../../shared/currencyRates';
+import { monthlySalary } from '../../../../../shared/monthlyRubSalary';
+import {
+  compareListed,
+  compareListedDate,
+  compareListedFit,
+  compareListedGroup,
+  listedDay,
+} from '../../../../../shared/vacancyListOrder';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
-import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 
 export type SortKey = 'role' | 'company' | 'money' | 'fit' | 'geo' | 'format' | 'date';
 export type SortDir = 'asc' | 'desc';
@@ -25,27 +32,42 @@ const DESC_FIRST: readonly SortKey[] = ['money', 'fit', 'date'];
 /** Порядок сервера: совпадение по убыванию. */
 export const SERVER_SORT: SortState = { key: 'fit', dir: 'desc' };
 
+/** Порядок подборки s07 по умолчанию (владелец 25.11): процент, затем дата. */
+export const DEFAULT_LIST_SORT: SortState = SERVER_SORT;
+
+/**
+ * Порядок столбца за подборку, прочитанную не целиком, отдаёт сервер. Пока читается первая порция
+ * или чтение сорвалось, строки показываем из пула: второго запроса порции до этого не шлём.
+ */
+export function serverSortApplies(pool: {
+  readonly complete: boolean;
+  readonly loading: boolean;
+  readonly failed: boolean;
+}): boolean {
+  return !pool.complete && !pool.loading && !pool.failed;
+}
+
 /** Первое нажатие — естественное направление столбца, повторное — обратное. */
 export function nextSort(current: SortState | null, key: SortKey): SortState {
   if (current?.key === key) return { key, dir: current.dir === 'asc' ? 'desc' : 'asc' };
   return { key, dir: DESC_FIRST.includes(key) ? 'desc' : 'asc' };
 }
 
-function moneyValue(item: MatchedVacancyItem, rates?: CurrencyRates): number | undefined {
+/** Деньги строки: зарплата вакансии, а без неё — оценка openqareer, как на сервере (B803). */
+function rowSalary(item: MatchedVacancyItem): MatchedVacancyItem['cluster']['salary'] {
   const salary = item.cluster.salary;
+  if (salary && (salary.from !== undefined || salary.to !== undefined)) return salary;
+  const market = item.explanation.marketSalary;
+  if (!market) return salary;
+  const { low, high, currency, period } = market;
+  return { from: low, to: high, currency, period } as MatchedVacancyItem['cluster']['salary'];
+}
+
+function moneyValue(item: MatchedVacancyItem, rates?: CurrencyRates): number | undefined {
+  const salary = monthlySalary(rowSalary(item), rates);
   const amount = salary?.from ?? salary?.to;
   if (amount === undefined || !salary?.currency) return undefined;
   return convertAmount(amount, salary.currency, 'RUB', rates) ?? amount;
-}
-
-function dateValue(item: MatchedVacancyItem): number | undefined {
-  const time = Date.parse(item.cluster.sources[0]?.observedAt ?? item.cluster.firstObservedAt);
-  return Number.isNaN(time) ? undefined : time;
-}
-
-function fitValue(item: MatchedVacancyItem): number | undefined {
-  const mark = vacancyFitMark(item.explanation.fitView);
-  return mark.kind === 'number' ? mark.percent : undefined;
 }
 
 function textValue(item: MatchedVacancyItem, key: SortKey): string {
@@ -56,32 +78,38 @@ function textValue(item: MatchedVacancyItem, key: SortKey): string {
   return cluster.workFormat ?? '';
 }
 
-function numberValue(
-  item: MatchedVacancyItem,
-  key: SortKey,
-  rates?: CurrencyRates,
-): number | undefined {
-  if (key === 'money') return moneyValue(item, rates);
-  if (key === 'fit') return fitValue(item);
-  return dateValue(item);
-}
-
-const NUMERIC: readonly SortKey[] = ['money', 'fit', 'date'];
-
-function compare(
+function compareColumn(
   left: MatchedVacancyItem,
   right: MatchedVacancyItem,
   sort: SortState,
   rates?: CurrencyRates,
 ): number {
   const sign = sort.dir === 'asc' ? 1 : -1;
-  if (!NUMERIC.includes(sort.key)) {
+  if (sort.key === 'fit') return compareListedFit(left, right, sort.dir);
+  if (sort.key !== 'money' && sort.key !== 'date') {
     return sign * textValue(left, sort.key).localeCompare(textValue(right, sort.key), 'ru-RU');
   }
-  const a = numberValue(left, sort.key, rates);
-  const b = numberValue(right, sort.key, rates);
-  if (a === undefined || b === undefined) return a === b ? 0 : a === undefined ? 1 : -1;
-  return sign * (a - b);
+  const value = (item: MatchedVacancyItem) =>
+    sort.key === 'money' ? moneyValue(item, rates) : listedDay(item);
+  const a = value(left);
+  const b = value(right);
+  if (a === b) return 0;
+  if (a === undefined || b === undefined) return a === undefined ? 1 : -1;
+  return sign * (a < b ? -1 : 1);
+}
+
+/** Столбец главный; второй ключ — процент и дата, у «Совпадения» — дата. */
+function compare(
+  left: MatchedVacancyItem,
+  right: MatchedVacancyItem,
+  sort: SortState,
+  rates?: CurrencyRates,
+): number {
+  return (
+    compareListedGroup(left, right) ||
+    compareColumn(left, right, sort, rates) ||
+    (sort.key === 'fit' ? compareListedDate(left, right) : compareListed(left, right))
+  );
 }
 
 /** Копия по столбцу; строки без значения всегда внизу; `null` — порядок сервера. */

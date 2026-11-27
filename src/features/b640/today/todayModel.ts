@@ -8,7 +8,7 @@ import type { MatchedVacancyItem } from '../../coach/cabinetTypes';
 import type { RoleSkillDemand } from '../../skills/roleSkillDemandApi';
 import type { TodayFunnelCounts, TodayNextInterview, TodayQueueItem } from '../../today/todayApi';
 import { queueActionTitle, queueDesktopSubtitle } from '../../today/todayFormat';
-import { formatCompensationCompact } from '../../vacancies/vacancyCompensation';
+import { formatStatedCompensation } from '../../vacancies/vacancyCompensation';
 import type { IconName } from '../kit';
 import { buildNodePath } from '../routes';
 
@@ -23,6 +23,11 @@ export interface TodayAction {
   readonly shortLabel: string;
   readonly icon: IconName;
   readonly path: string;
+}
+
+interface DayQueue {
+  readonly queue: readonly TodayQueueItem[];
+  readonly queueTotal?: number;
 }
 
 type ActionFace = Pick<TodayAction, 'label' | 'shortLabel' | 'icon' | 'path'>;
@@ -41,12 +46,11 @@ function actionFace(item: TodayQueueItem): ActionFace {
     return { label: 'Подготовиться', shortLabel: 'Готовиться', icon: 'play', path };
   }
   if (item.kind === 'linkedin_post') {
-    return {
-      label: 'Открыть пост',
-      shortLabel: 'Открыть',
-      icon: 'linkedin',
-      path: buildNodePath('a03b'),
-    };
+    // Id черновика в адресе: a03b открывает этот пост, а не первый (B645 s03).
+    const path = item.draftId
+      ? `${buildNodePath('a03b')}?post=${encodeURIComponent(item.draftId)}`
+      : buildNodePath('a03b');
+    return { label: 'Открыть пост', shortLabel: 'Открыть', icon: 'linkedin', path };
   }
   if (item.kind === 'new_vacancy' || item.kind === 'shortlist') {
     const path = item.clusterId
@@ -54,9 +58,14 @@ function actionFace(item: TodayQueueItem): ActionFace {
       : buildNodePath('s07');
     return { label: 'Открыть вакансию', shortLabel: 'Открыть', icon: 'vacancies', path };
   }
-  if (item.material === 'cover_letter' && item.applicationId) {
+  if (item.material === 'letter_draft' && item.applicationId) {
     const path = buildNodePath('o02', { responseId: item.applicationId });
     return { label: 'Проверить письмо', shortLabel: 'Проверить', icon: 'file', path };
+  }
+  if (item.material === 'cover_letter' && item.applicationId) {
+    const path = buildNodePath('o02', { responseId: item.applicationId });
+    // Письмо одобрено (B717): кнопка ведёт к шагу отправки на странице письма.
+    return { label: 'Отправить', shortLabel: 'Отправить', icon: 'send', path };
   }
   return {
     label: 'Открыть отклик',
@@ -67,26 +76,47 @@ function actionFace(item: TodayQueueItem): ActionFace {
 }
 
 /**
- * Подпись строки. У поста — только площадка: служебную приписку очереди
- * («сам не опубликуется») кандидату не показываем.
+ * Подпись строки. У поста — площадка и готовность черновика, как в макете;
+ * служебную приписку очереди («сам не опубликуется») кандидату не показываем.
  */
 function actionSub(item: TodayQueueItem): string {
-  return item.kind === 'linkedin_post' ? 'LinkedIn' : queueDesktopSubtitle(item);
+  return item.kind === 'linkedin_post' ? 'LinkedIn · черновик готов' : queueDesktopSubtitle(item);
+}
+
+/** День без дел по откликам, которые уже стоят в «Событиях откликов»: одна вакансия — одна строка. */
+export function withoutEvents<T extends DayQueue>(day: T, shown: ReadonlySet<string>): T {
+  const queue = day.queue.filter((item) => !item.applicationId || !shown.has(item.applicationId));
+  const removed = day.queue.length - queue.length;
+  if (removed === 0) return day;
+  return {
+    ...day,
+    queue,
+    ...(day.queueTotal === undefined ? {} : { queueTotal: day.queueTotal - removed }),
+  };
+}
+
+/** Заголовок модуля остальных дел: «Ещё 3 дела». */
+export function moreTitle(count: number): string {
+  return `Ещё ${pluralRu(count, ['дело', 'дела', 'дел'])}`;
+}
+
+/**
+ * Подробность главного дела (p.lead-text макета): вакансия, место и деньги.
+ * У поста подробности нет — тема уже в заголовке.
+ */
+export function leadText(item: TodayQueueItem): string | null {
+  if (item.kind === 'linkedin_post') return null;
+  const salary = item.salary ? formatStatedCompensation(item.salary) : null;
+  // Вакансия уже в заголовке («Ваш ход: …», «Новая вакансия: …») — второй раз её не пишем.
+  const title = queueActionTitle(item).includes(item.title) ? null : item.title.trim();
+  const parts = [title, item.location?.trim(), salary === 'не указана' ? null : salary];
+  const text = parts.filter(Boolean).join(' · ');
+  return text || null;
 }
 
 /** Строка очереди дня: что сделать и куда ведёт кнопка в новом кабинете. */
 export function queueAction(item: TodayQueueItem): TodayAction {
   return { title: queueActionTitle(item), sub: actionSub(item), ...actionFace(item) };
-}
-
-/** «13 откликов → 1 интервью → 1 оффер»; без откликов строки нет. */
-export function funnelLine(funnel: TodayFunnelCounts | undefined): string | null {
-  if (!funnel?.applied) return null;
-  return [
-    pluralRu(funnel.applied, ['отклик', 'отклика', 'откликов']),
-    `${funnel.interviews ?? 0} интервью`,
-    pluralRu(funnel.offers, ['оффер', 'оффера', 'офферов']),
-  ].join(' → ');
 }
 
 export interface SkillFit {
@@ -173,7 +203,7 @@ export function vacancyRow(item: MatchedVacancyItem): VacancyRow {
     id: cluster.id,
     title: cluster.canonicalTitle,
     sub: [cluster.canonicalCompany, cluster.canonicalLocation].filter(Boolean).join(' · '),
-    salary: formatCompensationCompact(cluster.salary),
+    salary: formatStatedCompensation(cluster.salary),
     fit: typeof percent === 'number' ? Math.round(percent) : null,
     path: buildNodePath('v04', { vacancyId: cluster.id }),
   };

@@ -5,8 +5,7 @@ import type { HhTextRateController } from './hhTextRate';
 /** Не чаще одного чтения карточки в секунду — медленнее обычного просмотра человеком. */
 const DEFAULT_MIN_INTERVAL_MS = 1_000;
 const DEFAULT_MAX_PENDING_REQUESTS = 40;
-const DESCRIPTION_PATTERN =
-  /<(div|section|article)[^>]*data-qa=["']vacancy-description["'][^>]*>([\s\S]*?)<\/\1>/i;
+const DESCRIPTION_OPEN = /<(div|section|article)[^>]*data-qa=["']vacancy-description["'][^>]*>/i;
 
 export interface HhVacancyDetails {
   readonly description?: string;
@@ -82,9 +81,23 @@ function isHhVacancyUrl(value: string): boolean {
   }
 }
 
+/** Содержимое блока до его собственного закрытия: заголовки внутри текста — тоже `div`. */
+function descriptionHtml(page: string): string {
+  const open = DESCRIPTION_OPEN.exec(page);
+  if (!open) return '';
+  const start = open.index + open[0].length;
+  const tags = new RegExp(`<(/?)${open[1]}\\b[^>]*>`, 'gi');
+  tags.lastIndex = start;
+  let depth = 1;
+  for (let tag = tags.exec(page); tag; tag = tags.exec(page)) {
+    depth += tag[1] ? -1 : 1;
+    if (depth === 0) return page.slice(start, tag.index);
+  }
+  return '';
+}
+
 function descriptionFromPage(page: string): string | undefined {
-  const match = DESCRIPTION_PATTERN.exec(page);
-  const description = match ? htmlToFeedText(match[2]) : '';
+  const description = htmlToFeedText(descriptionHtml(page));
   return description || undefined;
 }
 
@@ -150,6 +163,12 @@ export class HhVacancyDescriptionLoader {
       return false;
     }
     return true;
+  }
+
+  /** B797: сверка живости читает карточку заново, мимо памяти прочитанных. */
+  recheck(url: string): Promise<HhVacancyDetails | undefined> {
+    this.cached.delete(url);
+    return this.load(url);
   }
 
   load(url: string): Promise<HhVacancyDetails | undefined> {

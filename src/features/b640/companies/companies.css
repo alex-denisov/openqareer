@@ -1,0 +1,29 @@
+/* «Компании и люди» (v10, v10b): только то, чего нет в стилях макета; атрибут style в кабинете запрещён. */
+@layer b640.sections {
+  /* Обёртка состояния макета (`.st-in:target`): блок с отступом, строка по ширине содержимого.
+     Только обёртка: у кнопки «Хочу в компанию» тот же класс, она остаётся строчной и прижата вправо. */
+  .b640 div.co-want {
+    display: block;
+    margin-block: var(--career-space-2);
+  }
+
+  /* Шапка карточки (v10b): на 390 действия только в закреплённой панели, по ширине текста и у правого края,
+     «Хочу в компанию» над главным действием, как в макете. */
+  @media (max-width: 767px) {
+    .b640 .co-head > .co-head-acts {
+      display: none;
+    }
+    .b640 .co-head .act-dock {
+      flex-direction: column-reverse;
+      align-items: flex-end;
+      gap: 0;
+      padding-block: var(--career-space-2);
+      background: var(--career-surface);
+      border-block-start-color: var(--career-line-strong);
+    }
+    .b640 .co-head .act-dock > .btn {
+      flex: 0 0 auto;
+      padding-inline: var(--career-space-2);
+    }
+  }
+}

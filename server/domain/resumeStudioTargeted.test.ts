@@ -1,3 +1,4 @@
+import { isSearchIntent } from './resumeSearchIntent';
 import { describe, expect, it } from 'vitest';
 import { buildTargetedResumeSlice } from './resumeStudio';
 import type { ResumeAssertion, ResumeDocument } from './resumeStudio';
@@ -173,6 +174,25 @@ describe('buildTargetedResumeSlice', () => {
     });
   });
 
+  it('matches a Russian language requirement with an English profile entry and a higher level (B713)', () => {
+    const english: ResumeDocument = {
+      ...master,
+      languages: [
+        { id: 'en', name: fact('English', 'lang'), cefr: fact('C1', 'lang'), native: null },
+      ] as unknown as ResumeDocument['languages'],
+    };
+    const matched = ['Английский B2', 'Английский язык не ниже B2', 'English C1', 'Знание английского языка'];
+    const missing = ['Английский C2', 'Немецкий B1', 'Английский B2 и SQL'];
+
+    const result = buildTargetedResumeSlice(english, {
+      title: 'COO',
+      requirements: [...matched, ...missing],
+    });
+
+    expect(result.matchedRequirements).toEqual(matched);
+    expect(result.missingRequirements).toEqual(missing);
+  });
+
   it('prioritizes supported facts, keeps every role described, and keeps unsupported requirements visible', () => {
     const result = buildTargetedResumeSlice(master, {
       title: 'Инженер платформы',
@@ -203,6 +223,38 @@ describe('buildTargetedResumeSlice', () => {
     expect(documentFacts(result.document).every((value) => masterValues.has(value))).toBe(true);
   });
 
+  it('навыки вакансии первыми, строки о поиске работы в опыт не попадают (B785)', () => {
+    const intent =
+      'Pausing active client work to pursue a senior leadership role (VP of Tech / COO) where AI can be applied.';
+    const place = master.experience[0]!;
+    const withIntent: ResumeDocument = {
+      ...master,
+      experience: [
+        {
+          ...place,
+          description: fact(`Led 12 engineers.\n${intent}`, 'description'),
+          bullets: [...place.bullets, fact(intent, 'intent')],
+        },
+      ],
+    };
+    const { document } = buildTargetedResumeSlice(withIntent, {
+      title: 'CTO',
+      requirements: ['PostgreSQL'],
+    });
+    expect(document.skills?.map((skill) => skill.name)).toEqual(['PostgreSQL', 'Kubernetes']);
+    expect(document.experience[0]?.bullets).toEqual(place.bullets);
+    expect(document.experience[0]?.description?.value).toBe('Led 12 engineers.');
+  });
+
+  it.each([
+    ['Open to CTO and VP roles', true],
+    ['Ищу позицию технического директора', true],
+    ['Приостановил консалтинг, чтобы найти роль CTO', true],
+    ['Built a search for people looking for jobs', false],
+    ['Paused the rollout to pursue a safer migration', false],
+    ['Искал и нанимал разработчиков', false],
+  ])('%s', (text, expected) => expect(isSearchIntent(text)).toBe(expected));
+
   it('keeps every place described when no requirement matches the profile wording (B713)', () => {
     const result = buildTargetedResumeSlice(master, {
       title: 'Операционный директор',
@@ -210,10 +262,13 @@ describe('buildTargetedResumeSlice', () => {
     });
 
     expect(result.matchedRequirements).toEqual([]);
-    expect(result.document.experience.map((role) => role.id)).toEqual(['operations', 'platform', 'sales']);
-    for (const [index, role] of result.document.experience.entries()) {
-      expect(role.bullets).toEqual(master.experience[index]?.bullets);
+    // B785: разделы «О себе» и «Навыки» не пропадают.
+    expect(result.document.about).toBe(master.about);
+    expect(result.document.skills).toEqual(master.skills);
+    expect(result.document.experience.map((role) => role.id)).toEqual(['platform', 'operations', 'sales']);
+    for (const role of result.document.experience) {
+      expect(role.bullets).toEqual(master.experience.find((item) => item.id === role.id)?.bullets);
     }
-    expect(result.detailedExperienceIds).toEqual(['operations', 'platform', 'sales']);
+    expect(result.detailedExperienceIds).toEqual(['platform', 'operations', 'sales']);
   });
 });

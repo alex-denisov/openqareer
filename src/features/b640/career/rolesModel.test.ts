@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProposedRole } from '../../../../shared/roleProposals';
 import {
+  sourcesLine,
   buildRoleRows,
   compareCheckTag,
   searchStrip,
@@ -130,10 +131,8 @@ describe('buildRoleRows', () => {
 });
 
 describe('searchStrip', () => {
-  const rows = buildRoleRows(ROLES, ['Руководитель разработки'], []);
-
-  it('одна роль: название и число вакансий', () => {
-    expect(searchStrip(rows, ['Руководитель разработки'])).toEqual({
+  it('одна роль: название и число вакансий выбора', () => {
+    expect(searchStrip(['Руководитель разработки'], 64)).toEqual({
       title: 'Руководитель разработки',
       count: '64 вакансии · по подборке за 30 дней',
     });
@@ -141,18 +140,18 @@ describe('searchStrip', () => {
 
   it('несколько ролей: первая и «ещё N»', () => {
     expect(
-      searchStrip(rows, ['Руководитель разработки', 'Директор по разработке', 'Head of Platform'])
+      searchStrip(['Руководитель разработки', 'Директор по разработке', 'Head of Platform'], 912)
         ?.title,
     ).toBe('Руководитель разработки и ещё 2');
   });
 
   it('роль не выбрана — null', () => {
-    expect(searchStrip(rows, [])).toBeNull();
+    expect(searchStrip([], 10)).toBeNull();
   });
 
-  it('без числа вакансий подпись пустая', () => {
-    const own = buildRoleRows([], ['Архитектор'], []);
-    expect(searchStrip(own, ['Архитектор'])?.count).toBeNull();
+  it('число не прочитано или ноль — подпись пустая', () => {
+    expect(searchStrip(['Архитектор'], null)?.count).toBeNull();
+    expect(searchStrip(['Архитектор'], 0)?.count).toBeNull();
   });
 });
 
@@ -172,5 +171,81 @@ describe('compareCheckTag', () => {
       ok: true,
     });
     expect(compareCheckTag(row(null))).toEqual({ text: 'не начата', ok: false });
+  });
+});
+
+describe('B764: проверка, пройденная под другим названием роли', () => {
+  const checked = [
+    {
+      roleTitle: 'Chief Operating Officer',
+      roleTitleRu: 'Операционный директор (COO)',
+      completedAt: '2026-11-22',
+      confirmedSkills: ['Управление командой', 'Бюджет', 'Найм', 'OKR'],
+      skillCount: 6,
+    },
+  ];
+  const vp = observed('vp', 'VP of Operations', 20, null, { aliases: ['Chief Operating Officer'] });
+  const coo = observed('coo', 'COO', 30, null, { aliases: ['Chief Operating Officer'] });
+  const titlesRu = {
+    'VP of Operations': 'Вице-президент по операциям',
+    COO: 'Операционный директор (COO)',
+  };
+
+  it('B645-2: столбец роли показывает проверку своей роли — чужая по псевдониму «не начата»', () => {
+    const rows = buildRoleRows([vp, coo], ['VP of Operations', 'COO'], checked, titlesRu);
+    const vpRow = rows.find((row) => row.title === 'VP of Operations')!;
+    // Решение оркестратора 23.11: результат другой роли в столбце этой роли не показываем.
+    expect(compareCheckTag(vpRow)).toEqual({ text: 'не начата', ok: false });
+    const cooRow = rows.find((row) => row.title === 'COO')!;
+    // B645 (прод c6dac4fe): столбец COO писал «6 из 6» по модели роли — счёт той же проверки.
+    expect(compareCheckTag(cooRow)).toEqual({ text: 'пройдена · 4 из 6', ok: true });
+  });
+
+  it('прогон под своим названием с числом навыков — его счёт, без «для»', () => {
+    const { roleTitleRu: _ru, ...run } = checked[0]!;
+    const own = [{ ...run, roleTitle: 'COO' }];
+    const [row] = buildRoleRows([coo], ['COO'], own, titlesRu);
+    expect(compareCheckTag(row!)).toEqual({ text: 'пройдена · 4 из 6', ok: true });
+  });
+});
+
+/** B737: роль — ключ на английском, кандидату её название показывается по-русски. */
+describe('role label (B737)', () => {
+  const COO = 'Chief Operating Officer';
+  const TITLES_RU = { [COO]: 'Операционный директор (COO)' };
+
+  it('строка роли берёт titleRu ответа, ключ title не меняется', () => {
+    const role = observed('coo', COO, 12, null, { titleRu: 'Операционный директор (COO)' });
+    const [row] = buildRoleRows([role], [COO], []);
+    expect(row).toMatchObject({
+      title: COO,
+      label: 'Операционный директор (COO)',
+      origin: 'search',
+    });
+  });
+
+  it('роль только из поиска берёт словарь кампании, без перевода — исходное название', () => {
+    const rows = buildRoleRows([], [COO, 'Директор по чудесам'], [], TITLES_RU);
+    expect(rows.map((row) => [row.title, row.label])).toEqual([
+      [COO, 'Операционный директор (COO)'],
+      ['Директор по чудесам', 'Директор по чудесам'],
+    ]);
+  });
+
+  it('полоса «Роль поиска» показывает русское название первой роли', () => {
+    expect(searchStrip([COO, 'CTO'], null, TITLES_RU)?.title).toBe(
+      'Операционный директор (COO) и ещё 1',
+    );
+    expect(searchStrip([COO], null)?.title).toBe(COO);
+  });
+});
+
+describe('B645-2 s09: строка источников короткая', () => {
+  it('главный источник и «и ещё N»', () => {
+    expect(sourcesLine(['hh.ru'])).toBe('hh.ru');
+    expect(sourcesLine(['hh.ru', 'Indeed', 'сайты компаний', 'LinkedIn', 'RSS-лента'])).toBe(
+      'hh.ru и ещё 4',
+    );
+    expect(sourcesLine([])).toBe('');
   });
 });

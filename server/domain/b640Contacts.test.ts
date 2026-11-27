@@ -41,6 +41,16 @@ describe('B697: список контактов', () => {
     expect(list.items.find((item) => item.id === 'x')).toMatchObject({ link: 'intro', linkNote: 'общий знакомый: Игорь Шаталов' });
   });
 
+  it('B645: обрывок заголовка вместо компании — строка без компании, в фасет не идёт', () => {
+    const contacts = [
+      contact({ id: 'a', fullName: 'Анна Ким', companyName: 'Альфа' }),
+      contact({ id: 'b', fullName: 'Борис', companyName: 'кибербезопасности' }),
+    ];
+    const list = buildB640ContactList(input(contacts), query);
+    expect(list.items.find((item) => item.id === 'b')?.companyName).toBe('');
+    expect(list.facets.companies).toEqual([{ name: 'Альфа', count: 1 }]);
+  });
+
   it('поиск без регистра, фильтры, фасеты по поиску без своего фильтра', () => {
     const contacts = [
       contact({ id: 'a', fullName: 'Анна Ким', companyName: 'Альфа' }),
@@ -114,5 +124,20 @@ describe('B697: список контактов', () => {
       query,
     );
     expect(list.items[0]).toMatchObject({ link: 'none', linkNote: null });
+  });
+
+  it('B645 a02: имя без эмодзи, компания вместо человека не попадает, должность до « | » или « at »', () => {
+    const list = buildB640ContactList(
+      input([
+        contact({ id: 'a', fullName: '🟠Ирена Иванова' }),
+        contact({ id: 'b', fullName: "3G AGENT Co., Ltd (ASEAN) We're specializing in Recruitment", roleTitle: 'Recruitment' }),
+        contact({ id: 'c', fullName: 'Олег', roleTitle: 'CPO at Positive Technologies | AppSec Product Portfolio $50M+' }),
+      ]),
+      query,
+    );
+    expect(list.items.map((item) => [item.id, item.fullName, item.roleTitle])).toEqual([
+      ['a', 'Ирена Иванова', 'Рекрутер'],
+      ['c', 'Олег', 'CPO'],
+    ]);
   });
 });

@@ -41,6 +41,11 @@
       "family": "it-ops.sysadmin-support",
       "titleEn": "System Administrator",
       "titleRu": "Системный администратор",
+      "forms": {
+        "toBecome": "системные администраторы",
+        "genitive": "системного администратора",
+        "instrumental": "системным администратором"
+      },
       "levels": [
         "ic"
       ],
@@ -166,6 +171,11 @@
       "family": "it-ops.sre-devops",
       "titleEn": "DevOps Engineer",
       "titleRu": "DevOps-инженер",
+      "forms": {
+        "toBecome": "DevOps-инженеры",
+        "genitive": "DevOps-инженера",
+        "instrumental": "DevOps-инженером"
+      },
       "levels": [
         "ic"
       ],
@@ -258,7 +268,7 @@
       "function": "it-ops",
       "family": "it-ops.leadership",
       "titleEn": "Head of IT Operations",
-      "titleRu": "Руководитель ИТ-инфраструктуры",
+      "titleRu": "Руководитель ИТ-эксплуатации",
       "levels": [
         "head"
       ],
@@ -270,6 +280,7 @@
           "Director of IT Operations"
         ],
         "ru": [
+          "Руководитель ИТ-эксплуатации",
           "Руководитель ИТ-инфраструктуры",
           "Начальник отдела эксплуатации"
         ]

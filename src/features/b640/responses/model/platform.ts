@@ -9,13 +9,20 @@ export interface Platform {
 }
 
 const KNOWN: readonly (readonly [RegExp, string])[] = [
-  [/^hh(\.ru)?$/u, 'hh.ru'],
+  [/^hh(\.ru)?(?:[-._].*)?$/u, 'hh.ru'],
+  [/^indeed/u, 'Indeed'],
   [/^linkedin/u, 'LinkedIn'],
   [/^telegram/u, 'Telegram'],
   [/^remotive$/u, 'Remotive'],
   [/^trudvsem$/u, 'ТрудВсем'],
-  [/^himalayas$/u, 'Himalayas'],
+  [/^himalayas/u, 'Himalayas'],
 ];
+/** Коды freehire «src-fh-…»: из них площадки вакансий — эти, остальные — карьерные сайты компаний. */
+const FREEHIRE = /^fh[-._](.+)$/u;
+const FREEHIRE_PLATFORMS: ReadonlyMap<string, string> = new Map([
+  ['getmatch', 'Getmatch'],
+  ['habr-career', 'Хабр Карьера'],
+]);
 const SITE: Platform = { label: 'сайт компании', site: true };
 /**
  * Внутренние обозначения источника: доска работодателя (`ats-ashby-snowflake`), тип чтения
@@ -28,11 +35,37 @@ export function platformOf(source: string | null | undefined): Platform {
   if (!raw) return SITE;
   // Пометка в скобках («hh.ru (страница поиска)») — внутреннее различие сбора, её убираем первой.
   const name = vacancySourceDisplayName(raw);
-  const lower = name.toLowerCase();
+  // Коды сбора «src-hh-search», «src-indeed»: приставка — внутреннее имя канала, не площадка.
+  const lower = name.toLowerCase().replace(/^src[-._]/u, '');
+  const feed = FREEHIRE.exec(lower)?.[1];
+  if (feed) {
+    const label = FREEHIRE_PLATFORMS.get(feed);
+    return label ? { label, site: false } : SITE;
+  }
   if (INTERNAL.test(lower)) return SITE;
   const known = KNOWN.find(([pattern]) => pattern.test(lower));
   if (known) return { label: known[1], site: false };
-  return { label: name.charAt(0).toUpperCase() + name.slice(1), site: false };
+  const bare = name.replace(/^src[-._]/iu, '');
+  return { label: bare.charAt(0).toUpperCase() + bare.slice(1), site: false };
+}
+
+interface PlacedVacancy {
+  readonly clusterId?: string | null;
+  readonly vacancy?: { readonly source?: string; readonly company?: string } | null;
+}
+
+const ATS_CLUSTER = /^cluster-ats[-._]/u;
+
+/**
+ * Площадка отклика. Доски работодателей называют источник именем компании («Q-Tech»): это сайт
+ * компании, а не площадка (B801).
+ */
+export function responsePlatform({ clusterId, vacancy }: PlacedVacancy): Platform {
+  const platform = platformOf(vacancy?.source);
+  if (platform.site || KNOWN.some(([, label]) => label === platform.label)) return platform;
+  const same = platform.label.toLowerCase() === vacancy?.company?.trim().toLowerCase();
+  const listed = [...FREEHIRE_PLATFORMS.values()].includes(platform.label);
+  return !listed && (same || ATS_CLUSTER.test(clusterId ?? '')) ? SITE : platform;
 }
 
 /** «через hh.ru», «через сайт компании». */

@@ -124,7 +124,7 @@ function PeopleBody({ data }: { readonly data: AdaptationData }) {
         />
       ) : null}
       {open?.kind === 'meeting' ? (
-        <MeetingDialog people={people} chosen={open.personId} onClose={() => setOpen(null)} onSave={async (personId, date) => setMap(await scheduleMeeting(id, personId, date))} />
+        <MeetingDialog people={people} chosen={open.personId} onClose={() => setOpen(null)} onSave={async (personId, date, topic) => setMap(await scheduleMeeting(id, personId, date, topic))} />
       ) : null}
     </>
   );

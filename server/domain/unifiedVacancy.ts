@@ -80,6 +80,8 @@ export interface UnifiedVacancy {
   descriptionHidden?: boolean;
   /** Сколько раз hh ответил «доступ ограничен»: на втором ответе текст считается скрытым. */
   descriptionHiddenSeen?: number;
+  /** B794: страница прочитана целиком, текст и правда короткий: повторно не читается. */
+  descriptionShort?: boolean;
   /** Отпечаток «название + полный текст» (01.11): проекция сведения несёт его вместо текста. */
   textKey?: string;
   /** Область удалёнки (`shared/remoteScope`): считается при записи проекции из полного текста. */
@@ -109,6 +111,11 @@ export interface VacancyCluster {
   id: string;
   canonicalTitle: string;
   canonicalCompany: string;
+  /**
+   * B756 23.11: площадка не назвала работодателя. `canonicalCompany` тогда пустая строка —
+   * поле обязательно в договоре с кабинетом; признак говорит «компания не указана» явно.
+   */
+  companyUnspecified?: true;
   /** `canonicalCompany` — имя частного лица по признаку площадки (INC-023). */
   employerIsPerson?: boolean;
   canonicalLocation?: string;

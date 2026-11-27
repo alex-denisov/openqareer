@@ -1,182 +1,66 @@
+import { UnclusteredCatchUp } from './unclusteredCatchUpStep';
 import type { RoleLinkStep } from '../vacancies/titleParse/roleLinkStep';
 import type { PlacementBackfillTicker } from '../companyDirectory/placement/placementBackfill';
 import type { CareersPruneTicker } from '../companyDirectory/siteDiscovery/careersPrune';
 import type { AggregatorCompanyTicker } from '../companyDirectory/placement/aggregatorBackfill';
 import type { FreehireCandidatesPromoteTicker } from '../companyDirectory/freehire/freehireCandidatesPromote';
 import { CATALOG_TOTALS_REFRESH_MS } from '../vacancies/matchedCatalogSummary';
-import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 import { mapWithConcurrency } from '../vacancies/boundedConcurrency';
 import type { LinkCheckCensus } from '../vacancies/linkLivenessProbe';
 import { MemoryGuard, readProcessHeap, type HeapReading } from '../vacancies/memoryGuard';
 import { collectDiskTelemetry } from '../vacancies/diskCapacity';
-import type { LinkedinPoolExecutorReport } from '../linkedinPool/companyPageExecutor';
 import type { WorkdayDescriptionReport } from '../vacancies/workdayDescriptions';
 import type { HhCatalogTextReport } from '../vacancies/hhCatalogText';
+import { startSelectionLiveness } from './selectionLivenessStep';
 import {
   SYNC_BATCH_LIMIT,
   type RequestedSourceSync,
   type SourceSyncOutcome,
 } from '../vacancies/multiSourceVacancyEngine';
 import { timedStep } from './stepTiming';
+import { nextStorePassDelayMs, runStorePass, STORE_PASS_DELAY_MS } from './storePass';
+import { guardStep } from './guardStep';
+import type { StorePassMark } from './storePassMark';
+import {
+  CATALOG_STEP_CHUNK,
+  CATALOG_TOTALS_TICK_MS,
+  CLUSTER_KEYS_STEP_CHUNK,
+  DEFAULT_MAINTENANCE_INTERVALS,
+  DEFAULT_STOP_GRACE_MS,
+  DESCRIPTION_SKILLS_STEP_CHUNK,
+  ORPHAN_CLUSTERS_REST_MS,
+  ORPHAN_CLUSTERS_STEP_CHUNK,
+  PLACEMENT_INTERVAL_MS,
+  ROLE_LINK_INTERVAL_MS,
+  TITLE_PARSE_IDLE_BUDGET_MS,
+  TITLE_PARSE_PROGRESS_INTERVAL_MS,
+  TITLE_PARSE_STEP_CHUNK,
+  type MaintenanceEngine,
+  type MaintenanceIntervals,
+  type MaintenanceLinkedinPoolExecutor,
+  type MaintenanceLog,
+  type SyncWaveReport,
+  type TitleModelStep,
+  type TitleParseStep,
+} from './maintenanceContracts';
 
-/** Тот же контракт, что у `fastify.log`: объект контекста, потом сообщение. */
-export interface MaintenanceLog {
-  info(context: Record<string, unknown>, message: string): void;
-  warn(context: Record<string, unknown>, message: string): void;
-  error(context: Record<string, unknown>, message: string): void;
-}
-
-/** Ровно то, что обслуживатель просит у движка — остальное ему не нужно. */
-export interface MaintenanceEngine {
-  getSources(): VacancySourceConfig[];
-  replanCompany?(companyKey: string): boolean;
-  restoreAsync(
-    nowMs?: number,
-    chunkSize?: number,
-    options?: { prune?: boolean; backfill?: boolean },
-  ): Promise<{ restored: number }>;
-  maintainStoreAsync(
-    nowMs?: number,
-    shouldStop?: () => boolean,
-  ): Promise<{ backfillWindows: number }>;
-  syncSource(sourceId: string): Promise<SourceSyncOutcome>;
-  syncDue(nowMs?: number): Promise<SourceSyncOutcome[]>;
-  getRequestedSourceSyncs(): RequestedSourceSync[];
-  markSourceSyncStarted(request: RequestedSourceSync, startedAt?: string): boolean;
-  clearSourceSyncRequest(request: RequestedSourceSync): boolean;
-  probeDueLinks(nowMs?: number): Promise<LinkCheckCensus | undefined>;
-  probeUnseenEmployerLinks(
-    nowMs?: number,
-  ): Promise<{ checked: number; gone: number; open: number; unknown: number }>;
-  runCatalogMaintenanceStep(chunk?: number): { processed: number; pending: number } | undefined;
-  runClusterKeysBackfillStep(chunk?: number): number;
-  runDescriptionSkillsStep?(chunk?: number): {
-    inspected: number;
-    updated: number;
-    passFinished: boolean;
-  };
-  runWorkdayDescriptionStep?(): Promise<WorkdayDescriptionReport>;
-  runHhCatalogTextStep?(): Promise<HhCatalogTextReport>;
-  runOrphanClusterStep?(chunk?: number): {
-    inspected: number;
-    removed: number;
-    passFinished: boolean;
-  };
-  readonly clusterKeysReady: boolean;
-  /** B485: итоги каталога для сводки подборки после сведения пула. */
-  refreshCatalogTotals?(observedAt: string): unknown;
-  getCatalogTotals?(): { readonly computedAt?: string } | undefined;
-  readonly poolSize: number;
-  /** B649-4: тот же счёт в своём потоке, для строки памяти раз в минуту. */
-  poolSizeInWorker?(): Promise<number>;
-}
-
-export interface SyncWaveReport {
-  readonly synced: number;
-  readonly failed: readonly string[];
-  readonly kept: number;
-  readonly skipped?: 'stopped' | 'memory' | 'keys';
-}
-
-export interface MaintenanceIntervals {
-  readonly manualSyncMs: number;
-  readonly syncMs: number;
-  readonly livenessMs: number;
-  readonly catalogMs: number;
-  readonly reportMs: number;
-  readonly titleParseMs: number;
-  readonly titleModelMs: number;
-  readonly descriptionSkillsMs?: number;
-  readonly workdayDescriptionMs?: number;
-  readonly hhCatalogTextMs?: number;
-  readonly orphanClustersMs?: number;
-  readonly linkedinPoolExecutorMs: number;
-  readonly recruiterPurgeMs: number;
-}
-
-export interface MaintenanceLinkedinPoolExecutor {
-  runStep(): Promise<LinkedinPoolExecutorReport>;
-  stop(): Promise<void> | void;
-}
-
-/** Шаг смыслового индекса (B267 S2): одна порция разметки пула правилами. */
-export interface TitleParseStep {
-  step(chunk: number): {
-    scanned: number;
-    poolRowsScanned: number;
-    backfilled: number;
-    newKeys: number;
-    pruned: number;
-    passFinished: boolean;
-  };
-  countKeys(): number;
-}
-
-const ROLE_LINK_INTERVAL_MS = 60_000;
-/** B643-3: размещения компаний — такт раз в 5 с, пока идёт проход. */
-const PLACEMENT_INTERVAL_MS = 5_000;
-
-export interface TitleModelStep {
-  run(): Promise<{
-    batches: number;
-    parsed: number;
-    refused: number;
-    frozen: number;
-    callsToday: number;
-    dailyCapReached: boolean;
-    ms: number;
-  }>;
-}
-
-/**
- * Сколько `stop()` ждёт текущую волну. Обход hh.ru (B219) — это часы, и он
- * возобновляется с сохранённого курсора, поэтому ждать его целиком нельзя:
- * после этого срока волна бросается, хранилища закрываются, процесс выходит.
- * `TimeoutStopSec` юнита — 300 с — страховка сверху для production restore.
- */
-export const DEFAULT_STOP_GRACE_MS = 60_000;
-
-export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
-  manualSyncMs: 5 * 1_000,
-  syncMs: 5 * 60 * 1_000,
-  livenessMs: 15 * 60 * 1_000,
-  catalogMs: 1_000,
-  reportMs: 60 * 1_000,
-  titleParseMs: 5 * 1_000,
-  titleModelMs: 30 * 1_000,
-  descriptionSkillsMs: 10 * 1_000,
-  // Такт дочитывания текста (B535): Workday и др. — до двух запросов на хост
-  // раз в 20 с, LinkedIn — один раз в 10–20 с случайно; темп держит сам шаг.
-  workdayDescriptionMs: 10 * 1_000,
-  // До 10 карточек hh за тик при 1 чтении в секунду у загрузчика (B535).
-  hhCatalogTextMs: 3 * 1_000,
-  // 500 кластеров за 2 с: проход прода (~710 тыс.) ≈ 47 мин, потом час покоя (B535).
-  orphanClustersMs: 2 * 1_000,
-  linkedinPoolExecutorMs: 30 * 1_000,
-  recruiterPurgeMs: 24 * 60 * 60 * 1_000,
-};
-
-/** Ключей индекса за шаг разметки: окно O(chunk), одна короткая транзакция. */
-export const TITLE_PARSE_STEP_CHUNK = 500;
-const TITLE_PARSE_PROGRESS_INTERVAL_MS = 5 * 60 * 1_000;
-/** Сколько тик может проходить уже размеченные окна подряд. */
-const TITLE_PARSE_IDLE_BUDGET_MS = 300;
-
-/** Как часто таймер проверяет, не пора ли пересчитать итоги каталога (B510). */
-const CATALOG_TOTALS_TICK_MS = 60 * 1_000;
-
-/** Столько строк проекции каталога за один такт: одна короткая транзакция. */
-export const CATALOG_STEP_CHUNK = 500;
-
-/** Кластеров за один шаг заполнения ключей: ~5 000 строк ключей в транзакции. */
-export const CLUSTER_KEYS_STEP_CHUNK = 500;
-
-/** Строк описаний за один шаг извлечения навыков: короткая транзакция (B307). */
-export const DESCRIPTION_SKILLS_STEP_CHUNK = 500;
-
-/** Кластеров за шаг очистки сирот: ~50 мс на VM прода по замеру 21.10 (B535). */
-export const ORPHAN_CLUSTERS_STEP_CHUNK = 500;
-const ORPHAN_CLUSTERS_REST_MS = 60 * 60 * 1_000;
+export { STORE_PASS_MIN_GAP_MS } from './storePass';
+export {
+  CATALOG_STEP_CHUNK,
+  CLUSTER_KEYS_STEP_CHUNK,
+  DEFAULT_MAINTENANCE_INTERVALS,
+  DEFAULT_STOP_GRACE_MS,
+  DESCRIPTION_SKILLS_STEP_CHUNK,
+  ORPHAN_CLUSTERS_STEP_CHUNK,
+  TITLE_PARSE_STEP_CHUNK,
+  type MaintenanceEngine,
+  type MaintenanceIntervals,
+  type MaintenanceLinkedinPoolExecutor,
+  type MaintenanceLog,
+  type SyncWaveReport,
+  type TitleModelStep,
+  type TitleParseStep,
+} from './maintenanceContracts';
 
 /**
  * Цикл обслуживания пула вакансий (B230, срез 1). Живёт в своём процессе с
@@ -211,7 +95,8 @@ export class MaintenanceWorker {
   private readonly memoryGuard: MemoryGuard;
   private readonly readHeap: () => HeapReading;
   private readonly timers: NodeJS.Timeout[] = [];
-  private readonly inFlight = new Set<Promise<unknown>>();
+  /** Идущая работа и её имя: остановка называет в журнале, чего не дождалась (B759). */
+  private readonly inFlight = new Map<Promise<unknown>, string>();
   private readonly manualInFlight = new Set<string>();
   private readonly titleParse?: TitleParseStep;
   private readonly titleModel?: TitleModelStep;
@@ -225,9 +110,11 @@ export class MaintenanceWorker {
   private linkedinPoolSkipStatus: string | undefined;
   private readonly purgeRecruiters?: () => number;
   private readonly databasePath?: string;
+  private readonly storePassMark?: StorePassMark;
   private readonly now: () => number;
   private diskLowLogged = false;
   private orphanRestUntil = 0;
+  private readonly catchUp: UnclusteredCatchUp;
   /** Время последнего расчёта итогов; `undefined`, пока не прочитано из базы. */
   private catalogTotalsAt: number | undefined;
   private catalogTotalsRunning = false;
@@ -245,6 +132,8 @@ export class MaintenanceWorker {
     startedAt: Date.now(),
   };
   private stopped = false;
+  /** B759: идёт фоновая чистка — второй проход поверх неё не начинается. */
+  private storePassRunning = false;
 
   constructor(options: {
     engine: MaintenanceEngine;
@@ -261,8 +150,10 @@ export class MaintenanceWorker {
     linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
     purgeRecruiters?: () => number;
     databasePath?: string;
+    storePassMark?: StorePassMark;
     now?: () => number;
   }) {
+    this.storePassMark = options.storePassMark;
     this.now = options.now ?? Date.now;
     this.engine = options.engine;
     this.titleParse = options.titleParse;
@@ -279,6 +170,7 @@ export class MaintenanceWorker {
     this.intervals = { ...DEFAULT_MAINTENANCE_INTERVALS, ...options.intervals };
     this.readHeap = options.readHeap ?? readProcessHeap;
     this.memoryGuard = new MemoryGuard(this.readHeap);
+    this.catchUp = new UnclusteredCatchUp(this.engine, this.log, this.now, () => this.stopped);
   }
 
   /**
@@ -302,25 +194,20 @@ export class MaintenanceWorker {
       'maintenance-restored',
     );
     await this.backfillClusterKeys();
-    await this.maintainStore();
     return result;
   }
 
-  private async maintainStore(): Promise<void> {
-    const startedAt = Date.now();
-    try {
-      const { backfillWindows } = await this.engine.maintainStoreAsync(
-        Date.now(),
-        () => this.stopped,
-      );
-      this.log.info({ backfillWindows, ms: Date.now() - startedAt }, 'maintenance-store-pass');
-    } catch (error) {
-      // Чистка не условие работы: сбой виден в журнале, волны идут дальше.
-      this.log.error(
-        { errorName: (error as Error).name, message: (error as Error).message },
-        'maintenance-store-pass-failed',
-      );
-    }
+  /** Фоновая чистка пула (B759): `stop()` её дожидается, она сама прерывается. */
+  private runStorePass(): Promise<void> {
+    const pass = runStorePass({
+      maintainStoreAsync: (nowMs, shouldStop, options) =>
+        this.engine.maintainStoreAsync(nowMs, shouldStop, options),
+      ...(this.storePassMark ? { mark: this.storePassMark } : {}),
+      stopped: () => this.stopped,
+      now: this.now,
+      log: this.log,
+    });
+    return this.track(pass, 'maintenance-store-pass-failed', undefined);
   }
 
   /**
@@ -746,14 +633,13 @@ export class MaintenanceWorker {
       poolSize = null;
     }
     const heap = this.readHeap();
-    const rss = process.memoryUsage().rss;
     const disk = collectDiskTelemetry(this.databasePath, this.log, this.diskLowLogged);
     this.diskLowLogged = disk.diskLow;
     this.log.info(
       {
         heapUsedMb: Math.round(heap.heapUsedBytes / (1024 * 1024)),
         heapLimitMb: Math.round(heap.heapLimitBytes / (1024 * 1024)),
-        rssMb: Math.round(rss / (1024 * 1024)),
+        rssMb: Math.round(process.memoryUsage().rss / (1024 * 1024)),
         poolSize,
         ingestPaused: this.memoryGuard.isPaused,
         ...disk.fields,
@@ -782,27 +668,23 @@ export class MaintenanceWorker {
 
   /** Заводит таймеры; первая волна — сразу, остальное по расписанию. */
   start(): void {
-    const every = (ms: number, tick: () => unknown, name = stepName(tick)) => {
+    const every = (ms: number | undefined, tick: () => unknown, name = stepName(tick)) => {
+      if (!ms) return;
       const timed = timedStep(name, tick);
-      const timer = setInterval(() => void timed(), ms);
+      const timer = setInterval(() => guardStep(this.log, name, timed), ms);
       this.timers.push(timer);
     };
     every(this.intervals.manualSyncMs, () => this.runManualSyncWave());
     every(this.intervals.syncMs, () => this.runSyncWave());
     every(this.intervals.livenessMs, () => this.runLivenessProbe());
     every(this.intervals.catalogMs, () => this.runCatalogStep());
-    if (this.intervals.descriptionSkillsMs) {
-      every(this.intervals.descriptionSkillsMs, () => this.runDescriptionSkillsStep());
-    }
-    if (this.intervals.workdayDescriptionMs) {
-      every(this.intervals.workdayDescriptionMs, () => this.runWorkdayDescriptionStep());
-    }
-    if (this.intervals.orphanClustersMs) {
-      every(this.intervals.orphanClustersMs, () => this.runOrphanClusterStep());
-    }
-    if (this.intervals.hhCatalogTextMs) {
-      every(this.intervals.hhCatalogTextMs, () => this.runHhCatalogTextStep());
-    }
+    every(this.intervals.descriptionSkillsMs, () => this.runDescriptionSkillsStep());
+    every(this.intervals.workdayDescriptionMs, () => this.runWorkdayDescriptionStep());
+    every(this.intervals.orphanClustersMs, () => this.runOrphanClusterStep());
+    // B763: догон записей без кластера, см. `unclusteredCatchUpStep.ts`.
+    every(this.intervals.unclusteredCatchUpMs, () => this.catchUp.run(), 'runUnclusteredCatchUp');
+    every(this.intervals.hhCatalogTextMs, () => this.runHhCatalogTextStep());
+    this.timers.push(...startSelectionLiveness(this.engine, this.log, () => this.stopped));
     every(this.intervals.reportMs, () => this.reportMemory());
     if (this.purgeRecruiters) {
       every(this.intervals.recruiterPurgeMs, () =>
@@ -824,9 +706,40 @@ export class MaintenanceWorker {
       every(this.intervals.linkedinPoolExecutorMs, () => this.runLinkedinPoolExecutorStep());
     }
     every(CATALOG_TOTALS_TICK_MS, () => this.refreshCatalogTotals());
-    void timedStep('runManualSyncWave', () => this.runManualSyncWave())();
-    void timedStep('runSyncWave', () => this.runSyncWave())();
-    timedStep('refreshCatalogTotals', () => this.refreshCatalogTotals())();
+    const once = (name: string, tick: () => unknown) =>
+      guardStep(this.log, name, timedStep(name, tick));
+    once('runManualSyncWave', () => this.runManualSyncWave());
+    once('runSyncWave', () => this.runSyncWave());
+    once('refreshCatalogTotals', () => this.refreshCatalogTotals());
+    this.scheduleStorePass();
+  }
+
+  /**
+   * B759: чистка пула — после первых волн, не на старте, и дальше раз в 6 ч от отметки:
+   * без рестарта она тоже идёт. Следующий проход ставится, только когда текущий кончился.
+   */
+  private scheduleStorePass(
+    delayMs = this.intervals.storePassDelayMs ?? STORE_PASS_DELAY_MS,
+  ): void {
+    if (this.stopped) return;
+    const timer = setTimeout(() => {
+      const index = this.timers.indexOf(timer);
+      if (index >= 0) this.timers.splice(index, 1);
+      guardStep(this.log, 'runScheduledStorePass', () => this.runScheduledStorePass());
+    }, delayMs);
+    this.timers.push(timer);
+  }
+
+  private async runScheduledStorePass(): Promise<void> {
+    if (this.stopped || this.storePassRunning) return;
+    this.storePassRunning = true;
+    try {
+      await this.runStorePass();
+    } finally {
+      this.storePassRunning = false;
+    }
+    const last = this.storePassMark?.lastFinishedMs() ?? null;
+    this.scheduleStorePass(nextStorePassDelayMs(last, this.now()));
   }
 
   /**
@@ -901,12 +814,15 @@ export class MaintenanceWorker {
       timer = setTimeout(() => resolve('timeout'), graceMs);
     });
     const outcome = await Promise.race([
-      Promise.allSettled(Array.from(this.inFlight)).then(() => 'finished' as const),
+      Promise.allSettled(Array.from(this.inFlight.keys())).then(() => 'finished' as const),
       deadline,
     ]);
     if (timer) clearTimeout(timer);
     if (outcome === 'timeout') {
-      this.log.warn({ graceMs }, 'maintenance-stop-wave-abandoned');
+      this.log.warn(
+        { graceMs, pending: Array.from(this.inFlight.values()) },
+        'maintenance-stop-wave-abandoned',
+      );
       return { waveFinished: false };
     }
     return { waveFinished: true };
@@ -921,7 +837,7 @@ export class MaintenanceWorker {
       .finally(() => {
         this.inFlight.delete(tracked);
       });
-    this.inFlight.add(tracked);
+    this.inFlight.set(tracked, failureMessage.replace(/-failed$/, ''));
     return tracked;
   }
 }

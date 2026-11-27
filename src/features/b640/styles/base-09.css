@@ -250,6 +250,7 @@
   .b640 .btn.is-line { border-color: var(--career-line-strong); background: transparent; color: var(--career-text); }
   .b640 .btn.is-line:hover { border-color: var(--career-text-dim); background: var(--career-surface-raised); }
   .b640 .panel-col .ec-ib > .ico { display: none; }
+  .b640 .panel-col .ec > .va-pop { position: static; inline-size: auto; }
   .b640 .ec-tip { display: none; }
   @media (max-width: 767px) {
     .b640 .panel-col .chat .msg-acts.ec-acts > .btn.btn { block-size: var(--career-target-min); }
@@ -460,7 +461,7 @@
   .b640 .cb-main { display: grid; gap: var(--career-space-1); flex: 1 1 auto; min-inline-size: 0; }
   .b640 .cb-l { margin: 0; color: var(--career-text-dim); font-size: var(--career-text-xs); font-weight: 600; }
   .b640 .cb-t { margin: 0; color: var(--career-text); font-size: var(--career-text-sm); }
-  .b640 .cb-copy { flex: none; }
+  .b640 .cb-copy { flex: none; inline-size: var(--career-target-min); block-size: var(--career-target-min); }
   .b640 .actions.cb-top { margin: 0; }
   .b640 .cw-list { display: grid; margin: 0; padding: 0; list-style: none; border-block-start: var(--career-border-width) solid var(--career-line); }
   .b640 .cw-list > .cw-row { position: relative; display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.4fr) auto; align-items: center; gap: var(--career-space-3); min-block-size: var(--career-target-min); max-block-size: 56px; padding: var(--career-space-1) var(--career-space-2); border-block-end: var(--career-border-width) solid var(--career-line); }
@@ -578,6 +579,7 @@
   }
   .b640 .lk-dr-top + .lk-draft { margin-block-start: calc(var(--career-space-1) * -1); }
   .b640 .lk-dr-top:has(.var-sw) { align-items: flex-end; }
+  .b640 .lk-dr-top:has(.tag) { align-items: flex-end; }
   @media (max-width: 767px) { .b640 .np-full { row-gap: var(--career-space-4); } }
   .b640 .co-list > .co-novac-s,
   .b640 .co-list > .vl-empty { margin-block-start: 0; }
@@ -611,7 +613,7 @@
     .b640 main .lk-card.is-next > .actions:has(> .is-primary) > .va-popwrap > .btn { inline-size: var(--career-target-min); min-block-size: var(--career-target-min); padding: 0; gap: 0; justify-content: center; font-size: 0; }
     .b640 main .lk-card.is-next > .actions:has(> .is-primary) > .va-popwrap > .btn > .ico { inline-size: var(--career-icon-md); block-size: var(--career-icon-md); }
     .b640 main .lk-card.is-next > .actions:has(> .is-primary) > .row-act { flex: none; margin: 0; }
-    div.b640:has(main .lk-card.is-next > .actions:has(> .is-primary)) main { padding-block-end: calc(var(--career-target-min) + var(--career-space-4)); }
+    div.b640:has(main .lk-card.is-next > .actions > .is-primary) main { padding-block-end: calc(var(--career-target-min) + 2 * var(--career-space-2) + var(--career-border-width) + var(--career-space-4)); }
   }
   @media (max-width: 767px) { .b640 main .lk-card.is-next > .actions:has(> .is-primary) > .va-popwrap > .btn > .num { font-size: 0; } }
   .b640 fieldset.pf-f > legend.pf-lbl { margin-block-end: var(--career-space-2); }

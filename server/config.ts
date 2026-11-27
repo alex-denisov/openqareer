@@ -30,6 +30,7 @@ const configSchema = z.object({
   OPENQAREER_OPENROUTER_API_KEY: z.string().min(20).optional(),
   OPENQAREER_HIBP_API_KEY: blankAsUnset(z.string().min(1).max(2_048)),
   OPENQAREER_EXA_API_KEY: blankAsUnset(z.string().min(1).max(2_048)),
+  OPENQAREER_YOUTUBE_API_KEY: blankAsUnset(z.string().min(1).max(2_048)),
   // Empty placeholders in the env file mean «not configured yet» (B266).
   OPENQAREER_TELEGRAM_BOT_TOKEN: z.preprocess(
     (value) => (value === '' ? undefined : value),
@@ -102,6 +103,11 @@ const configSchema = z.object({
   OPENQAREER_RESEND_API_KEY: blankAsUnset(z.string().min(10).max(2_048)),
   OPENQAREER_ACCOUNT_EMAIL_FROM: blankAsUnset(z.string().min(3).max(320)),
   OPENQAREER_EMAIL_VERIFICATION_REQUIRED: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  ),
+  /** B642: запись и расшифровка разговоров — выключены до редакции 1.3 юридических документов. */
+  OPENQAREER_INTERVIEW_RECORDING_ENABLED: z.preprocess(
     (value) => (value === '' ? undefined : value),
     z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
   ),
@@ -273,6 +279,8 @@ export interface ServerConfig {
   openRouterKey?: string;
   hibpApiKey?: string;
   exaApiKey?: string;
+  /** B668: ключ YouTube Data API v3 (проект Google Cloud); нет ключа — источник не подключён. */
+  youtubeApiKey?: string;
   /** B266: owner alerts (plan requests). Both unset → alerts are silently off. */
   telegramBotToken?: string;
   telegramOwnerChatId?: string;
@@ -319,6 +327,8 @@ export interface ServerConfig {
     publicBaseUrl: string;
   };
   emailVerificationRequired?: boolean;
+  /** B642: маршруты записей разговоров; выключено — их нет (404). */
+  interviewRecordingEnabled?: boolean;
   emailVerificationFixedCode?: string;
   /** B471: zero means new Executive requests are placed on the waitlist. */
   executiveRequestCapacity?: number;
@@ -443,6 +453,7 @@ export function readServerConfig(
     openRouterKey: parsed.OPENQAREER_OPENROUTER_API_KEY,
     hibpApiKey: parsed.OPENQAREER_HIBP_API_KEY,
     exaApiKey: parsed.OPENQAREER_EXA_API_KEY,
+    youtubeApiKey: parsed.OPENQAREER_YOUTUBE_API_KEY,
     telegramBotToken: parsed.OPENQAREER_TELEGRAM_BOT_TOKEN,
     telegramOwnerChatId: parsed.OPENQAREER_TELEGRAM_OWNER_CHAT_ID,
     ...(parsed.OPENQAREER_TELEGRAM_WEBHOOK_SECRET
@@ -470,6 +481,7 @@ export function readServerConfig(
     emailMxCheckBypassDomains: parsed.OPENQAREER_MX_CHECK_BYPASS_DOMAINS,
     cabinetB640Usernames: parsed.OPENQAREER_CABINET_B640_USERNAMES,
     emailVerificationRequired: parsed.OPENQAREER_EMAIL_VERIFICATION_REQUIRED,
+    interviewRecordingEnabled: parsed.OPENQAREER_INTERVIEW_RECORDING_ENABLED,
     executiveRequestCapacity: parsed.OPENQAREER_EXECUTIVE_REQUEST_CAPACITY,
     emailVerificationFixedCode: parsed.OPENQAREER_TEST_FIXED_CODE,
     secureCookies,

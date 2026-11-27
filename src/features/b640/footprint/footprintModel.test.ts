@@ -3,10 +3,13 @@ import type { CandidateFootprintAudit } from '../../../../shared/candidateFootpr
 import type { FootprintRiskItem } from '../../../../shared/footprintRisk';
 import {
   auditProgress,
+  confirmsOwner,
   defaultSelection,
   failedChecks,
   findingsWord,
+  firstToRemove,
   letterText,
+  riskLine,
   mailtoHref,
   opensRemovalPath,
   planGroups,
@@ -81,6 +84,13 @@ describe('находки', () => {
     expect(opensRemovalPath(item)).toBe(true);
     expect(opensRemovalPath({ ...item, action: { kind: 'add_to_profile', label: 'В профиль' } })).toBe(false);
     expect(opensRemovalPath({ ...item, action: null })).toBe(false);
+    expect(opensRemovalPath({ ...item, action: { kind: 'not_mine', label: 'Это не моё' } })).toBe(false);
+    // B382: страница по нику — «Проверить» ведёт на f03b, сама страница открывается там.
+    const nick = { ...item, action: { kind: 'confirm_owner' as const, label: 'Проверить' } };
+    expect(confirmsOwner(nick)).toBe(true);
+    expect(opensRemovalPath(nick)).toBe(true);
+    expect(confirmsOwner({ ...nick, url: null })).toBe(false);
+    expect(confirmsOwner(item)).toBe(false);
   });
 
   it('письмо сайту: удалить данные или исправить расхождение', () => {
@@ -95,5 +105,82 @@ describe('находки', () => {
     expect(letterText(mismatch)).toContain('На вашем сайте указано: Должность — «тимлид»');
     expect(letterText(mismatch)).toContain('верно — «руководитель группы»');
     expect(mailtoHref(item)).toMatch(/^mailto:\?subject=%D0/u);
+  });
+
+  it('заголовок — только адрес сайта: в письме нет «мои данные: spark-interfax.ru»', () => {
+    const site = { ...item, url: 'https://www.spark-interfax.ru/ooo-1', title: 'spark-interfax.ru' };
+    expect(letterText(site)).toBe(
+      'Здравствуйте. На странице https://www.spark-interfax.ru/ooo-1 опубликованы мои данные. ' +
+        'Прошу удалить их и ответить на это письмо.',
+    );
+  });
+});
+
+describe('B668: ссылка YouTube в «Данных для поиска»', () => {
+  it('архив и канал по одной ссылке — одна строка, выбор запускает оба', () => {
+    const preview = 'Проверить архив публичной страницы https://www.youtube.com/@ada';
+    const groups = planGroups([
+      { id: 'w', kind: 'profile_url', preview, selectedByDefault: true, available: true },
+      { id: 'y', kind: 'profile_url', preview, selectedByDefault: true, available: true },
+    ]);
+    expect(groups).toEqual([{ key: `profile_url\0${preview}`, kind: 'profile_url', label: preview, ids: ['w', 'y'] }]);
+  });
+});
+
+describe('B668: город — не место работы', () => {
+  it('«2 места работы, город»', () => {
+    const groups = planGroups(['Искать имя и работодателя «А»', 'Искать имя и работодателя «Б»', 'Искать имя и город «Москва»'].map(
+      (preview, index) => ({ id: `${index}`, kind: 'work_context' as const, preview, selectedByDefault: true, available: true }),
+    ));
+    expect(searchByLine(groups, new Set(groups.map((group) => group.key)))).toBe('2 места работы, город');
+  });
+});
+
+describe('B645 f03b: строка «Риск» — уровень и почему', () => {
+  const base = { level: 'high', levelLabel: 'высокий риск' } as const;
+  it('уровень коротко и причина через двоеточие, как в макете', () => {
+    expect(riskLine({ ...base, levelReason: 'номер находят по имени' })).toBe('высокий: номер находят по имени');
+    expect(riskLine({ level: 'important', levelLabel: 'важно', levelReason: 'совпадение по имени не подтверждено' }))
+      .toBe('важно: совпадение по имени не подтверждено');
+  });
+  it('без причины — прежняя подпись уровня', () => {
+    expect(riskLine(base)).toBe('высокий риск');
+  });
+});
+
+describe('B645 f03: главная кнопка — первая находка, которую стоит убрать', () => {
+  const nick = { ...item, id: 'nick', action: { kind: 'confirm_owner' as const, label: 'Проверить' } };
+  const check = { ...item, id: 'check', action: { kind: 'check_now' as const, label: 'Проверить' } };
+  const hide = { ...item, id: 'hide', action: { kind: 'hide' as const, label: 'Скрыть' } };
+  it('страницы «Проверить» пропускает', () => {
+    expect(firstToRemove([nick, check, hide])?.id).toBe('hide');
+  });
+  it('убирать нечего — первая страница «Проверить»', () => {
+    expect(firstToRemove([nick, check])?.id).toBe('nick');
+  });
+  it('полезные и разобранные не берёт', () => {
+    const useful = { ...item, action: { kind: 'not_mine' as const, label: 'Это не моё' } };
+    expect(firstToRemove([useful, { ...hide, action: null }])).toBeUndefined();
+  });
+});
+
+describe('B668: формы слов в «Ищем по»', () => {
+  it('1, 2, 5, 7 и 21', () => {
+    const line = (count: number) => {
+      const groups = Array.from({ length: count }, (_, index) => ({
+        key: String(index),
+        kind: 'work_context' as const,
+        label: '',
+        ids: [],
+      }));
+      return searchByLine(groups, new Set(groups.map((group) => group.key)));
+    };
+    expect([1, 2, 5, 7, 21].map(line)).toEqual([
+      'место работы',
+      '2 места работы',
+      '5 мест работы',
+      '7 мест работы',
+      '21 место работы',
+    ]);
   });
 });

@@ -44,7 +44,7 @@ describe('B694: ритм', () => {
     expect(first.json().data).toMatchObject({ postsPerWeek: 1, days: ['mon', 'tue', 'wed', 'thu', 'fri'], time: '10:00' });
     const saved = await call('PUT', `${BASE}/rhythm`, { postsPerWeek: 3, days: ['tue', 'thu'], time: '09:30', timezone: 'Europe/Berlin' });
     expect(saved.statusCode).toBe(200);
-    expect((await h.get(`${BASE}/rhythm`, 'flagged.test')).json().data).toEqual({ postsPerWeek: 3, days: ['tue', 'thu'], time: '09:30', timezone: 'Europe/Berlin' });
+    expect((await h.get(`${BASE}/rhythm`, 'flagged.test')).json().data).toMatchObject({ postsPerWeek: 3, days: ['tue', 'thu'], time: '09:30', timezone: 'Europe/Berlin' });
     expect((await h.get(`${BASE}/rhythm`, 'other.test')).json().data.postsPerWeek).toBe(1);
     for (const bad of [
       { postsPerWeek: 0, days: ['mon'], time: '10:00', timezone: 'UTC' },
@@ -154,6 +154,69 @@ describe('B694: очередь', () => {
     expect((await call('DELETE', `${BASE}/queue/${item.id}`, undefined)).statusCode).toBe(409);
     expect((await h.get(`${BASE}/queue?state=done`, 'flagged.test')).json().data.total).toBe(1);
     expect((await h.get(`${BASE}/queue`, 'other.test')).json().data.total).toBe(0);
+  });
+
+  it('B695: «Остановить всё» ставит очередь на паузу — ничего не наступает, напоминание не ставится; снятие паузы возвращает', async () => {
+    const { h, call, draft, sql } = await setup();
+    draft('flagged.test', { id: 'd1' });
+    const queued = (await call('POST', `${BASE}/queue`, { draftId: 'd1', at: future(2) })).json().data;
+    sql('UPDATE candidate_linkedin_queue SET scheduled_at = ? WHERE id = ?', '2020-01-01T10:00:00.000Z', queued.id);
+    expect((await h.get(`${BASE}/queue?state=due`, 'flagged.test')).json().data).toMatchObject({ total: 1, paused: false });
+
+    expect((await call('POST', '/api/v1/candidate/automation/pause', { days: 365 })).statusCode).toBe(200);
+    const paused = (await h.get(`${BASE}/queue`, 'flagged.test')).json().data;
+    expect(paused).toMatchObject({ total: 1, paused: true });
+    expect(paused.items[0]).toMatchObject({ state: 'queued', openUrl: null });
+    expect((await h.get(`${BASE}/queue?state=due`, 'flagged.test')).json().data.total).toBe(0);
+    expect((await call('POST', `${BASE}/queue/${queued.id}/reminded`, {})).statusCode).toBe(409);
+    // Пауза одного кандидата не трогает другого.
+    expect((await h.get(`${BASE}/queue`, 'other.test')).json().data.paused).toBe(false);
+
+    expect((await call('DELETE', '/api/v1/candidate/automation/pause', undefined)).statusCode).toBe(200);
+    const resumed = (await h.get(`${BASE}/queue?state=due`, 'flagged.test')).json().data;
+    expect(resumed).toMatchObject({ total: 1, paused: false });
+  });
+
+  it('B695: напоминание «Пора опубликовать пост» — на время строки, переносится, снимается при удалении, публикации и «Остановить всё»', async () => {
+    const { h, call, draft } = await setup();
+    const reminders = (user: HarnessUser = 'flagged.test') => {
+      const db = new DatabaseSync(h.databasePath);
+      try {
+        return db.prepare(`SELECT source_type, source_id, created_at FROM candidate_notifications
+          WHERE candidate_id = ? AND event_kind = 'post_reminder' ORDER BY created_at`).all(h.candidateIds[user]);
+      } finally { db.close(); }
+    };
+    draft('flagged.test', { id: 'd1' });
+    draft('flagged.test', { id: 'd2' });
+    draft('flagged.test', { id: 'c1', kind: 'comment' });
+    const first = (await call('POST', `${BASE}/queue`, { draftId: 'd1', at: future(2) })).json().data;
+    expect(reminders()).toEqual([{ source_type: 'linkedin_queue', source_id: first.id, created_at: first.scheduledAt }]);
+    const comment = (await call('POST', `${BASE}/queue`, { draftId: 'c1', at: future(4) })).json().data;
+    expect(reminders()).toContainEqual({
+      source_type: 'linkedin_queue_comment',
+      source_id: comment.id,
+      created_at: comment.scheduledAt,
+    });
+    await call('DELETE', `${BASE}/queue/${comment.id}`, undefined);
+    expect(reminders()).toHaveLength(1);
+
+    const moved = (await call('PATCH', `${BASE}/queue/${first.id}`, { at: future(3) })).json().data;
+    expect(reminders()).toEqual([{ source_type: 'linkedin_queue', source_id: first.id, created_at: moved.scheduledAt }]);
+
+    const second = (await call('POST', `${BASE}/queue`, { draftId: 'd2', at: future(5) })).json().data;
+    expect(reminders()).toHaveLength(2);
+    expect((await call('POST', '/api/v1/candidate/automation/pause', { days: 365 })).statusCode).toBe(200);
+    expect(reminders()).toEqual([]);
+    // На паузе перенос не ставит напоминание заново.
+    await call('PATCH', `${BASE}/queue/${second.id}`, { at: future(6) });
+    expect(reminders()).toEqual([]);
+    expect((await call('DELETE', '/api/v1/candidate/automation/pause', undefined)).statusCode).toBe(200);
+    expect(reminders().map((row) => (row as { source_id: string }).source_id).sort()).toEqual([first.id, second.id].sort());
+
+    await call('POST', `${BASE}/queue/${first.id}/published`, {});
+    await call('DELETE', `${BASE}/queue/${second.id}`, undefined);
+    expect(reminders()).toEqual([]);
+    expect(reminders('other.test')).toEqual([]);
   });
 
   it('страницы: limit не больше 20, сортировка по времени', async () => {

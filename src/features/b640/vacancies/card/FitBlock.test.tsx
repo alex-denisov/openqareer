@@ -25,7 +25,12 @@ const requirement = (id: string, text: string) => ({
 
 const view = {
   state: 'ready',
-  requirements: [requirement('a', 'Kubernetes'), requirement('b', 'Найм руководителей'), requirement('c', 'English C1'), requirement('d', 'Go')],
+  requirements: [
+    requirement('a', 'Kubernetes'),
+    requirement('b', 'Найм руководителей'),
+    requirement('c', 'English C1'),
+    requirement('d', 'Go'),
+  ],
   result: {
     status: 'assessed',
     dataState: 'confirmed',
@@ -34,8 +39,16 @@ const view = {
     coverage: { matched: 2, total: 4, unknown: 1, partial: 1 },
     reason: 'assessed',
     assessments: [
-      { requirementId: 'a', status: 'matched', evidence: [{ factId: 'f', quote: 'Финтех Лаб · Kubernetes' }] },
-      { requirementId: 'b', status: 'partial', evidence: [{ factId: 'f', quote: 'нанимали разработчиков' }] },
+      {
+        requirementId: 'a',
+        status: 'matched',
+        evidence: [{ factId: 'f', quote: 'Финтех Лаб · Kubernetes' }],
+      },
+      {
+        requirementId: 'b',
+        status: 'partial',
+        evidence: [{ factId: 'f', quote: 'нанимали разработчиков' }],
+      },
       { requirementId: 'c', status: 'unknown', evidence: [] },
       { requirementId: 'd', status: 'unmatched', evidence: [] },
     ],
@@ -107,12 +120,12 @@ describe('RequirementList', () => {
 
 describe('ReqsBox', () => {
   it('строка «Требования: N из M есть в профиле», закрыта', () => {
-    const html = renderToStaticMarkup(<ReqsBox view={view} />);
+    const html = renderToStaticMarkup(<ReqsBox view={view} sourceName="hh.ru" />);
     expect(html).toContain('Требования: 2 из 4 есть в профиле');
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain('v4-fd-l');
   });
   it('нет требований — строки нет', () => {
-    expect(renderToStaticMarkup(<ReqsBox view={undefined} />)).toBe('');
+    expect(renderToStaticMarkup(<ReqsBox view={undefined} sourceName="hh.ru" />)).toBe('');
   });
 });

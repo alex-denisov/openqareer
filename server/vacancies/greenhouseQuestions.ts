@@ -2,11 +2,11 @@ import type { QuestionnaireQuestion } from '../../shared/applicationQuestionnair
 import { parseGreenhouseQuestions } from '../domain/applicationQuestionnaire';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import { parseAtsBoardSourceId } from './atsBoardAdapters';
+import { readLimited } from './limitedBody';
 import { withRequestTimeout } from './requestTimeout';
 
 const GREENHOUSE_API = 'https://boards-api.greenhouse.io/v1/boards';
 const READ_TIMEOUT_MS = 8_000;
-const MAX_BODY_BYTES = 512_000;
 const BOARD = /^[A-Za-z0-9_-]{1,100}$/u;
 const JOB_ID = /^[0-9]{1,20}$/u;
 
@@ -15,14 +15,34 @@ export interface GreenhouseJobRef {
   readonly jobId: string;
 }
 
-/** Доска и номер вакансии Greenhouse из записи подбора; не Greenhouse — `null`. */
+/** Страницы вакансий Greenhouse, включая домен EU: вопросы всех досок отдаёт один открытый API. */
+const BOARD_HOSTS: ReadonlySet<string> = new Set([
+  'boards.greenhouse.io',
+  'job-boards.greenhouse.io',
+  'boards.eu.greenhouse.io',
+  'job-boards.eu.greenhouse.io',
+]);
+
+/** Доска и номер из адреса страницы: вакансия могла прийти не с самой доски Greenhouse. */
+function refFromUrl(value: string | undefined): GreenhouseJobRef | null {
+  if (!value || !URL.canParse(value)) return null;
+  const url = new URL(value);
+  if (url.protocol !== 'https:' || url.port || url.username || url.password) return null;
+  if (!BOARD_HOSTS.has(url.hostname)) return null;
+  const [, board = '', section, jobId = ''] = url.pathname.split('/');
+  return section === 'jobs' && BOARD.test(board) && JOB_ID.test(jobId) ? { board, jobId } : null;
+}
+
+/** Доска и номер вакансии Greenhouse из записи подбора или её адреса; не Greenhouse — `null`. */
 export function greenhouseJobRef(
-  vacancy: Pick<UnifiedVacancy, 'provenance'> | undefined,
+  vacancy: (Pick<UnifiedVacancy, 'provenance'> & Partial<Pick<UnifiedVacancy, 'url'>>) | undefined,
 ): GreenhouseJobRef | null {
   const ref = vacancy ? parseAtsBoardSourceId(vacancy.provenance.sourceId) : null;
   const jobId = vacancy?.provenance.externalId ?? '';
-  if (!ref || ref.provider !== 'greenhouse') return null;
-  return BOARD.test(ref.board) && JOB_ID.test(jobId) ? { board: ref.board, jobId } : null;
+  if (ref?.provider === 'greenhouse' && BOARD.test(ref.board) && JOB_ID.test(jobId)) {
+    return { board: ref.board, jobId };
+  }
+  return refFromUrl(vacancy?.url);
 }
 
 /**
@@ -69,26 +89,6 @@ function rememberFailure(key: string): void {
 export function resetGreenhouseQuestionsCache(): void {
   failedUntil.clear();
   inFlight.clear();
-}
-
-/** Тело читается потоком и обрывается на пределе: чужой ответ не занимает память без меры. */
-async function readLimited(response: Response): Promise<string | null> {
-  if (Number(response.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) return null;
-  const reader = response.body?.getReader();
-  if (!reader) return null;
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > MAX_BODY_BYTES) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks).toString('utf8');
 }
 
 async function fetchQuestions(

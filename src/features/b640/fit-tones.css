@@ -1,0 +1,48 @@
+/* B790 (владелец 25.11): четыре ступени процента 28.10 (#188) — зелёный, синий, янтарный, серый.
+   Свои токены: акцент B640 зелёный и сливал 60–79 с 80+. */
+@layer b640.sections {
+  .b640 {
+    --fit-hi: oklch(43% 0.11 140);
+    --fit-good: oklch(48% 0.19 256);
+    --fit-mid: oklch(47% 0.1 70);
+    --fit-low: oklch(46% 0.018 255);
+  }
+  .b640[data-theme='dark'] {
+    --fit-hi: oklch(76% 0.14 154);
+    --fit-good: oklch(79% 0.145 255);
+    --fit-mid: oklch(79% 0.13 79);
+    --fit-low: oklch(65% 0.024 255);
+  }
+  @media (prefers-color-scheme: dark) {
+    .b640[data-theme='system'] {
+      --fit-hi: oklch(76% 0.14 154);
+      --fit-good: oklch(79% 0.145 255);
+      --fit-mid: oklch(79% 0.13 79);
+      --fit-low: oklch(65% 0.024 255);
+    }
+  }
+  .b640 :is(.fit, .vt-tone).is-hi {
+    color: var(--fit-hi);
+  }
+  .b640 :is(.v4-fit-bar, .vs-bar) > .is-hi:not(.vs-fork):not(.vs-me) {
+    background: var(--fit-hi);
+  }
+  .b640 :is(.fit, .vt-tone).is-good {
+    color: var(--fit-good);
+  }
+  .b640 :is(.v4-fit-bar, .vs-bar) > .is-good:not(.vs-fork):not(.vs-me) {
+    background: var(--fit-good);
+  }
+  .b640 :is(.fit, .vt-tone).is-mid {
+    color: var(--fit-mid);
+  }
+  .b640 :is(.v4-fit-bar, .vs-bar) > .is-mid:not(.vs-fork):not(.vs-me) {
+    background: var(--fit-mid);
+  }
+  .b640 :is(.fit, .vt-tone).is-low {
+    color: var(--fit-low);
+  }
+  .b640 :is(.v4-fit-bar, .vs-bar) > .is-low:not(.vs-fork):not(.vs-me) {
+    background: var(--fit-low);
+  }
+}

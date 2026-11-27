@@ -1,28 +1,41 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import {
   getNotificationChannelStatus,
   getNotificationPreferences,
   updateNotificationPreference,
-  type NotificationChannelPreference,
   type NotificationChannelStatus,
 } from '../../account/notificationPreferencesApi';
+import {
+  INVITATION_KEY,
+  getInvitationPreference,
+  putInvitationPreference,
+  type B640ChannelPreference,
+} from './invitationPreferenceApi';
 import type { B640Node } from '../routes';
+import { DeliverySettingsGroup } from './DeliverySettingsGroup';
+import { deliverySettingsRead } from './deliverySettingsApi';
 import { CHANNEL_LABEL, NOTIFICATION_ROWS, type NotificationChannel, type NotificationRow } from './model';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
+import { prefetch } from './prefetch';
+import { telegramStateRead } from './telegramStateApi';
 import { useTelegramLink, type TelegramLink } from './useTelegramLink';
 
 interface Settings {
-  readonly events: readonly NotificationChannelPreference[];
+  readonly events: readonly B640ChannelPreference[];
   readonly channels: NotificationChannelStatus;
 }
 
-async function loadSettings(): Promise<Settings> {
-  const [events, channels] = await Promise.all([
+async function fetchSettings(): Promise<Settings> {
+  const [events, invitation, channels] = await Promise.all([
     getNotificationPreferences(),
+    getInvitationPreference(),
     getNotificationChannelStatus(),
   ]);
-  return { events, channels };
+  return { events: [invitation, ...events], channels };
 }
+
+/** B773: таблица n02 читается рядом с вопросом о сессии (`preload` раздела). */
+export const settingsRead = prefetch(fetchSettings);
 
 const OFF = { app: false, email: false, telegram: false };
 
@@ -102,7 +115,7 @@ function TelegramLine({ link }: { readonly link: TelegramLink }) {
   if (state.step !== 'connected') return null;
   return (
     <p className="set-res" role="status">
-      <span>Telegram подключён</span>
+      <span>{state.username ? `Telegram · ${state.username}` : 'Telegram подключён'}</span>
       <button className="btn is-sm" type="button" disabled={link.busy} onClick={link.unlink}>
         Отвязать
       </button>
@@ -111,7 +124,7 @@ function TelegramLine({ link }: { readonly link: TelegramLink }) {
 }
 
 interface MatrixProps {
-  readonly events: readonly NotificationChannelPreference[];
+  readonly events: readonly B640ChannelPreference[];
   readonly columns: readonly NotificationChannel[];
   readonly link: TelegramLink;
   readonly saving: ReadonlySet<string>;
@@ -156,7 +169,7 @@ function Matrix({ events, columns, link, saving, onToggle }: MatrixProps) {
   );
 }
 
-const withEvent = (value: NotificationChannelPreference) => (settings: Settings): Settings => ({
+const withEvent = (value: B640ChannelPreference) => (settings: Settings): Settings => ({
   ...settings,
   events: [...settings.events.filter((item) => item.key !== value.key), value],
 });
@@ -177,7 +190,11 @@ function useToggle(settings: Settings, update: (change: (data: Settings) => Sett
     update(withEvent(next));
     try {
       const { key: _key, ...preference } = next;
-      update(withEvent(await updateNotificationPreference(row.key, preference)));
+      const saved =
+        row.key === INVITATION_KEY
+          ? await putInvitationPreference(preference)
+          : await updateNotificationPreference(row.key, preference);
+      update(withEvent(saved));
     } catch {
       update(withEvent(current));
       setFailed(true);
@@ -216,13 +233,31 @@ function SettingsTable({ settings, load }: { settings: Settings; load: ReturnTyp
   );
 }
 
-/** n02 «Уведомления»: что и куда присылать, привязка Telegram на месте. */
+/** Чтения групп ниже таблицы идут вместе с чтением таблицы, а не после неё. */
+function useEarlyReads() {
+  useState(() => {
+    deliverySettingsRead.start();
+    telegramStateRead.start();
+    return null;
+  });
+  useEffect(
+    () => () => {
+      deliverySettingsRead.drop();
+      telegramStateRead.drop();
+    },
+    [],
+  );
+}
+
+/** n02 «Уведомления»: что и куда присылать, привязка Telegram на месте, как часто и с компанией ли. */
 export function NotificationSettingsScreen({ node }: { readonly node: B640Node }) {
-  const load = useLoad(loadSettings);
+  useEarlyReads();
+  const load = useLoad(settingsRead.read);
   return (
     <SettingsPage node={node} heading="Настройки уведомлений" busy={load.state === 'loading'}>
       {load.state === 'error' ? <ErrorLine text="Настройки не загрузились" onRetry={load.retry} /> : null}
       {load.state === 'ready' ? <SettingsTable settings={load.data} load={load} /> : null}
+      {load.state === 'ready' ? <DeliverySettingsGroup telegram={load.data.channels.telegram.available} /> : null}
     </SettingsPage>
   );
 }

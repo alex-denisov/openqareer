@@ -59,12 +59,25 @@ export interface RoleFamily {
   readonly labelRu: string;
   readonly coverage: string;
 }
+/**
+ * B669: падежные формы профессии для текстов пути в неё: «Путь в продакт-менеджеры»,
+ * «для продакта», «отклики продактом». Есть не у каждой роли.
+ */
+export interface RoleForms {
+  /** Кем стать, «в кого»: «продакт-менеджеры». */
+  readonly toBecome: string;
+  /** Для кого: «продакта». */
+  readonly genitive: string;
+  /** Кем: «продактом». */
+  readonly instrumental: string;
+}
 export interface Role {
   readonly id: string;
   readonly function: string;
   readonly family: string;
   readonly titleEn: string;
   readonly titleRu: string;
+  readonly forms?: RoleForms;
   /** Проверяется при загрузке: JSON остаётся источником данных, а не TS-кодом. */
   readonly levels: readonly string[];
   readonly variants: Readonly<{ en: readonly string[]; ru: readonly string[] }>;
@@ -140,6 +153,9 @@ export function validateOntology(): readonly string[] {
     if (role.variants.en.length === 0 || role.variants.ru.length === 0) errors.push(`Missing variants for role ${role.id}`);
     if (new Set(role.variants.en).size !== role.variants.en.length) errors.push(`Duplicate EN variant for role ${role.id}`);
     if (new Set(role.variants.ru).size !== role.variants.ru.length) errors.push(`Duplicate RU variant for role ${role.id}`);
+    if (role.forms && !Object.values(role.forms).every((form) => form.trim().length > 0)) {
+      errors.push(`Empty form for role ${role.id}`);
+    }
     for (const adjacent of role.adjacent) {
       if (!ontology.rolesById.has(adjacent.roleId)) errors.push(`Unknown adjacent role ${adjacent.roleId} for ${role.id}`);
     }

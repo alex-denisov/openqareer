@@ -30,6 +30,14 @@ const api = vi.hoisted(() => ({
   getCheckout: vi.fn(),
   listPlanRequests: vi.fn(),
   createPlanRequest: vi.fn(),
+  getDeletion: vi.fn(),
+  requestDeletion: vi.fn(),
+  restoreAccount: vi.fn(),
+  getAppPreferences: vi.fn(),
+  saveAppPreferences: vi.fn(),
+  getSearchConsent: vi.fn(),
+  setSearchConsent: vi.fn(),
+  countScheduledPosts: vi.fn(),
 }));
 
 vi.mock('../../coach/coachApi', async (original) => ({
@@ -48,6 +56,20 @@ vi.mock('../../automation/automationApi', () => ({
   getCandidateAutomation: api.getAutomation,
   pauseCandidateAutomation: api.pauseAutomation,
   resumeCandidateAutomation: api.resumeAutomation,
+}));
+vi.mock('../platforms/linkedin/linkedinQueueApi', () => ({ countScheduledPosts: api.countScheduledPosts }));
+vi.mock('../../vacancies/recruiterContactsApi', () => ({
+  getSearchConsent: api.getSearchConsent,
+  setSearchConsent: api.setSearchConsent,
+}));
+vi.mock('./appPreferencesApi', () => ({
+  getAppPreferences: api.getAppPreferences,
+  saveAppPreferences: api.saveAppPreferences,
+}));
+vi.mock('./accountDeletionApi', () => ({
+  getAccountDeletion: api.getDeletion,
+  requestAccountDeletion: api.requestDeletion,
+  restoreAccount: api.restoreAccount,
 }));
 vi.mock('../../resume/resumeExport', () => ({ triggerFileDownload: api.download }));
 vi.mock('../../shell/candidateBillingApi', () => ({
@@ -142,7 +164,15 @@ const button = (root: Element, text: string) =>
   [...root.querySelectorAll('button, a.btn')].find((item) => item.textContent?.trim() === text) ?? null;
 
 beforeEach(() => {
+  api.getSearchConsent.mockResolvedValue({
+    granted: true,
+    policyVersion: 'v',
+    updatedAt: '2026-11-01T00:00:00.000Z',
+  });
   vi.clearAllMocks();
+  api.countScheduledPosts.mockResolvedValue(0);
+  api.getAppPreferences.mockResolvedValue({ theme: null, moneyCurrency: null });
+  api.saveAppPreferences.mockResolvedValue({ theme: null, moneyCurrency: null });
   api.getAccount.mockResolvedValue({ profile: { timezone: 'Europe/Samara' }, sessions: [] });
   api.getConsents.mockResolvedValue([
     { id: 'c1', capability: 'digital_footprint', versionId: 'v', grantedAt: '2026-11-01', revokedAt: null },
@@ -151,6 +181,7 @@ beforeEach(() => {
   api.getSummary.mockResolvedValue(paid);
   api.getReceipts.mockResolvedValue({ receipts: [receipt(1, 'https://receipts.example/1')], nextCursor: null });
   api.listPlanRequests.mockResolvedValue([]);
+  api.getDeletion.mockResolvedValue(null);
 });
 afterEach(() => {
   view?.unmount();
@@ -158,21 +189,157 @@ afterEach(() => {
 });
 
 describe('n05 «Согласия и данные»', () => {
-  it('три согласия сервера, удаления аккаунта нет, пока оно стирает сразу', async () => {
+  it('согласия в порядке макета, заголовок раздела не повторяется', async () => {
+    const root = await open(<DataScreen node={node('n05')} />);
+    const switches = [...root.querySelectorAll('input.sw')] as HTMLInputElement[];
+    expect(switches.map((item) => [item.getAttribute('aria-label'), item.checked])).toEqual([
+      ['«Вы в поиске»', true],
+      ['Цифровой след', true],
+      ['Подключённый профиль', false],
+      ['Отклики', false],
+    ]);
+    const titles = [...root.querySelectorAll('.set-t, .set-h')].map((item) => item.textContent);
+    expect(titles.filter((title) => title === 'Действия от вашего имени')).toHaveLength(1);
+  });
+
+  it('«Вы в поиске»: отзыв сразу, выдача — после текста согласия', async () => {
+    api.setSearchConsent.mockResolvedValue({ granted: false, policyVersion: 'v', updatedAt: '' });
+    const root = await open(<DataScreen node={node('n05')} />);
+    click(root.querySelector('input[aria-label="«Вы в поиске»"]'));
+    await settle();
+    expect(api.setSearchConsent).toHaveBeenCalledWith(false);
+    api.getSearchConsent.mockResolvedValue({ granted: false, policyVersion: 'v', updatedAt: '' });
+    api.setSearchConsent.mockClear();
+    const again = await open(<DataScreen node={node('n05')} />);
+    click(again.querySelector('input[aria-label="«Вы в поиске»"]'));
+    expect(api.setSearchConsent).not.toHaveBeenCalled();
+    const dialog = document.querySelector('.pf-dialog[role=dialog]') as HTMLElement;
+    expect(dialog.querySelector('h2')?.textContent).toBe('«Вы в поиске»');
+    expect(dialog.textContent).toContain('мы будем искать контакты нанимающих');
+    click(button(dialog, 'Дать согласие'));
+    await settle();
+    expect(api.setSearchConsent).toHaveBeenCalledWith(true);
+  });
+
+  it('«Вы в поиске» не прочиталось — строка с ошибкой и «Повторить», остальные на месте', async () => {
+    api.getSearchConsent.mockRejectedValue(new Error('down'));
+    const root = await open(<DataScreen node={node('n05')} />);
+    const row = root.querySelector('.set-row') as HTMLElement;
+    expect(row.querySelector('.set-t')?.textContent).toBe('«Вы в поиске»');
+    expect(row.querySelector('.set-res.is-err')?.textContent).toContain('Не загрузилось');
+    expect(root.querySelectorAll('input.sw')).toHaveLength(3);
+    api.getSearchConsent.mockResolvedValue({ granted: true, policyVersion: 'v', updatedAt: '' });
+    click(button(row, 'Повторить'));
+    await settle();
+    await settle();
+    expect(root.querySelector('input[aria-label="«Вы в поиске»"]')).not.toBeNull();
+    expect(root.querySelector('.set-res.is-err')).toBeNull();
+  });
+
+  it('B774: у данного согласия «Текст согласия» открывает тот же текст без кнопки выдачи', async () => {
+    const root = await open(<DataScreen node={node('n05')} />);
+    const row = (title: string) =>
+      [...root.querySelectorAll('.set-row')].find((item) => item.querySelector('.set-t')?.textContent === title)!;
+    expect(row('Подключённый профиль').textContent).not.toContain('Текст согласия');
+    click(button(row('Цифровой след'), 'Текст согласия'));
+    const dialog = document.querySelector('.pf-dialog[role=dialog]') as HTMLElement;
+    expect(dialog.querySelectorAll('li').length).toBeGreaterThan(0);
+    expect(dialog.textContent).not.toContain('Дать согласие');
+    click(button(row('«Вы в поиске»'), 'Текст согласия'));
+    const search = [...document.querySelectorAll('.pf-dialog[role=dialog]')].at(-1) as HTMLElement;
+    expect(search.textContent).toContain('мы будем искать контакты нанимающих');
+    expect(search.textContent).not.toContain('Дать согласие');
+  });
+
+  it('B774: выключенные действия от вашего имени ведут туда, где их включают', async () => {
+    api.getAutomation.mockResolvedValue({ settings: { enabled: false, pausedUntil: null } });
+    const root = await open(<DataScreen node={node('n05')} />);
+    const link = root.querySelector('a[aria-label="Настроить автоотклики"]');
+    expect(link?.getAttribute('href')).toBe('/app/responses');
+    expect(link?.closest('.set-row')?.textContent).toContain('выключены');
+  });
+
+  it('три согласия сервера и удаление аккаунта, как в макете', async () => {
     const root = await open(<DataScreen node={node('n05')} />);
     expect([...root.querySelectorAll('.set-h')].map((item) => item.textContent)).toEqual([
       'На что вы дали согласие',
       'Действия от вашего имени',
       'Ваши данные',
+      'Удаление аккаунта',
     ]);
     const switches = [...root.querySelectorAll('input.sw')] as HTMLInputElement[];
     expect(switches.map((item) => [item.getAttribute('aria-label'), item.checked])).toEqual([
-      ['Подключённый профиль', false],
+      ['«Вы в поиске»', true],
       ['Цифровой след', true],
-      ['Действия от вашего имени', false],
+      ['Подключённый профиль', false],
+      ['Отклики', false],
     ]);
-    expect(root.textContent).not.toMatch(/Удалить аккаунт|Удаление аккаунта/u);
+    const remove = root.querySelector('button[aria-label="Удалить аккаунт"]') as HTMLButtonElement;
+    expect(remove.textContent).toBe('Удалить');
+    expect(remove.className).toBe('btn is-sm is-danger');
+    expect(remove.closest('.set-row')?.querySelector('.set-t')?.textContent).toBe('Удалить аккаунт');
     expect(api.deleteCandidateAccount).not.toHaveBeenCalled();
+  });
+
+  it('n05b: удаление только после окна, «Оставить» ничего не трогает', async () => {
+    api.requestDeletion.mockResolvedValue({
+      requestedAt: '2026-11-19T10:00:00.000Z',
+      purgeAfter: '2026-12-19T10:00:00.000Z',
+    });
+    const root = await open(<DataScreen node={node('n05')} />);
+    const dialog = () => document.querySelector('.pf-dialog[role=dialog]') as HTMLElement | null;
+    click(root.querySelector('button[aria-label="Удалить аккаунт"]'));
+    expect(dialog()?.querySelector('h2')?.textContent).toBe('Удалить аккаунт?');
+    expect([...dialog()!.querySelectorAll('.c5-list li')].map((item) => item.textContent)).toEqual([
+      'Профиль, отклики и дневник сотрутся через 30 дней.',
+      'Автоотклики и публикации по расписанию остановятся сразу.',
+      'До конца этого срока аккаунт можно вернуть.',
+    ]);
+    click(button(dialog()!, 'Оставить'));
+    await settle();
+    expect(dialog()).toBeNull();
+    expect(api.requestDeletion).not.toHaveBeenCalled();
+
+    click(root.querySelector('button[aria-label="Удалить аккаунт"]'));
+    click(button(dialog()!, 'Удалить аккаунт'));
+    await settle();
+    expect(api.requestDeletion).toHaveBeenCalledTimes(1);
+    expect(dialog()).toBeNull();
+    const row = button(root, 'Вернуть аккаунт')!.closest('.set-row')!;
+    expect(n(row.querySelector('.set-t')?.textContent)).toBe('Аккаунт удалится 19 декабря');
+    expect(root.querySelector('button[aria-label="Удалить аккаунт"]')).toBeNull();
+  });
+
+  it('запрошенное удаление видно сразу, «Вернуть аккаунт» его снимает', async () => {
+    api.getDeletion.mockResolvedValue({
+      requestedAt: '2026-11-19T10:00:00.000Z',
+      purgeAfter: '2026-12-19T10:00:00.000Z',
+    });
+    api.restoreAccount.mockResolvedValue(undefined);
+    const root = await open(<DataScreen node={node('n05')} />);
+    click(button(root, 'Вернуть аккаунт'));
+    await settle();
+    expect(api.restoreAccount).toHaveBeenCalledTimes(1);
+    expect(button(root, 'Вернуть аккаунт')).toBeNull();
+    expect(root.querySelector('button[aria-label="Удалить аккаунт"]')).not.toBeNull();
+  });
+
+  it('ошибка удаления остаётся в окне, аккаунт не помечен', async () => {
+    api.requestDeletion.mockRejectedValue(new Error('500'));
+    const root = await open(<DataScreen node={node('n05')} />);
+    click(root.querySelector('button[aria-label="Удалить аккаунт"]'));
+    const dialog = document.querySelector('.pf-dialog[role=dialog]') as HTMLElement;
+    click(button(dialog, 'Удалить аккаунт'));
+    await settle();
+    expect(dialog.querySelector('[role=alert]')?.textContent).toBe('Аккаунт не удалён');
+    expect(button(root, 'Вернуть аккаунт')).toBeNull();
+  });
+
+  it('без ответа об удалении группа не показывается', async () => {
+    api.getDeletion.mockRejectedValue(new Error('404'));
+    const root = await open(<DataScreen node={node('n05')} />);
+    expect(root.textContent).not.toMatch(/Удаление аккаунта/u);
+    expect(root.querySelector('.set-h')?.textContent).toBe('На что вы дали согласие');
   });
 
   it('согласие отзывается переключателем, а даётся только после текста согласия', async () => {
@@ -199,7 +366,7 @@ describe('n05 «Согласия и данные»', () => {
     expect(input().checked).toBe(true);
     const dialog = () => document.querySelector('.pf-dialog[role=dialog]') as HTMLElement | null;
     expect(dialog()?.querySelector('h2')?.textContent).toBe('Отозвать согласие на цифровой след?');
-    expect(dialog()?.querySelector('.c5-lead')?.textContent).toBe('Сохранённые находки удалятся.');
+    expect(dialog()?.querySelector('.c5-lead')?.textContent).toBe('Сохранённые проверки и находки удалятся.');
     click(button(dialog()!, 'Отмена'));
     await settle();
     expect(dialog()).toBeNull();
@@ -220,10 +387,22 @@ describe('n05 «Согласия и данные»', () => {
     ]);
     api.revokeConsent.mockResolvedValue(null);
     const root = await open(<DataScreen node={node('n05')} />);
-    click(root.querySelector('input[aria-label="Действия от вашего имени"]'));
+    click(root.querySelector('input[aria-label="Отклики"]'));
     await settle();
     expect(api.revokeConsent).toHaveBeenCalledWith('actions_on_behalf');
     expect(document.querySelector('.pf-dialog')).toBeNull();
+  });
+
+  it('B787: под согласием — текст принятой версии, а не действующей', async () => {
+    api.getConsents.mockResolvedValue([
+      { id: 'c2', capability: 'actions_on_behalf', versionId: 'actions_on_behalf-v1.0', grantedAt: '2026-11-01', revokedAt: null },
+    ]);
+    const root = await open(<DataScreen node={node('n05')} />);
+    const row = root.querySelector('input[aria-label="Отклики"]')!.closest('li')!;
+    click(button(row, 'Текст согласия'));
+    await settle();
+    expect(document.body.textContent).toContain('Платформа помогает направлять согласованные отклики');
+    expect(document.body.textContent).not.toContain('Поручаю OpenQareer');
   });
 
   it('«Остановить всё» спрашивает подтверждение; после — «Возобновить»', async () => {
@@ -262,6 +441,35 @@ describe('n05 «Согласия и данные»', () => {
     expect(button(root, 'Остановить всё')).toBeNull();
   });
 
+  it('B695: автоотклики выключены, но в очереди LinkedIn есть посты — «Остановить всё» есть', async () => {
+    api.getAutomation.mockResolvedValue({ settings: { enabled: false, pausedUntil: null } });
+    api.countScheduledPosts.mockResolvedValue(2);
+    api.pauseAutomation.mockResolvedValue(undefined);
+    const root = await open(<DataScreen node={node('n05')} />);
+    const group = root.querySelectorAll('.set-group')[1];
+    expect(group.querySelector('.set-t')?.textContent).toBe('Автоотклики, комментарии в LinkedIn');
+    expect(group.querySelector('.set-v')?.textContent).toBe('идут');
+    click(button(root, 'Остановить всё'));
+    const dialog = document.querySelector('.pf-dialog[role=dialog]') as HTMLElement;
+    expect(dialog.querySelector('.c5-lead')?.textContent).toBe('Остановятся автоотклики на hh.ru и публикации в LinkedIn.');
+    api.getAutomation.mockResolvedValue({
+      settings: { enabled: false, pausedUntil: new Date(Date.now() + 86_400_000).toISOString() },
+    });
+    click(button(dialog, 'Остановить всё'));
+    await settle();
+    expect(api.pauseAutomation).toHaveBeenCalledWith(365);
+    expect(root.querySelectorAll('.set-group')[1].querySelector('.set-v')?.textContent).toBe('остановлены');
+    expect(button(root, 'Возобновить')).not.toBeNull();
+  });
+
+  it('B695: очередь не прочиталась — строка по автооткликам, экран не падает', async () => {
+    api.getAutomation.mockResolvedValue({ settings: { enabled: false, pausedUntil: null } });
+    api.countScheduledPosts.mockRejectedValue(new Error('сеть'));
+    const root = await open(<DataScreen node={node('n05')} />);
+    expect(root.querySelectorAll('.set-group')[1].querySelector('.set-v')?.textContent).toBe('выключены');
+    expect(button(root, 'Остановить всё')).toBeNull();
+  });
+
   it('выгрузка сохраняет файл; сбой показан на месте', async () => {
     api.exportCandidateData.mockRejectedValueOnce(new Error('сеть'));
     const root = await open(<DataScreen node={node('n05')} />);
@@ -281,14 +489,15 @@ describe('n05 «Согласия и данные»', () => {
 });
 
 describe('n06 «Приложение»', () => {
-  it('тема и часовой пояс; настроек без механики и обновлений в браузере нет', async () => {
+  it('тема, язык и часовой пояс; на сайте вместо настроек компьютера — версия и «Приложение для Mac»', async () => {
     api.updateAccountProfile.mockResolvedValue({});
     const root = await open(<AppScreen node={node('n06')} />);
-    const themes = [...root.querySelectorAll('.seg-ctl.sec-seg label')];
+    const themes = [...root.querySelectorAll('.seg-ctl.sec-seg[aria-label="Тема"] label')];
     expect(themes.map((item) => item.textContent)).toEqual(['Как в системе', 'Светлая', 'Тёмная']);
     click(themes[2].querySelector('input'));
     expect(setTheme).toHaveBeenCalledWith('dark');
-    const select = root.querySelector('select.sec-sel') as HTMLSelectElement;
+    const zoneLabel = [...root.querySelectorAll('.set-t')].find((item) => item.textContent === 'Часовой пояс');
+    const select = root.querySelector(`select[aria-labelledby="${zoneLabel?.id}"]`) as HTMLSelectElement;
     expect(select.value).toBe('Europe/Samara');
     act(() => {
       select.value = 'Europe/Moscow';
@@ -296,7 +505,31 @@ describe('n06 «Приложение»', () => {
     });
     await settle();
     expect(api.updateAccountProfile).toHaveBeenCalledWith({ timezone: 'Europe/Moscow' });
-    expect(root.textContent).not.toMatch(/Язык|Валюта|Обновлени|строке меню|Запуск при входе/u);
+    expect(api.saveAppPreferences).toHaveBeenCalledWith({ theme: 'dark' });
+    expect(root.textContent).not.toMatch(/строке меню|Запуск при входе|Проверить обновления|Обновлять автоматически/u);
+    expect([...root.querySelectorAll('.set-h')].map((item) => item.textContent)).toEqual(['Интерфейс', 'Обновления']);
+    expect(root.querySelector('.only-desk')?.textContent).toMatch(/^ОбновленияВерсия \d+\.\d+\.\d+.*Приложение для MacСкачать$/u);
+    const download = [...root.querySelectorAll('a')].find((item) => item.textContent === 'Скачать');
+    expect(download?.getAttribute('href')).toBe('/downloads/openqareer-macos.dmg');
+  });
+
+  it('B593: валюта зарплат сохраняется; сбой возвращает прежнюю и показывает строку', async () => {
+    api.getAppPreferences.mockResolvedValue({ theme: null, moneyCurrency: 'USD' });
+    const root = await open(<AppScreen node={node('n06')} />);
+    const group = root.querySelector('[role=radiogroup][aria-label="Валюта зарплат"]') as HTMLElement;
+    const options = [...group.querySelectorAll('label')];
+    expect(options.map((item) => item.textContent)).toEqual(['₽', '$', '€', 'AED']);
+    expect((options[1].querySelector('input') as HTMLInputElement).checked).toBe(true);
+    api.saveAppPreferences.mockResolvedValueOnce({ theme: null, moneyCurrency: 'EUR' });
+    click(options[2].querySelector('input'));
+    await settle();
+    expect(api.saveAppPreferences).toHaveBeenLastCalledWith({ moneyCurrency: 'EUR' });
+    expect((options[2].querySelector('input') as HTMLInputElement).checked).toBe(true);
+    api.saveAppPreferences.mockRejectedValueOnce(new Error('сеть'));
+    click(options[0].querySelector('input'));
+    await settle();
+    expect((options[2].querySelector('input') as HTMLInputElement).checked).toBe(true);
+    expect(root.querySelector('.set-res.is-err')?.textContent).toContain('Не сохранилось');
   });
 });
 

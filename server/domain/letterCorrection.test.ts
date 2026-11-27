@@ -14,11 +14,23 @@ describe('letterCorrection (B640): причина отказа одной фра
     expect(text).toContain('не называй других имён');
   });
 
+  it('место: города вакансии не называть', () => {
+    expect(letterCorrection(['place'])).toContain('Не называй городов');
+  });
+
   it('по одной фразе на правило, резюме — по тому, приложено ли оно', () => {
     expect(letterCorrection(['number', 'number', 'resume'])).toBe(
       'Прошлый вариант письма отклонён. Не пиши цифр, которых нет в профиле кандидата: каждая цифра письма должна стоять в профиле. Последней фразой перед подписью скажи, что резюме приложено.',
     );
     expect(letterCorrection(['resume'], false)).toContain('Не упоминай резюме');
     expect(letterCorrection(['unknown'])).toBe(undefined);
+  });
+});
+
+describe('B753: отказ проверки сообщения знакомому и рекрутёру', () => {
+  it('длинный текст, слова отклика и новые цифры — своя фраза', () => {
+    expect(letterCorrection(['contact_too_long'])).toContain('короче');
+    expect(letterCorrection(['contact_response_formula'])).toContain('не отклик');
+    expect(letterCorrection(['contact_new_digits'])).toContain('цифр');
   });
 });

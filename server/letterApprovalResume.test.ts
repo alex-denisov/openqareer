@@ -72,6 +72,96 @@ describe('B601: одобрение письма прикладывает рез�
   });
 });
 
+describe('B785: одобренный, но не отправленный отклик', () => {
+  const PATH = '/api/v1/candidate/vacancies/cluster-99/letter-resume';
+
+  async function approvedThenChanged() {
+    const kit = await setup('Head of Platform');
+    const first = (await kit.approve()).json().data;
+    seedResume(kit.candidates, kit.candidateId, 'VP Platform Engineering');
+    const prepared = (await kit.prepareResume()).json().data;
+    return { ...kit, first, prepared };
+  }
+
+  it('подготовка ничего не прикладывает; «Одобрить» прикладывает ровно показанную версию', async () => {
+    const { call, candidates, candidateId, first, prepared, linkedResume, resumeDocuments, readApproval } =
+      await approvedThenChanged();
+    expect(prepared.replaceable).toBe(true);
+    expect(prepared.versionId).not.toBe(first.resume.versionId);
+    expect(linkedResume(first.applicationId)).toBe(first.resume.documentId);
+    expect(resumeDocuments()).toHaveLength(1);
+    // Пока кандидат смотрел версию, профиль снова изменился.
+    seedResume(candidates, candidateId, 'Chief Platform Officer');
+    const attached = (await call('PUT', PATH, { versionId: prepared.versionId })).json().data.resume;
+    expect(attached.versionId).toBe(prepared.versionId);
+    expect(linkedResume(first.applicationId)).toBe(attached.documentId);
+    expect((await readApproval()).json().data.approval.resume.versionId).toBe(prepared.versionId);
+    await call('PUT', PATH, { versionId: prepared.versionId });
+    expect(resumeDocuments()).toHaveLength(2);
+    expect(candidates.listApplications(candidateId).map(({ stage }) => stage)).toEqual(['saved']);
+  });
+
+  it('файл, приложенный кандидатом, и отправленный отклик не меняются', async () => {
+    const { call, candidates, candidateId, first, prepared, prepareResume, linkedResume } =
+      await approvedThenChanged();
+    const { document: own } = candidates.saveDocument(candidateId, {
+      kind: 'resume', source: 'upload', fileName: 'own.pdf', mimeType: 'application/pdf',
+      contentBase64: Buffer.from('pdf').toString('base64'), parseStatus: 'not_applicable',
+    } as never);
+    candidates.linkApplicationMaterial(candidateId, first.applicationId, 'resume', own.id);
+    expect((await prepareResume()).json().data.replaceable).toBe(false);
+    expect((await call('PUT', PATH, { versionId: prepared.versionId })).statusCode).toBe(409);
+    expect(linkedResume(first.applicationId)).toBe(own.id);
+
+    const sent = await approvedThenChanged();
+    const application = sent.candidates.getApplication(sent.candidateId, sent.first.applicationId)!;
+    await sent.call('PATCH', '/api/v1/candidate/applications/' + application.id, {
+      expectedVersion: application.version,
+      stage: 'applied',
+    });
+    expect((await sent.prepareResume()).json().data.replaceable).toBe(false);
+    expect((await sent.call('PUT', PATH, { versionId: sent.prepared.versionId })).statusCode).toBe(409);
+    expect(sent.linkedResume(sent.first.applicationId)).toBe(sent.first.resume.documentId);
+  });
+
+  it('чужая или неверная версия не прикладывается', async () => {
+    const { call, first, linkedResume } = await approvedThenChanged();
+    expect((await call('PUT', PATH, { versionId: 'x' })).statusCode).toBe(400);
+    expect((await call('PUT', PATH, { versionId: '11111111-1111-5111-8111-111111111111' })).statusCode).toBe(409);
+    expect(linkedResume(first.applicationId)).toBe(first.resume.documentId);
+  });
+});
+
+describe('B785: резюме отправленного отклика', () => {
+  it('после отправки версия не меняется и отклик не открывается заново', async () => {
+    const { call, candidates, candidateId, approve, prepareResume, versions, linkedResume, resumeDocuments } =
+      await setup('Head of Platform');
+    const first = (await approve()).json().data;
+    const sent = candidates.getApplication(candidateId, first.applicationId)!;
+    const marked = await call('PATCH', '/api/v1/candidate/applications/' + sent.id, {
+      expectedVersion: sent.version,
+      stage: 'applied',
+    });
+    expect(marked.statusCode).toBe(200);
+    // Профиль, а с ним и разбор изменились: id версии был бы другим.
+    seedResume(candidates, candidateId, 'VP Platform Engineering');
+    expect((await prepareResume()).json().data.versionId).toBe(first.resume.versionId);
+    // Сам отклик заново не одобряется; письмо знакомому пишется и после отправки — с тем же резюме.
+    expect((await approve()).statusCode).toBe(409);
+    const toContact = await approve({ recipient: { name: 'Пётр Пример' } });
+    expect(toContact.statusCode).toBe(200);
+    expect(toContact.json().data.resume).toMatchObject({
+      versionId: first.resume.versionId,
+      documentId: first.resume.documentId,
+    });
+    expect(linkedResume(first.applicationId)).toBe(first.resume.documentId);
+    expect(versions()).toHaveLength(1);
+    expect(resumeDocuments()).toHaveLength(1);
+    const after = candidates.listApplications(candidateId);
+    expect(after.map(({ id, stage }) => [id, stage])).toEqual([[first.applicationId, 'applied']]);
+  });
+});
+
 describe('hasAttachableResume', () => {
   it('место работы без подтверждённого факта не делает резюме: в снимке его нет', async () => {
     const { candidates, candidateId, approve } = await setup();
@@ -95,5 +185,126 @@ describe('B601: возврат к прежнему резюме', () => {
     expect(middle.resume.versionId).not.toBe(first.resume.versionId);
     expect(linkedResume(back.applicationId)).toBe(back.resume.documentId);
     expect(back.resume.documentId).not.toBe(middle.resume.documentId);
+  });
+});
+
+describe('B785: правки резюме под вакансию', () => {
+  const PATH = '/api/v1/candidate/vacancies/cluster-99/resume-edits';
+
+  const BULLETS = ['Вела бэкенд и релизы команды', 'Перевела платформу на Kubernetes, 2024'];
+
+  it('правка видна, отменяется, меняется без новых чисел и уходит в одобренное резюме', async () => {
+    const { call, candidates, candidateId, approve, prepareResume } = await setup();
+    seedResume(candidates, candidateId, 'Head of Platform', BULLETS);
+    const [edit] = (await call('GET', PATH)).json().data.edits;
+    expect(edit).toMatchObject({ text: BULLETS[1], why: 'Kubernetes', cancelled: false });
+    const first = async () => {
+      const id = (await prepareResume()).json().data.versionId;
+      const version = candidates.getResumeVersion(candidateId, id);
+      return (version?.snapshot as unknown as { document: { experience: Array<{ bullets: Array<{ value: string }> }> } })
+        .document.experience[0]!.bullets[0]!.value;
+    };
+    expect(await first()).toBe(BULLETS[1]);
+    expect((await call('PUT', PATH, { action: 'cancel', id: edit.id })).json().data.edits[0].cancelled).toBe(true);
+    expect(await first()).toBe(BULLETS[0]);
+    expect((await call('PUT', PATH, { action: 'text', id: edit.id, text: 'Ускорила на 30%' })).statusCode).toBe(422);
+    const text = 'Kubernetes в 2024: перевела платформу';
+    expect((await call('PUT', PATH, { action: 'text', id: edit.id, text })).statusCode).toBe(200);
+    expect(await first()).toBe(text);
+    const approved = (await approve()).json().data.resume;
+    expect(JSON.stringify(candidates.getResumeVersion(candidateId, approved.versionId)?.snapshot)).toContain(text);
+    expect(candidates.exportCandidate(candidateId).content.resumeEdits).toEqual([
+      { vacancyId: 'cluster-99', choices: { cancelled: [], texts: { [edit.id]: text } } },
+    ]);
+    expect((await call('PUT', PATH, { action: 'cancel', id: 'нет' })).statusCode).toBe(409);
+    expect((await call('PUT', PATH, { action: 'other', id: 'x' })).statusCode).toBe(400);
+  });
+
+  it('RU/EN: перевод входит в версию, сбой перевода язык не меняет, назад — без модели', async () => {
+    let works = false;
+    const translate = async ({ bullets }: { bullets: ReadonlyArray<{ key: string; text: string }> }) =>
+      works ? { bullets: bullets.map(({ key, text }) => ({ key, text: 'The platform was moved to Kubernetes' + (text.includes('2024') ? ', 2024' : '') })) } : null;
+    const { call, candidates, candidateId, approve, prepareResume } = await setup(undefined, {
+      experienceFactRewriter: { translate, rewrite: async () => null } as never,
+    });
+    seedResume(candidates, candidateId, 'Head of Platform', BULLETS);
+    const snapshot = async () => {
+      const id = (await prepareResume()).json().data.versionId;
+      return JSON.stringify(candidates.getResumeVersion(candidateId, id)?.snapshot.document.experience);
+    };
+    const russian = await snapshot();
+    expect((await call('GET', PATH)).json().data.lang).toBe('ru');
+    expect((await call('PUT', PATH, { action: 'lang', lang: 'en' })).statusCode).toBe(503);
+    expect((await call('GET', PATH)).json().data.lang).toBe('ru');
+    expect(await snapshot()).toBe(russian);
+    works = true;
+    expect((await call('PUT', PATH, { action: 'lang', lang: 'en' })).json().data.lang).toBe('en');
+    expect(await snapshot()).not.toMatch(/Перевела|Вела|Финтех/u);
+    const { versionId } = (await approve()).json().data.resume;
+    expect(JSON.stringify(candidates.getResumeVersion(candidateId, versionId)?.snapshot)).toContain('moved to Kubernetes, 2024');
+    works = false;
+    expect((await call('PUT', PATH, { action: 'lang', lang: 'ru' })).json().data.lang).toBe('ru');
+    expect(await snapshot()).toBe(russian);
+  });
+
+  it('RU/EN: более длинный перевод не теряет пунктов при подгонке под две страницы', async () => {
+    const translate = async ({ bullets }: { bullets: ReadonlyArray<{ key: string; text: string }> }) => ({
+      bullets: bullets.map(({ key, text }) => ({
+        key,
+        text: `The support service moved to the new platform with ${/\d+/u.exec(text)?.[0]} regional teams across the whole country on schedule`,
+      })),
+    });
+    const { call, candidates, candidateId, prepareResume } = await setup(undefined, {
+      experienceFactRewriter: { translate, rewrite: async () => null } as never,
+    });
+    const bullets = Array.from({ length: 50 }, (_, index) => `Сервис поддержки перешёл на платформу, регион номер ${index + 100}`);
+    seedResume(candidates, candidateId, 'Head of Platform', bullets);
+    const count = async () => {
+      const id = (await prepareResume()).json().data.versionId;
+      return candidates.getResumeVersion(candidateId, id)?.snapshot.document.experience[0]?.bullets.length;
+    };
+    const russian = await count();
+    expect(russian).toBeGreaterThan(20);
+    expect((await call('PUT', PATH, { action: 'lang', lang: 'en' })).statusCode).toBe(200);
+    expect(await count()).toBe(russian);
+  });
+});
+
+describe('отклик на hh.ru: уходит резюме hh.ru', () => {
+  const vacancy = { primaryUrl: 'https://hh.ru/vacancy/135330911' };
+
+  it('своё резюме не собирается, правок нет, к письму ничего не приложено', async () => {
+    const { approve, call, prepareResume, resumeDocuments, versions } = await setup('Head of Platform', { vacancy });
+    expect((await prepareResume()).json().data).toMatchObject({ ready: false, versionId: null });
+    expect((await call('GET', '/api/v1/candidate/vacancies/cluster-99/resume-edits')).json().data).toEqual({ edits: [], lang: null });
+    const response = await approve();
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.resume).toBeNull();
+    expect(resumeDocuments()).toHaveLength(0);
+    expect(versions()).toHaveLength(0);
+  });
+});
+
+describe('язык резюме по умолчанию — язык вакансии', () => {
+  const PATH = '/api/v1/candidate/vacancies/cluster-99/resume-edits';
+  const vacancy = { descriptionSummary: 'Platform engineering with Node.js and Kubernetes' };
+  const translate = async ({ bullets }: { bullets: ReadonlyArray<{ key: string; text: string }> }) => ({
+    bullets: bullets.map(({ key }) => ({ key, text: 'The platform was moved to Kubernetes' })),
+  });
+
+  it('русский профиль, английская вакансия — английский текст; переключатель возвращает русский', async () => {
+    const { call, candidates, candidateId, prepareResume } = await setup(undefined, {
+      vacancy,
+      experienceFactRewriter: { translate, rewrite: async () => null } as never,
+    });
+    seedResume(candidates, candidateId, 'Head of Platform', ['Перевела платформу на Kubernetes']);
+    const text = async () => {
+      const id = (await prepareResume()).json().data.versionId;
+      return JSON.stringify(candidates.getResumeVersion(candidateId, id)?.snapshot.document.experience);
+    };
+    expect(await text()).toContain('moved to Kubernetes');
+    expect((await call('GET', PATH)).json().data.lang).toBe('en');
+    expect((await call('PUT', PATH, { action: 'lang', lang: 'ru' })).json().data.lang).toBe('ru');
+    expect(await text()).toContain('Перевела платформу');
   });
 });

@@ -1,7 +1,8 @@
 import { apiFetch, readData } from '../../coach/apiClient';
+import { getCurrentRoleSkillAssessment } from '../../skills/roleSkillAssessmentApi';
 import { getIncome } from '../profile/profileExtrasApi';
 import { loadRoles, type RolesData } from './careerApi';
-import type { ProfessionRequirement } from './professionPathModel';
+import type { ProfessionForms, ProfessionRequirement } from './professionPathModel';
 
 const PATH_API = '/api/v1/candidate/career/profession-path';
 
@@ -19,16 +20,23 @@ export type ProfessionWage =
 
 export type ProfessionPath =
   | { readonly state: 'no_target' }
-  | { readonly state: 'source_unavailable'; readonly target: string }
+  | {
+      readonly state: 'source_unavailable';
+      readonly target: string;
+      readonly forms?: ProfessionForms | null;
+    }
   | {
       readonly state: 'too_few';
       readonly target: string;
+      readonly forms?: ProfessionForms | null;
       readonly sampleSize: number;
       readonly threshold: number;
     }
   | {
       readonly state: 'ready';
       readonly target: string;
+      /** B669: падежные формы профессии из словаря; без них — общие тексты. */
+      readonly forms?: ProfessionForms | null;
       readonly sampleSize: number;
       readonly observedAt: string;
       readonly requirements: readonly ProfessionRequirement[];
@@ -43,6 +51,8 @@ export interface ProfessionData {
   readonly roles: RolesData | null;
   /** Нынешний доход на руки из профиля; `null` — не указан или не прочитан. */
   readonly currentIncome: number | null;
+  /** B741: проверку навыков профессии можно начать; без неё шаг без кнопки. */
+  readonly checkReady: boolean;
 }
 
 export async function getProfessionPath(signal?: AbortSignal): Promise<ProfessionPath> {
@@ -55,7 +65,18 @@ export async function loadProfession(signal: AbortSignal): Promise<ProfessionDat
     loadRoles(signal).catch(() => null),
     getIncome(signal).catch(() => null),
   ]);
-  return { path, roles, currentIncome: income?.current ?? null };
+  return {
+    path,
+    roles,
+    currentIncome: income?.current ?? null,
+    checkReady: await readCheckReady(path),
+  };
+}
+
+async function readCheckReady(path: ProfessionPath): Promise<boolean> {
+  if (path.state !== 'ready') return false;
+  const current = await getCurrentRoleSkillAssessment(path.target).catch(() => null);
+  return current?.state === 'ready';
 }
 
 export async function saveLowerIncome(answer: LowerIncomeAnswer): Promise<LowerIncomeAnswer> {

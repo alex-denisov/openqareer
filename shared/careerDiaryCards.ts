@@ -8,10 +8,28 @@ export type CareerDiaryGoalSetter = (typeof GOAL_SETTERS)[number];
 export const GOAL_INDICATORS_MAX = 3;
 export const DIARY_NOTE_MAX = 500;
 
+/** Строка результата в профиле; длиннее не принимаем. */
+export const GOAL_TRANSFER_LINE_MAX = 300;
+
+/** B742: достигнутая цель перенесена в профиль строкой результата под местом работы. */
+export interface CareerDiaryGoalTransfer {
+  /** Позиция «Опыта», под которой стоит строка. */
+  readonly experienceId: string;
+  /** Факт профиля, который стал этой строкой. */
+  readonly memoryId: string;
+  readonly transferredAt: string;
+}
+
 export interface CareerDiaryGoalArchive {
   readonly archivedAt: string;
   /** Причина одной строкой: «Отменена директором: банк меняет платформу сборки». */
   readonly reason: string;
+}
+
+/** B742: вклад квартала в годовую цель — значение, к которому цель приходит к концу квартала. */
+export interface CareerDiaryQuarterTarget {
+  readonly quarter: 1 | 2 | 3 | 4;
+  readonly value: number;
 }
 
 export interface CareerDiaryGoalDetails {
@@ -21,6 +39,10 @@ export interface CareerDiaryGoalDetails {
   /** Вес цели в оценке, 0–100. */
   readonly weight: number | null;
   readonly archive: CareerDiaryGoalArchive | null;
+  /** Вклад кварталов годовой цели по порядку; нет — null (так читаются прежние цели). */
+  readonly quarterTargets: readonly CareerDiaryQuarterTarget[] | null;
+  /** Перенос в профиль; не переносили — null (так читаются прежние цели). */
+  readonly transfer: CareerDiaryGoalTransfer | null;
 }
 
 /** Цель одним ответом: сама цель, её поля из макета и показатели внутри. */
@@ -51,6 +73,7 @@ export interface CareerDiaryGoalCardInput {
   readonly setBy: CareerDiaryGoalSetter;
   readonly agreedOn?: string | null;
   readonly weight?: number | null;
+  readonly quarterTargets?: readonly CareerDiaryQuarterTarget[] | null;
   readonly indicators: readonly CareerDiaryIndicatorInput[];
 }
 
@@ -176,4 +199,6 @@ export const DEFAULT_GOAL_DETAILS: CareerDiaryGoalDetails = {
   agreedOn: null,
   weight: null,
   archive: null,
+  quarterTargets: null,
+  transfer: null,
 };

@@ -26,6 +26,8 @@ import type {
 
 export const STATUS_HISTORY_SECTION = 'status';
 const STATUS_HISTORY_LABEL = 'Статус';
+/** B665: «История изменений» — журнал: возврат — свой шаг, прежняя смена остаётся как была. */
+const STATUS_REVERT_LABEL = 'Возврат прежнего статуса';
 
 export interface CandidateStatusDeps {
   readonly repository: SqliteCandidateStatusRepository;
@@ -102,6 +104,7 @@ export function previewCandidateStatus(
   const latest = deps.repository.current(candidateId);
   return buildStatusPreview(choiceOf(latest), to, {
     autoApplyPaused: deps.automationPause.isPaused(candidateId, now),
+    weeklySelection: deps.repository.weeklySelectionEnabled(candidateId),
   });
 }
 
@@ -118,6 +121,27 @@ export interface StatusChangeResult {
   readonly applied: { readonly pauseAutoApply: boolean };
 }
 
+function assertChanged(
+  latest: CandidateStatusChange | null,
+  from: StatusChoice,
+  to: StatusChoice,
+): void {
+  if (latest && from.status === to.status && from.targetProfession === to.targetProfession) {
+    throw new StatusUnchangedError();
+  }
+}
+
+/** B779: подборка раз в неделю — отметка кандидата; без поля остаётся как была. */
+function applyWeeklySelection(
+  repository: SqliteCandidateStatusRepository,
+  candidateId: string,
+  options: StatusChangeOptions,
+  now: Date,
+): void {
+  if (options.weeklySelection === undefined) return;
+  repository.setWeeklySelection(candidateId, options.weeklySelection, now);
+}
+
 /** Статус меняется только здесь и только по запросу самого кандидата. */
 export function changeCandidateStatus(
   deps: CandidateStatusDeps,
@@ -126,9 +150,7 @@ export function changeCandidateStatus(
   const { candidateId, to, now } = input;
   const latest = deps.repository.current(candidateId);
   const from = choiceOf(latest);
-  if (latest && from.status === to.status && from.targetProfession === to.targetProfession) {
-    throw new StatusUnchangedError();
-  }
+  assertChanged(latest, from, to);
   const pause =
     shouldPauseAutoApply(to.status, input.options) &&
     !deps.automationPause.isPaused(candidateId, now);
@@ -165,6 +187,7 @@ export function changeCandidateStatus(
     if (snapshot) deps.automationPause.restore(candidateId, snapshot);
     throw error;
   }
+  applyWeeklySelection(deps.repository, candidateId, input.options, now);
   return {
     state: readCandidateStatus(deps, candidateId, now),
     applied: { pauseAutoApply: pause },
@@ -186,7 +209,21 @@ export function revertCandidateStatus(
   if (latest.applied.autoApplyPause) {
     deps.automationPause.restore(candidateId, latest.applied.autoApplyPause);
   }
-  deps.changeLog.markReverted(candidateId, latest.id, revertedAt);
+  deps.changeLog.record({
+    id: randomUUID(),
+    candidateId,
+    actor: 'candidate',
+    section: STATUS_HISTORY_SECTION,
+    itemId: null,
+    label: STATUS_REVERT_LABEL,
+    previous: titleOf(choiceOf(latest)),
+    applied: titleOf({
+      status: latest.previousStatus,
+      targetProfession: latest.previousTargetProfession,
+    }),
+    commandId: null,
+    createdAt: revertedAt,
+  });
   return readCandidateStatus(deps, candidateId, now);
 }
 

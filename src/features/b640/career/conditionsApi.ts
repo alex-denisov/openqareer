@@ -44,8 +44,8 @@ async function saveStopList(
 }
 
 const sameProfilePart = (a: SearchConditionsDraft, b: SearchConditionsDraft): boolean =>
-  JSON.stringify([a.geography, a.salaryFrom.amountRubles, a.format]) ===
-  JSON.stringify([b.geography, b.salaryFrom.amountRubles, b.format]);
+  JSON.stringify([a.geography, a.salaryFrom.amountRubles, a.salaryFrom.showWithoutSalary, a.format]) ===
+  JSON.stringify([b.geography, b.salaryFrom.amountRubles, b.salaryFrom.showWithoutSalary, b.format]);
 
 /** Сохраняет переход `before → after`: профиль ограничений и стоп-лист — только изменённое. */
 export async function saveConditions(

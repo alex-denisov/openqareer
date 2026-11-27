@@ -10,6 +10,7 @@ import { HH_ATTEMPT_STALE_MS, type HhAttemptRow } from '../candidate/sqliteHhSes
 export type HhApplyRefusal =
   | 'hh_resumes_not_read'
   | 'hh_resume_not_in_session'
+  | 'hh_copy_not_ready'
   | 'hh_apply_in_progress'
   | 'hh_already_applied'
   | 'hh_daily_limit_reached'
@@ -49,8 +50,17 @@ export function hhApplyGate(input: HhApplyGateInput): HhApplyGateResult {
   if (!input.snapshot.resumes.some((resume) => resume.id === input.resumeId)) {
     return { ok: false, refusal: 'hh_resume_not_in_session' };
   }
+  // B787: копия под вакансию без правок или с видимостью «всем» работодателю не уходит.
+  const copies = Object.values(input.snapshot.copies ?? {});
+  if (copies.some((copy) => copy.copyId === input.resumeId && copy.stage !== 'ready')) {
+    return { ok: false, refusal: 'hh_copy_not_ready' };
+  }
   if (input.forVacancy.some((attempt) => inProgress(attempt, input.now))) {
     return { ok: false, refusal: 'hh_apply_in_progress' };
+  }
+  // hh.ru сам показал прежний отклик: повтор только тратит попытку.
+  if (input.forVacancy.some((attempt) => attempt.failureCode === 'already_applied')) {
+    return { ok: false, refusal: 'hh_already_applied' };
   }
   // Анкета после отклика тоже значит, что отклик на hh.ru ушёл.
   if (input.forVacancy.some((attempt) => attempt.outcome === 'sent' || attempt.outcome === 'questionnaire')) {

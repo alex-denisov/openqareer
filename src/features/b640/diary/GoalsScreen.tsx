@@ -9,9 +9,13 @@ import { InfoTip } from '../kit/InfoTip';
 import { StatusLine } from '../kit/ResultLine';
 import { buildNodePath, type B640Node } from '../routes';
 import { Link } from '../shell/Link';
+import { useScreenChrome } from '../shell/ShellContext';
 import { listGoalCards } from './diaryApi';
+import { getGoalExamples, getRoleTitleRu, type GoalExample } from './goalHintsApi';
+import { useRoleTitle } from './roleTitle';
 import { GoalItem } from './GoalItem';
-import { HORIZONS, goalsLead, quarterLabel } from './goalsModel';
+import { GoalsMeeting } from './GoalsMeeting';
+import { HORIZONS, archiveNote, goalsLead, quarterLabel } from './goalsModel';
 import { today } from './model';
 import { RetryButton } from './parts';
 import './diary.css';
@@ -56,13 +60,71 @@ function AddActions() {
   );
 }
 
-/** Пусто (d02c): вопрос о целях и пример для роли. */
+/** Примеры без привязки к профессии: пока нет роли или примеров под неё. */
+const GOAL_EXAMPLES: readonly GoalExample[] = [
+  { title: 'Выполнить план квартала', measure: '% от плана' },
+  { title: 'Закрыть вакансии в команду', measure: 'закрыто по плану найма' },
+  { title: 'Сократить срок ключевого процесса', measure: 'дней от начала до результата' },
+];
+
+/** Примеры d02c: ещё готовятся, готовы под роль или их нет (нет роли, модель не ответила). */
+type RoleExamples =
+  | { readonly state: 'loading' }
+  | { readonly state: 'ready'; readonly items: readonly GoalExample[] }
+  | { readonly state: 'none' };
+
+/**
+ * B744: примеры под роль кандидата (d02c). B768: пока роль или примеры не пришли —
+ * «loading», общие примеры только при отказе модели или без роли.
+ */
+function useRoleExamples(role: string | null | undefined): RoleExamples {
+  const [answer, setAnswer] = useState<{ role: string; items: readonly GoalExample[] | null }>();
+  useEffect(() => {
+    if (!role) return undefined;
+    let active = true;
+    getGoalExamples(role).then(
+      (items) => active && setAnswer({ role, items }),
+      () => active && setAnswer({ role, items: null }),
+    );
+    return () => {
+      active = false;
+    };
+  }, [role]);
+  if (role === undefined) return { state: 'loading' };
+  if (role === null) return { state: 'none' };
+  if (answer?.role !== role) return { state: 'loading' };
+  return answer.items ? { state: 'ready', items: answer.items } : { state: 'none' };
+}
+
+/** Название роли в тексте экрана по-русски; модели уходит роль как есть. */
+function useRoleLabel(role: string | null | undefined): string | null | undefined {
+  const [label, setLabel] = useState<string | null>(null);
+  useEffect(() => {
+    if (!role) return undefined;
+    let active = true;
+    getRoleTitleRu(role).then(
+      (titleRu) => active && setLabel(titleRu),
+      () => active && setLabel(null),
+    );
+    return () => {
+      active = false;
+    };
+  }, [role]);
+  return role ? (label ?? role) : role;
+}
+
+/** Пусто (d02c): вопрос о целях в роли кандидата и пример. */
 function NoGoals() {
+  const role = useRoleTitle();
+  const forRole = useRoleExamples(role);
+  const label = useRoleLabel(role);
   return (
     <section className="lead" aria-labelledby="gc-t">
       <div className="lead-head">
         <h2 className="lead-title gc-title" id="gc-t">
-          Какие у вас цели на этот квартал?
+          {label
+            ? `Какие цели в роли «${label}» в первом квартале?`
+            : 'Какие у вас цели на этот квартал?'}
         </h2>
         <InfoTip
           label="Пояснение"
@@ -79,22 +141,34 @@ function NoGoals() {
           Загрузить KPI
         </Link>
       </div>
-      <div className="ghost" aria-label="Пример целей">
-        <p className="ghost-cap">Пример</p>
-        <p className="gc-ex">
-          <strong>Выпускать релиз за неделю</strong>
-          <span className="row-sub"> · срок релиза в днях</span>
-        </p>
-        <p className="gc-ex">
-          <strong>Закрыть вакансии в команду</strong>
-          <span className="row-sub"> · закрыто по плану найма</span>
-        </p>
-        <p className="gc-ex">
-          <strong>Выполнять план выручки отдела</strong>
-          <span className="row-sub"> · выручка за квартал</span>
-        </p>
-      </div>
+      <GoalExamples examples={forRole} label={label} />
     </section>
+  );
+}
+
+function GoalExamples({
+  examples,
+  label,
+}: {
+  readonly examples: RoleExamples;
+  readonly label: string | null | undefined;
+}) {
+  const forRole = examples.state !== 'none' && label;
+  const rows = examples.state === 'ready' ? examples.items : GOAL_EXAMPLES;
+  return (
+    <div className="ghost" aria-label={forRole ? 'Пример целей для роли' : 'Пример целей'}>
+      <p className="ghost-cap">{forRole ? `Пример для роли «${label}»` : 'Пример'}</p>
+      {examples.state === 'loading' ? (
+        <StatusLine state="wait" text="Загружаем примеры" />
+      ) : (
+        rows.map((example) => (
+          <p className="gc-ex" key={example.title}>
+            <strong>{example.title}</strong>
+            <span className="row-sub"> · {example.measure}</span>
+          </p>
+        ))
+      )}
+    </div>
   );
 }
 
@@ -110,7 +184,7 @@ function Archive({ cards }: { readonly cards: readonly CareerDiaryGoalCard[] }) 
         <h3 className="mod-title" id={index === 0 ? 'kp-arch' : undefined} key={card.id}>
           <Link to={buildNodePath('d02a', { goalId: card.id })}>{card.title}</Link>
           {card.details.archive ? (
-            <InfoTip label="Почему в архиве" text={card.details.archive.reason} />
+            <InfoTip label="Почему в архиве" text={archiveNote(card.details.archive, today())} />
           ) : null}
         </h3>
       ))}
@@ -145,7 +219,14 @@ function GoalsLead({ data }: { readonly data: CareerDiaryGoalCards }) {
   const now = today();
   const [horizon, setHorizon] = useState<CareerDiaryHorizon>('quarter');
   const lead = goalsLead(data.items);
-  const shown = data.items.filter((card) => card.horizon === horizon);
+  // Макет d02: на «Квартале» после квартальных целей идут и годовые — с целью этого квартала.
+  const shown =
+    horizon === 'quarter'
+      ? [
+          ...data.items.filter((card) => card.horizon === 'quarter'),
+          ...data.items.filter((card) => card.horizon === 'year'),
+        ]
+      : data.items.filter((card) => card.horizon === horizon);
   return (
     <section className="lead" aria-labelledby="kp-title">
       <div className="lead-head">
@@ -167,7 +248,7 @@ function GoalsLead({ data }: { readonly data: CareerDiaryGoalCards }) {
       {shown.length > 0 ? (
         <ul className="dn-goals">
           {shown.map((card) => (
-            <GoalItem key={card.id} card={card} now={now} />
+            <GoalItem key={card.id} card={card} now={now} quarterView={horizon === 'quarter'} />
           ))}
         </ul>
       ) : (
@@ -181,6 +262,8 @@ function GoalsLead({ data }: { readonly data: CareerDiaryGoalCards }) {
 /** Экран d02 «Цели и показатели»: цели по горизонтам, показатели, архив; пусто — d02c. */
 export function GoalsScreen({ node }: { readonly node: B640Node }) {
   const [loaded, retry] = useGoalCards();
+  // Как у макетов d02 и d02c (`data-mtight`).
+  useScreenChrome({ rootData: { mtight: '1' } });
   const empty =
     loaded.state === 'ready' && loaded.data.items.length === 0 && loaded.data.archived.length === 0;
   return (
@@ -206,6 +289,11 @@ export function GoalsScreen({ node }: { readonly node: B640Node }) {
           </>
         ) : null}
       </div>
+      {empty ? null : (
+        <div className="col">
+          <GoalsMeeting />
+        </div>
+      )}
     </div>
   );
 }

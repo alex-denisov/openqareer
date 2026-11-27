@@ -5,7 +5,11 @@ import type {
   FeedPostCreated,
   FeedPostPage,
 } from '../../../../../shared/b640FeedComments';
-import type { LinkedinQueuePage, LinkedinRhythm } from '../../../../../shared/b640LinkedinQueue';
+import type {
+  LinkedinQueueItem,
+  LinkedinQueuePage,
+  LinkedinRhythm,
+} from '../../../../../shared/b640LinkedinQueue';
 
 const BASE = '/api/v1/candidate/b640/linkedin';
 
@@ -36,6 +40,15 @@ export const getRhythm = () => request<LinkedinRhythm>(`${BASE}/rhythm`);
 
 export const listQueue = (limit = 20) => request<LinkedinQueuePage>(`${BASE}/queue?limit=${limit}`);
 
+const queueTotal = (state: 'queued' | 'due') =>
+  request<LinkedinQueuePage>(`${BASE}/queue?state=${state}&limit=1`).then((page) => page.total);
+
+/** B695: сколько постов ждёт в очереди LinkedIn (по расписанию и уже пора) — их тоже останавливает n05. */
+export const countScheduledPosts = async (): Promise<number> => {
+  const [queued, due] = await Promise.all([queueTotal('queued'), queueTotal('due')]);
+  return queued + due;
+};
+
 /** Одобренный черновик встаёт в первый свободный слот ритма; на LinkedIn ничего не уходит. */
 export const enqueueDraft = (draftId: string) =>
   request<{ readonly scheduledAt: string }>(`${BASE}/queue`, post({ draftId }));
@@ -48,3 +61,25 @@ export const createFeedPost = (input: { readonly url?: string; readonly text: st
 
 export const approveFeedPosts = (draftIds: readonly string[]) =>
   request<FeedApproveResponse>(`${BASE}/feed-posts/approve`, post({ draftIds }));
+
+/** a05 «Пропустить»: пост снимается с ленты, черновик отклоняется. */
+export const skipFeedPost = (draftId: string) =>
+  request<{ readonly draftId: string; readonly skipped: true }>(
+    `${BASE}/feed-posts/${encodeURIComponent(draftId)}/skip`,
+    post({}),
+  );
+
+/** a05e: ритм сохраняется на сервере, комментарии очереди встают на его слоты. */
+export const saveRhythm = (rhythm: LinkedinRhythm) =>
+  request<LinkedinRhythm>(`${BASE}/rhythm`, { ...post(rhythm), method: 'PUT' });
+
+/** a05b «Перенести»: новое время строки очереди. */
+export const rescheduleQueueItem = (id: string, at: string) =>
+  request<LinkedinQueueItem>(`${BASE}/queue/${encodeURIComponent(id)}`, {
+    ...post({ at }),
+    method: 'PATCH',
+  });
+
+/** a05b «Снять с очереди». */
+export const removeQueueItem = (id: string) =>
+  request<LinkedinQueueItem>(`${BASE}/queue/${encodeURIComponent(id)}`, { method: 'DELETE' });

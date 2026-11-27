@@ -16,8 +16,9 @@ import { parseVacancy } from './sqliteVacancyPoolStore';
  * Новая версия правил разбора — новый ключ: проход начнётся сначала.
  * v2 (03.11): «Global» и «Anywhere» целиком — область из любой страны.
  * v3 (04.11): «work from anywhere» в названии и тексте главнее поля места.
+ * v4 (B794): условия найма только в США (401(k), E-Verify, «US Remote») называют США.
  */
-export const REMOTE_SCOPE_BACKFILL_KEY = 'remote-scope-v3';
+export const REMOTE_SCOPE_BACKFILL_KEY = 'remote-scope-v4';
 
 const STATE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS remote_scope_backfill_state (
   key TEXT PRIMARY KEY,
@@ -92,7 +93,11 @@ function changedProjections(database: DatabaseSync, rows: readonly CandidateRow[
     if (!stored || !vacancy) return [];
     const projection = clusterProjectionOf({ ...vacancy, id: row.id });
     if (row.projection && storedScope(row.projection) === projection.remoteScope) return [];
-    return [{ id: row.id, payload: stored.payload, projection: JSON.stringify(projection) }];
+    // Прочие поля проекции остаются как записаны: проход меняет только область.
+    const next = row.projection
+      ? { ...(JSON.parse(row.projection) as object), remoteScope: projection.remoteScope }
+      : projection;
+    return [{ id: row.id, payload: stored.payload, projection: JSON.stringify(next) }];
   });
 }
 

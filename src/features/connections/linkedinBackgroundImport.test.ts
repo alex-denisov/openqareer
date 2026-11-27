@@ -56,7 +56,6 @@ function harness(
       calls.push('open');
       return true;
     },
-    reveal: async () => void calls.push('reveal'),
     park: async () => void calls.push('park'),
     close: async () => void calls.push('close'),
     inspectCurrentPage: async () => inspections[Math.min(index++, inspections.length - 1)],
@@ -78,51 +77,50 @@ describe('runLinkedInBackgroundImport', () => {
     const { dependencies, states, calls } = harness([page()]);
     const outcome = await runLinkedInBackgroundImport(dependencies);
     expect(outcome).toEqual({ phase: 'done', message: 'Из LinkedIn сохранено 3 факта.' });
-    expect(calls).not.toContain('reveal');
+    expect(states.map((state) => state.phase)).not.toContain('needs_person');
     expect(calls[0]).toBe('route');
     expect(calls).toContain('open');
     expect(calls.slice(-2)).toEqual(['close', 'release']);
     expect(states.map((state) => state.phase)).toEqual(['opening', 'reading', 'saving', 'done']);
   });
 
-  it('shows the window only when LinkedIn asks a person to sign in, then parks it', async () => {
+  it('asks for a person when LinkedIn wants a sign-in, and hides the window after it', async () => {
     const { dependencies, states, calls } = harness([LOGIN_PAGE, LOGIN_PAGE, page()]);
     const outcome = await runLinkedInBackgroundImport(dependencies);
     expect(outcome.phase).toBe('done');
-    expect(calls.filter((call) => call === 'reveal')).toHaveLength(1);
-    expect(calls.indexOf('park')).toBeGreaterThan(calls.indexOf('reveal'));
+    expect(calls.filter((call) => call === 'park')).toHaveLength(1);
     expect(states).toContainEqual({
       phase: 'needs_person',
       message: 'Ждём, пока вы войдёте в LinkedIn в открывшемся окне.',
     });
   });
 
-  it('shows the window for a captcha', async () => {
+  it('asks for a person on a captcha', async () => {
     const captcha = page({ signedInApplicant: false, captcha: true });
-    const { dependencies, calls } = harness([captcha, page()]);
+    const { dependencies, states } = harness([captcha, page()]);
     await runLinkedInBackgroundImport(dependencies);
-    expect(calls).toContain('reveal');
+    expect(states.map((state) => state.phase)).toContain('needs_person');
   });
 
   it('keeps the window hidden while the page is still loading', async () => {
     const loading = page({ ready: false, signedInApplicant: false });
-    const { dependencies, calls } = harness([loading, loading, page()]);
+    const { dependencies, states } = harness([loading, loading, page()]);
     await runLinkedInBackgroundImport(dependencies);
-    expect(calls).not.toContain('reveal');
+    expect(states.map((state) => state.phase)).not.toContain('needs_person');
   });
 
-  it('shows the window when the page never settles on its own', async () => {
+  it('asks for a person when the page never settles on its own', async () => {
     const loading = page({ ready: false, signedInApplicant: false });
-    const { dependencies, calls } = harness([loading]);
+    const { dependencies, states, calls } = harness([loading]);
     const run = runLinkedInBackgroundImport({
       ...dependencies,
-      isWindowOpen: async () => calls.includes('open') && !calls.includes('reveal'),
+      isWindowOpen: async () => calls.includes('open') && !states.some((state) => state.phase === 'needs_person'),
     });
     await expect(run).resolves.toEqual({
       phase: 'failed',
       message: 'Окно LinkedIn закрыто, импорт не завершён. Профиль не изменился.',
     });
-    expect(calls).toContain('reveal');
+    expect(states.map((state) => state.phase)).toContain('needs_person');
   });
 
   it('fails without a window when the route cannot be raised', async () => {

@@ -5,6 +5,7 @@ import type {
   FootprintRiskLevel,
   FootprintRiskSummary,
 } from '../../../../shared/footprintRisk';
+import { pluralRu } from '../../../../shared/pluralRu';
 import type { IconName } from '../kit';
 import type { B640Node } from '../routes';
 
@@ -15,6 +16,8 @@ export interface PlanItem {
   readonly preview: string;
   readonly selectedByDefault: boolean;
   readonly available: boolean;
+  /** Ссылка из контактов профиля: её можно убрать (B668). */
+  readonly profileLink?: string;
 }
 
 /** Одна строка «Данных для поиска»: одинаковые запросы к разным источникам слиты в одну. */
@@ -23,6 +26,7 @@ export interface PlanGroup {
   readonly kind: PlanItem['kind'];
   readonly label: string;
   readonly ids: readonly string[];
+  readonly profileLink?: string;
 }
 
 export function planGroups(plan: readonly PlanItem[]): readonly PlanGroup[] {
@@ -33,7 +37,13 @@ export function planGroups(plan: readonly PlanItem[]): readonly PlanGroup[] {
     const prev = groups.get(key);
     groups.set(key, prev
       ? { ...prev, ids: [...prev.ids, item.id] }
-      : { key, kind: item.kind, label: item.preview, ids: [item.id] });
+      : {
+          key,
+          kind: item.kind,
+          label: item.preview,
+          ids: [item.id],
+          ...(item.profileLink ? { profileLink: item.profileLink } : {}),
+        });
   }
   return [...groups.values()];
 }
@@ -51,24 +61,30 @@ export function selectedIds(
   return groups.filter((group) => selected.has(group.key)).flatMap((group) => group.ids);
 }
 
-const KIND_WORD: Readonly<Record<PlanItem['kind'], readonly [string, string]>> = {
-  name: ['имя', 'имени'],
-  email: ['почта', 'почты'],
-  username: ['ник', 'ника'],
-  profile_url: ['ссылка', 'ссылки'],
-  work_context: ['место работы', 'места работы'],
+const KIND_WORD: Readonly<Record<PlanItem['kind'], [string, string, string]>> = {
+  name: ['имя', 'имени', 'имён'],
+  email: ['почта', 'почты', 'почт'],
+  username: ['ник', 'ника', 'ников'],
+  profile_url: ['ссылка', 'ссылки', 'ссылок'],
+  work_context: ['место работы', 'места работы', 'мест работы'],
 };
 const KIND_ORDER: readonly PlanItem['kind'][] = ['name', 'email', 'username', 'profile_url', 'work_context'];
+
+/** Город идёт в плане тем же видом, что места работы; формулировка — из плана поиска (B668). */
+const CITY_WORDING = /^Искать имя и город «/u;
+const isCity = (group: PlanGroup): boolean =>
+  group.kind === 'work_context' && CITY_WORDING.test(group.label);
 
 /** «имя, почта, 2 ссылки» — по чему ищем, без способа поиска. */
 export function searchByLine(groups: readonly PlanGroup[], selected: ReadonlySet<string>): string {
   const parts: string[] = [];
   for (const kind of KIND_ORDER) {
-    const count = groups.filter((group) => group.kind === kind && selected.has(group.key)).length;
+    const count = groups.filter((group) => group.kind === kind && !isCity(group) && selected.has(group.key)).length;
     if (count === 0) continue;
-    const [one, many] = KIND_WORD[kind];
-    parts.push(count === 1 ? one : `${count} ${many}`);
+    const forms = KIND_WORD[kind];
+    parts.push(count === 1 ? forms[0] : pluralRu(count, forms));
   }
+  if (groups.some((group) => isCity(group) && selected.has(group.key))) parts.push('город');
   return parts.join(', ');
 }
 
@@ -86,6 +102,29 @@ export function failedChecks(audit: CandidateFootprintAudit | null): number {
   if (!audit || audit.state === 'pending') return 0;
   const failed = audit.adapterStatuses.filter((status) => status.state === 'source_error').length;
   return audit.state === 'failed' ? Math.max(failed, 1) : failed;
+}
+
+/** Строка сбоя F2б, как в макете: «2 категории не проверены». */
+export function uncheckedLine(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${count} категория не проверена`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${count} категории не проверены`;
+  return `${count} категорий не проверены`;
+}
+
+const SHORT_LEVEL: Record<FootprintRiskLevel, string> = {
+  high: 'высокий',
+  important: 'важно',
+  low: 'низкий',
+  useful: 'полезно',
+};
+
+/** Строка «Риск» находки, как в макете f03b: «высокий: номер находят по имени». */
+export function riskLine(
+  item: Pick<FootprintRiskItem, 'level' | 'levelLabel' | 'levelReason'>,
+): string {
+  return item.levelReason ? `${SHORT_LEVEL[item.level]}: ${item.levelReason}` : item.levelLabel;
 }
 
 const DAY_MONTH = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' });
@@ -124,6 +163,8 @@ export const ACTION_ICON: Readonly<Record<FootprintRiskActionKind, IconName>> = 
   ask_to_fix: 'edit',
   hide: 'eyeoff',
   add_to_profile: 'plus',
+  confirm_owner: 'flag',
+  not_mine: 'close',
 };
 
 /** Находки, которые ещё стоит разобрать: открытые и не полезные. */
@@ -135,9 +176,34 @@ export function usefulItems(summary: FootprintRiskSummary): readonly FootprintRi
   return summary.items.filter((item) => item.level === 'useful');
 }
 
-/** Ведёт ли действие на экран пути удаления (у полезной находки — нет). */
+/** Действия полезной находки: путь удаления у неё не открывается. */
+const USEFUL_ACTIONS: ReadonlySet<string> = new Set(['add_to_profile', 'not_mine']);
+
+/** Ведёт ли действие на экран находки f03b (у полезной находки — нет). */
 export function opensRemovalPath(item: FootprintRiskItem): boolean {
-  return item.action !== null && item.action.kind !== 'add_to_profile';
+  return item.action !== null && !USEFUL_ACTIONS.has(item.action.kind);
+}
+
+/** «Проверить» ждёт решения кандидата; «стоит убрать» — остальные действия удаления. */
+const REVIEW_ACTIONS: ReadonlySet<string> = new Set(['check_now', 'confirm_owner']);
+
+/**
+ * B645 f03: главная кнопка — первая находка, которую стоит убрать (как «Убрать телефон» в
+ * макете); убирать нечего — первая страница, которую нужно проверить.
+ */
+export function firstToRemove(
+  risks: readonly FootprintRiskItem[],
+): FootprintRiskItem | undefined {
+  const paths = risks.filter(opensRemovalPath);
+  return paths.find((item) => !REVIEW_ACTIONS.has(item.action?.kind ?? '')) ?? paths[0];
+}
+
+/**
+ * B727: страница по нику — кандидат решает, его ли она. Строка ведёт на f03b (B382: из списка
+ * внешних ссылок нет, макет p02), а сама страница открывается уже с f03b.
+ */
+export function confirmsOwner(item: FootprintRiskItem): boolean {
+  return item.action?.kind === 'confirm_owner' && item.url !== null;
 }
 
 /** Готовый текст письма владельцу сайта; отправляет сам кандидат. */
@@ -148,8 +214,20 @@ export function letterText(item: FootprintRiskItem): string {
       `${item.mismatch.field} — «${item.mismatch.foundValue}». Это неточно: верно — ` +
       `«${item.mismatch.profileValue}». Прошу исправить и ответить на это письмо.`;
   }
-  return `Здравствуйте. ${capitalize(where.trim() || 'на вашем сайте')} опубликованы мои данные: ` +
-    `${item.title.toLowerCase()}. Прошу удалить их и ответить на это письмо.`;
+  const what = titleIsSite(item) ? '' : `: ${item.title.toLowerCase()}`;
+  return `Здравствуйте. ${capitalize(where.trim() || 'на вашем сайте')} опубликованы мои данные${what}. ` +
+    'Прошу удалить их и ответить на это письмо.';
+}
+
+/** Заголовок находки — просто адрес сайта: он ничего не говорит о данных. */
+function titleIsSite(item: FootprintRiskItem): boolean {
+  const title = item.title.trim().toLowerCase().replace(/^www\./u, '');
+  if (!item.url) return false;
+  try {
+    return new URL(item.url).hostname.toLowerCase().replace(/^www\./u, '') === title;
+  } catch {
+    return false;
+  }
 }
 
 function capitalize(text: string): string {

@@ -8,6 +8,7 @@ import {
 } from '../../../vacancies/vacancyScreenCollections';
 import { useShell } from '../../shell/ShellContext';
 import { useToast } from '../../kit';
+import { useOnReveal } from '../../kit/screenActive';
 import { buildNodePath } from '../../routes';
 import type { SkipReasonId } from '../../../../../shared/skipReasons';
 import type { HiddenRow } from '../b640Api';
@@ -43,6 +44,8 @@ function errorText(reason: unknown, fallback: string): string {
 /** Компании, отмеченные «Хочу»; сбой чтения — меток нет, строка работает как раньше. */
 function useWantRecords() {
   const [records, setRecords] = useState(() => wantedCompanyRecords([]));
+  const [attempt, setAttempt] = useState(0);
+  useOnReveal(useCallback(() => setAttempt((value) => value + 1), []));
   useEffect(() => {
     let alive = true;
     listCandidateCompanyWants()
@@ -53,7 +56,7 @@ function useWantRecords() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [attempt]);
   return records;
 }
 
@@ -89,6 +92,51 @@ function buildActions(item: MatchedVacancyItem, deps: ActionDeps): RowMenuAction
   };
 }
 
+/**
+ * Скрытые строки сессии и отмена. Скрытие убирает сохранённую карточку в архив, отмена возвращает:
+ * звезду и версию карточки каждый раз читаем заново (`refresh`).
+ */
+function useHiding(refresh: () => void) {
+  const toast = useToast();
+  const [hiddenRows, setHiddenRows] = useState<readonly HiddenRow[]>([]);
+  const hiddenIds = useMemo(() => new Set(hiddenRows.map((row) => row.cluster.id)), [hiddenRows]);
+
+  const unhide = useCallback(
+    async (id: string) => {
+      await unhideVacancy(id);
+      refresh();
+      setHiddenRows((rows) => rows.filter((row) => row.cluster.id !== id));
+    },
+    [refresh],
+  );
+
+  const onHidden = useCallback(
+    (item: MatchedVacancyItem, reason: SkipReasonId) => {
+      const id = item.cluster.id;
+      const row: HiddenRow = { ...item, hidden: { reasonId: reason, at: new Date().toISOString() } };
+      setHiddenRows((rows) => [row, ...rows.filter((entry) => entry.cluster.id !== id)]);
+      refresh();
+      const onUndo = () => {
+        unhide(id).catch((failure: unknown) => toast.show({ text: errorText(failure, 'Не удалось вернуть вакансию') }));
+      };
+      toast.show({ text: 'Скрыто', undo: { label: 'Отменить', onUndo } });
+    },
+    [refresh, toast, unhide],
+  );
+
+  const hideBatch = useHideMany(setHiddenRows, unhide);
+  const hideMany = useCallback<HideMany>(
+    async (entries) => {
+      const failed = await hideBatch(entries);
+      refresh();
+      return failed;
+    },
+    [hideBatch, refresh],
+  );
+
+  return { hiddenRows, hiddenIds, unhide, hideMany, onHidden };
+}
+
 /** Раскрытая строка, окно действий, скрытие с отменой, «Хочу», «Уже откликнулись», ☆. */
 export function useRowInteractions(links: VacancyLinks): RowInteractions {
   const { navigate } = useShell();
@@ -96,8 +144,7 @@ export function useRowInteractions(links: VacancyLinks): RowInteractions {
   const records = useWantRecords();
   const [openId, setOpenId] = useState<string | null>(null);
   const [menu, setMenu] = useState<TableMenu | null>(null);
-  const [hiddenRows, setHiddenRows] = useState<readonly HiddenRow[]>([]);
-  const hiddenIds = useMemo(() => new Set(hiddenRows.map((row) => row.cluster.id)), [hiddenRows]);
+  const { hiddenRows, hiddenIds, unhide, hideMany, onHidden } = useHiding(links.refresh);
   const wantedKeys = useMemo(() => new Set(records.keys()), [records]);
 
   const toggleOpen = useCallback((id: string) => setOpenId((current) => (current === id ? null : id)), []);
@@ -113,19 +160,6 @@ export function useRowInteractions(links: VacancyLinks): RowInteractions {
     [links, toast],
   );
 
-  const unhide = useCallback(async (id: string) => {
-    await unhideVacancy(id);
-    setHiddenRows((rows) => rows.filter((row) => row.cluster.id !== id));
-  }, []);
-
-  const undoHide = useCallback(
-    (id: string) => {
-      unhide(id).catch((reason: unknown) => toast.show({ text: errorText(reason, 'Не удалось вернуть вакансию') }));
-    },
-    [toast, unhide],
-  );
-
-  const hideMany = useHideMany(setHiddenRows, unhide);
   const actionsFor = useCallback(
     (item: MatchedVacancyItem): RowMenuActions =>
       buildActions(item, {
@@ -134,14 +168,9 @@ export function useRowInteractions(links: VacancyLinks): RowInteractions {
         wantedKeys,
         closeMenu,
         toGoal: () => navigate(buildNodePath('o08')),
-        onHidden: (hiddenItem, reason) => {
-          const id = hiddenItem.cluster.id;
-          const row: HiddenRow = { ...hiddenItem, hidden: { reasonId: reason, at: new Date().toISOString() } };
-          setHiddenRows((rows) => [row, ...rows.filter((entry) => entry.cluster.id !== id)]);
-          toast.show({ text: 'Скрыто', undo: { label: 'Отменить', onUndo: () => undoHide(id) } });
-        },
+        onHidden,
       }),
-    [links, navigate, records, toast, undoHide, wantedKeys, closeMenu],
+    [links, navigate, records, onHidden, wantedKeys, closeMenu],
   );
 
   return { openId, menu, hiddenIds, hiddenRows, unhide, hideMany, wantedKeys, toggleOpen, openMenu, closeMenu, toggleSaved, actionsFor };

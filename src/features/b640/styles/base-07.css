@@ -63,7 +63,13 @@
   .b640 .sec-grp { display: grid; gap: var(--career-space-6); }
   .b640 .seg-ctl.sec-seg { display: inline-flex; grid-template-columns: none; }
   .b640 .seg-ctl.sec-seg span { padding-inline: var(--career-space-3); white-space: nowrap; }
+  /* n06 (22.11): плашка 42 px по макету, место нажатия — подпись 44×44: она заходит на рамку, узкие «₽ $ €» не уже 44. В WebKit .app радио не растягивается, нажимают подпись. */
+  .b640 .seg-ctl.sec-seg label { min-inline-size: var(--career-target-min); margin-block: calc(-1 * var(--career-border-width)); }
+  .b640 .seg-ctl.sec-seg label > span { margin-block: var(--career-border-width); }
   .b640 .sec-sel { inline-size: 15rem; max-inline-size: 100%; min-block-size: var(--career-target-min); padding-inline: var(--career-space-3); border-radius: var(--career-radius-ctl); border: var(--career-border-width) solid color-mix(in srgb, var(--career-text-dim) 70%, var(--career-bg-elevated)); background: var(--career-bg); color: var(--career-text); font: inherit; font-size: var(--career-text-sm); }
+  /* n06 и o06a (B645, 22.11): WebKit в .app рисовал нативное меню macOS высотой 22–24 px; своя форма и стрелка из двух градиентов, цвет по теме. Форма — для всех select кабинета ((0,2,1), файл позже base-03, перекрывает `.of-f select`); высоту каждый берёт из своего правила, у `.of-f select` это min-block-size 44 px. */
+  .b640 select:not([multiple]) { appearance: none; -webkit-appearance: none; padding-inline-end: calc(var(--career-space-3) * 2 + var(--career-space-2)); background-image: linear-gradient(45deg, transparent 50%, var(--career-text-dim) 50%), linear-gradient(135deg, var(--career-text-dim) 50%, transparent 50%); background-position: calc(100% - var(--career-space-3) - var(--career-space-1)) 50%, calc(100% - var(--career-space-3)) 50%; background-size: var(--career-space-1) var(--career-space-1); background-repeat: no-repeat; cursor: pointer; }
+  .b640 .sec-sel { block-size: var(--career-target-min); min-block-size: var(--career-target-min); }
   .b640 .sec-sel:focus-visible { outline: 2px solid var(--career-accent); outline-offset: var(--career-focus-offset); }
   @media (max-width: 767px) {
     .b640 .sec-row.is-stack { flex-wrap: wrap; padding-block: var(--career-space-3); }
@@ -89,7 +95,11 @@
   }
   .b640 .topbar h1:has(.top-tip) { display: flex; align-items: center; gap: var(--career-space-1); overflow: visible; }
   .b640 .top-tip .tip-bubble { font-size: var(--career-text-xs); font-weight: 400; letter-spacing: normal; white-space: normal; }
-  @media (max-width: 767px) { .b640 .topbar h1:has(.top-tip) { justify-content: center; } }
+  @media (max-width: 767px) {
+    .b640 .topbar h1:has(.top-tip) { justify-content: center; }
+    /* ⓘ у заголовка по центру экрана: подсказка под кнопкой по центру, иначе уходит за правый край 390. */
+    .b640 .top-tip .tip-bubble { inset-inline-start: 50%; translate: -50% 0; max-inline-size: min(var(--career-tip-width), calc(100vw - var(--career-space-4) * 2)); }
+  }
   .b640 .dn-q-row { display: flex; align-items: center; gap: var(--career-space-2); }
   .b640 .dn-quick input { min-block-size: var(--career-target-min); padding-inline-start: var(--career-space-3); border-radius: var(--career-radius-ctl); border: var(--career-border-width) solid color-mix(in srgb, var(--career-text-dim) 70%, var(--career-bg-elevated)); background: var(--career-bg); color: var(--career-text); font: inherit; font-size: var(--career-text-sm); }
   .b640 .dn-quick input:focus-visible { outline: 2px solid var(--career-accent); outline-offset: var(--career-focus-offset); }
@@ -204,6 +214,7 @@
   .b640 .kp-t { font-size: var(--career-text-sm); font-weight: 600; }
   .b640 .kp-v { font-size: var(--career-text-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
   .b640 .kp-s { grid-column: 1 / -1; color: var(--career-text-soft); font-size: var(--career-text-xs); }
+  .b640 .kp-s.va-err { color: var(--career-danger); }
   .b640 .kp-ok { display: grid; place-items: center; min-inline-size: var(--career-target-min); min-block-size: var(--career-target-min); }
   .b640 .act-dock { display: none; }
   @media (max-width: 767px) {
@@ -446,7 +457,8 @@
   .b640 .r6-steps a .ico { inline-size: var(--career-icon-sm); block-size: var(--career-icon-sm); color: var(--career-accent); }
   .b640 .lk-draft { field-sizing: content; min-block-size: calc(3 * var(--career-target-min)); }
   .b640 .tag { white-space: normal; overflow-wrap: break-word; max-inline-size: 100%; }
-  .b640 .crumbs.has-ctx { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--career-space-3); }
+  /* B721: на 390 путь с шапкой контекста скрыт (`only-desk`), шапка стоит первой строкой страницы. */
+  @media (min-width: 768px) { .b640 .crumbs.has-ctx { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--career-space-3); } }
   .b640 .crumbs .ctx-one { position: relative; }
   .b640 .crumbs .ctx-one .ctx-kind { display: none; }
   .b640 .crumbs .ctx-more { position: absolute; z-index: 12; inset-block-start: 100%; inset-inline-start: 0; min-inline-size: 18rem; padding: var(--career-space-3); background: var(--career-surface); border: var(--career-border-width) solid var(--career-line-strong); border-radius: var(--career-radius-md); box-shadow: var(--career-shadow-pop); }
@@ -485,11 +497,19 @@
   }
   .b640 .hh-ok-l { display: grid; gap: var(--career-space-2); margin: 0; padding-inline-start: var(--career-space-5); color: var(--career-text-soft); font-size: var(--career-text-sm); }
   @media (max-width: 767px) {
-    div.b640[data-vsheet]::after { content: ""; position: fixed; inset: 0; z-index: 29; background: var(--career-backdrop); }
-    div.b640[data-vsheet] .va-pop { position: fixed; z-index: 30; inset-block: auto 0; inset-inline: 0; inline-size: auto; max-block-size: 86vh; overflow-y: auto; padding-block-end: calc(var(--career-space-4) + env(safe-area-inset-bottom, 0px)); border-end-start-radius: 0; border-end-end-radius: 0; }
-    div.b640[data-vsheet] .va-pop .chip { min-block-size: var(--career-target-min); }
-    div.b640[data-vsheet] .va-pop-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    div.b640[data-vsheet] .va-pop-chips .chip { white-space: normal; }
+    div.b640:is([data-vsheet], :has(> .va-pop))::after { content: ""; position: fixed; inset: 0; z-index: 29; background: var(--career-backdrop); }
+    div.b640:is([data-vsheet], :has(> .va-pop)) .va-pop { position: fixed; z-index: 30; inset-block: auto 0; inset-inline: 0; inline-size: auto; max-block-size: 86vh; overflow-y: auto; padding-block-end: calc(var(--career-space-4) + env(safe-area-inset-bottom, 0px)); border-end-start-radius: 0; border-end-end-radius: 0; }
+    div.b640:is([data-vsheet], :has(> .va-pop)) .va-pop .chip { min-block-size: var(--career-target-min); }
+    div.b640:is([data-vsheet], :has(> .va-pop)) .va-pop-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    div.b640:is([data-vsheet], :has(> .va-pop)) .va-pop-chips .chip { white-space: normal; }
+  }
+  /* a05e на 390: «Настроить ритм» открывается листом снизу, как «Что поменять». */
+  @media (max-width: 767px) {
+    div.b640:has(#va-pop-rh)::after { content: ""; position: fixed; inset: 0; z-index: 29; background: var(--career-backdrop); }
+    .b640 main .va-popwrap:has(> #va-pop-rh) { z-index: 30; }
+    .b640 #va-pop-rh.va-pop { position: fixed; z-index: 30; inset-block: auto 0; inset-inline: 0; inline-size: auto; max-block-size: 86vh; overflow-y: auto; padding-block-end: calc(var(--career-space-4) + env(safe-area-inset-bottom, 0px)); border-end-start-radius: 0; border-end-end-radius: 0; }
+    .b640 #va-pop-rh .chip { min-block-size: var(--career-target-min); }
+    .b640 #va-pop-rh .va-pop-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   .b640 .po-name { display: flex; align-items: center; gap: var(--career-space-1); margin: 0; font-size: var(--career-text-md); font-weight: 600; }
   .b640 .li-was { display: block; }

@@ -30,12 +30,13 @@ import {
   readData,
   readDataArray,
   readDataObject,
+  malformedResponseError,
   setStoredSessionToken,
   throwApiError,
 } from './apiClient';
 export { CoachApiError } from './apiClient';
 export type { MatchedVacancyPage } from './matchedVacancyApi';
-export { getMatchedVacancyPage, getMatchedVacancies } from './matchedVacancyApi';
+export { getMatchedVacancyFacets, getMatchedVacancyPage, getMatchedVacancies } from './matchedVacancyApi';
 export {
   getCandidate,
   getCandidateMessagePage,
@@ -66,6 +67,8 @@ export type {
 export interface AuthUserFeatures {
   /** Новый кабинет B640 вместо прежнего. */
   cabinetB640: boolean;
+  /** B642: запись и расшифровка разговоров включены на сервере. */
+  interviewRecording?: boolean;
 }
 
 export interface AuthUser {
@@ -97,6 +100,8 @@ export type CandidateConnection = {
       connectedAt: string;
       lastImportedAt: string;
       factCount: number;
+      /** n03: «linkedin.com/in/…» или имя из резюме hh.ru; старый сервер поля не присылает. */
+      account?: string | null;
     }
 );
 
@@ -437,11 +442,41 @@ export async function getSession(signal?: AbortSignal): Promise<AuthUser | null>
   return readData<AuthUser | null>(response);
 }
 
+/**
+ * B401: пароль верный, но у кандидата включена двухфакторная защита — сессии ещё нет,
+ * нужен код из приложения. `challenge` живёт 5 минут и годится для одного входа.
+ */
+export class TwoFactorRequiredError extends Error {
+  constructor(readonly challenge: string) {
+    super('Введите код из приложения-аутентификатора.');
+    this.name = 'TwoFactorRequiredError';
+  }
+}
+
+function sessionOrChallenge(data: AuthUser | { twoFactorRequired?: boolean; challenge?: unknown }): AuthUser {
+  if ('twoFactorRequired' in data && data.twoFactorRequired === true) {
+    if (typeof data.challenge !== 'string') throw malformedResponseError();
+    throw new TwoFactorRequiredError(data.challenge);
+  }
+  return data as AuthUser;
+}
+
 export async function login(username: string, password: string): Promise<AuthUser> {
   const response = await apiFetch('/api/v1/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...clientDeviceHeader() },
     body: JSON.stringify({ username, password }),
+    signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
+  });
+  return sessionOrChallenge(await readDataObject<AuthUser>(response));
+}
+
+/** B401: второй шаг входа — код из приложения или резервный код. */
+export async function completeTwoFactorLogin(challenge: string, code: string): Promise<AuthUser> {
+  const response = await apiFetch('/api/v1/auth/login/two-factor', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ challenge, code: code.trim() }),
     signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
   });
   return readDataObject<AuthUser>(response);
@@ -560,6 +595,8 @@ export async function updateAccountProfile(input: {
 export async function changePassword(input: {
   currentPassword: string;
   newPassword: string;
+  /** B401: при включённой двухфакторной защите. */
+  twoFactorCode?: string;
 }): Promise<AuthUser> {
   const response = await apiFetch('/api/v1/account/password', {
     method: 'POST',
@@ -585,7 +622,7 @@ export async function resetPassword(token: string, newPassword: string): Promise
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token, newPassword }),
   });
-  return readDataObject<AuthUser>(response);
+  return sessionOrChallenge(await readDataObject<AuthUser>(response));
 }
 
 export async function revokeOtherSessions(): Promise<number> {
@@ -806,8 +843,13 @@ export async function reviewMemories(
  * строятся, страница подбора вырезает ради байтового бюджета (INC-029), и в
  * браузере считать было не из чего. Ответ — до трёх ролей, сотни байт.
  */
-export async function getRoleHypotheses(signal?: AbortSignal): Promise<ProposedRole[]> {
-  const response = await apiFetch('/api/v1/candidate/role-hypotheses', { signal });
+export async function getRoleHypotheses(
+  signal?: AbortSignal,
+  /** Пояс кандидата: граница «за 30 дней» в числе роли — от его полуночи (B726). */
+  timeZone?: string,
+): Promise<ProposedRole[]> {
+  const query = timeZone ? `?${new URLSearchParams({ tz: timeZone })}` : '';
+  const response = await apiFetch(`/api/v1/candidate/role-hypotheses${query}`, { signal });
   if (!response.ok) {
     await throwApiError(response);
   }

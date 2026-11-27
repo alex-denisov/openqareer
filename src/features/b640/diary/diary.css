@@ -18,4 +18,165 @@
       grid-template-columns: minmax(0, 1fr);
     }
   }
+
+  /* B686: загрузка и проверка KPI (d02k, d02l). */
+  .b640 .gb-f .kd-text {
+    box-sizing: border-box;
+    inline-size: 100%;
+    min-block-size: calc(var(--career-space-12) * 2);
+    padding: var(--career-space-3);
+    border-radius: var(--career-radius-ctl);
+    border: var(--career-border-width) solid
+      color-mix(in srgb, var(--career-text-dim) 70%, var(--career-bg-elevated));
+    background: var(--career-bg);
+    color: var(--career-text);
+    font: inherit;
+    font-size: var(--career-text-sm);
+    resize: vertical;
+  }
+  .b640 .gb-f .kd-text:focus-visible {
+    outline: 2px solid var(--career-accent);
+    outline-offset: var(--career-focus-offset);
+  }
+  .b640 .gb-f .kd-text:disabled {
+    color: var(--career-text-soft);
+  }
+  /* d02l на 390: строка списка — кнопка без своей рамки и фона (в макете это ссылка). */
+  .b640 button.kp-main {
+    padding-inline: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+  .b640 button.kp-main:focus-visible {
+    outline: 2px solid var(--career-accent);
+    outline-offset: var(--career-focus-offset);
+  }
+  /* B645 d02k: от шапки до подписи 20 px, как в макете. */
+  .b640 .page.kd-page {
+    gap: var(--career-space-5);
+  }
+  /* B645 d02k на 390: подпись в 16 px от шапки, поле 110 (6,875rem), «Разобрать» — правая половина панели.
+     Только на d02k (поле #kd-text): на d02l «Принять» во всю ширину панели. */
+  @media (max-width: 767px) {
+    .b640 .page.kd-page:has(#kd-text) {
+      gap: var(--career-space-4);
+    }
+    .b640 .kd-text {
+      block-size: 6.875rem;
+    }
+    .b640 .kd-page:has(#kd-text) .actions.m-commit.m-commit > .btn.is-primary.is-primary {
+      flex: 0 0 50%;
+      margin-inline-start: auto;
+    }
+  }
+  .b640 .kd-f {
+    gap: var(--career-space-2);
+    justify-items: stretch;
+    max-inline-size: 40rem;
+  }
+  .b640 .kd-f label {
+    color: var(--career-text);
+    font-size: var(--career-text-sm);
+  }
+  .b640 .kd-pick {
+    margin: 0;
+  }
+  .b640 .kd-file {
+    display: flex;
+    align-items: center;
+    gap: var(--career-space-3);
+    margin: 0;
+    font-size: var(--career-text-sm);
+  }
+  .b640 .kp-tbl select {
+    inline-size: 100%;
+    min-inline-size: 0;
+    min-block-size: var(--career-target-min);
+    padding-inline: var(--career-space-2);
+    border-radius: var(--career-radius-sm);
+    border: var(--career-border-width) solid var(--career-line-strong);
+    background: var(--career-bg);
+    color: var(--career-text);
+    font: inherit;
+    font-size: var(--career-text-sm);
+  }
+  /* B645 d02l: значения в таблице видны целиком — поля и списки по содержимому, столбцы по ним. */
+  @media (min-width: 768px) {
+    .b640 .kp-tbl select,
+    .b640 .kp-tbl input.kp-t,
+    .b640 .kp-tbl input.kp-w {
+      inline-size: auto;
+      field-sizing: content;
+      font-size: var(--career-text-xs);
+    }
+    /* «руководитель» на 27 px длиннее «директора» из макета: поля ячеек 6 вместо 8, таблица 660 вместо 656. */
+    .b640 .kp-tbl th,
+    .b640 .kp-tbl td {
+      padding-inline: calc(var(--career-space-1) * 1.5);
+    }
+    /* Как в макете d02l: «Срок» и «Кто поставил» выглядят полями без стрелки, значение целиком. */
+    .b640 .kp-tbl select:not([multiple]) {
+      padding-inline: var(--career-space-2);
+      background-image: none;
+    }
+    /* WebKit (.app) без field-sizing: ширина поля по числу знаков значения. */
+    @supports not (field-sizing: content) {
+      .b640 .kp-tbl input.kp-t,
+      .b640 .kp-tbl input.kp-w {
+        inline-size: calc(
+          var(--kp-ch) * 1ch + var(--career-space-2) * 2 + var(--career-border-width) * 2
+        );
+      }
+      .b640 .kp-tbl .kp-pct input.kp-w {
+        inline-size: calc(
+          var(--kp-ch) * 1ch + 1ch + var(--career-space-2) * 3 + var(--career-border-width) * 2
+        );
+      }
+      .b640 .kp-tbl td:first-child input {
+        min-inline-size: calc(
+          var(--kp-ch) * 1ch + var(--career-space-2) * 2 + var(--career-border-width) * 2
+        );
+      }
+    }
+    /* B645 d02l: отмеченное «Верно» — контурная кнопка с галочкой, без заливки и зелёной рамки. */
+    .b640 .kp-tbl .btn.kp-okb[aria-pressed='true'] {
+      border-color: var(--career-line-strong);
+      background: transparent;
+      color: var(--career-text);
+    }
+    .b640 .kp-tbl .btn.kp-okb[aria-pressed='true']:hover {
+      border-color: var(--career-text-dim);
+      background: var(--career-surface-raised);
+    }
+    .b640 .kp-tbl .btn.kp-okb[aria-pressed='true'] .ico {
+      color: var(--career-text);
+    }
+    /* B645 d02l: «Важность» — одно поле «30 %», знак процента внутри рамки поля, как в макете. */
+    .b640 .kp-tbl .kp-pct {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+    }
+    .b640 .kp-tbl .kp-pct input.kp-w {
+      padding-inline-end: calc(var(--career-space-2) * 2 + 1ch);
+    }
+    .b640 .kp-tbl .kp-pct-sign {
+      position: absolute;
+      inset-inline-end: var(--career-space-2);
+      color: var(--career-text);
+      font-size: var(--career-text-xs);
+      pointer-events: none;
+    }
+  }
+  .b640 .kp-foot {
+    display: grid;
+    gap: var(--career-space-2);
+  }
+  .b640 .dn-flag.is-done > .ico {
+    color: var(--career-success);
+  }
 }

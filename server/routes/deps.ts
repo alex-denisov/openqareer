@@ -34,7 +34,15 @@ export interface RuntimeMemoryReport {
   };
 }
 
+/** Обработчик обновлений SMM-чата; ошибки он пишет в журнал сам. */
+export interface SmmTelegramUpdates {
+  readonly chatId: string;
+  readonly handle: (update: unknown) => void;
+}
+
 export interface RouteDeps {
+  /** B732: SMM-чат владельца получает свои обновления с общего вебхука бота. */
+  smmTelegram?: SmmTelegramUpdates;
   vacancyMechanics?: import('../domain/vacancyMechanicsRuntime').VacancyMechanicsRuntime;
   bulkLlmRuntime?: import('../providers/bulkLlmRuntime').BulkLlmRuntime;
   /** Черновики LinkedIn: очередь «Сегодня» показывает посты, ждущие одобрения. */
@@ -64,7 +72,10 @@ export interface RouteDeps {
     'prioritizeCampaign'
   > &
     Partial<
-      Pick<import('../vacancies/matchedPoolPrecompute').MatchedPoolPrecompute, 'setFitRequester' | 'setCampaignRoleRefresher' | 'setListWarmer'>
+      Pick<
+        import('../vacancies/matchedPoolPrecompute').MatchedPoolPrecompute,
+        'refreshCampaign' | 'setFitRequester' | 'setCampaignRoleRefresher' | 'setListWarmer'
+      >
     >;
   /** Роли кандидатов — запросы к площадкам вакансий (27.10). */
   vacancyDemand?: import('../vacancies/vacancyDemandStore').VacancyDemandStore;
@@ -76,13 +87,29 @@ export interface RouteDeps {
   resumeStructurer?: ResumeStructurer;
   /** Пункты резюме из фактов беседы (29.10); без ключа блок консультанта не появляется. */
   experienceFactRewriter?: import('../providers/experienceFactRewriter').ExperienceFactRewriter;
+  /** B686: разбор KPI для дневника; без ключей и Vertex разбор отвечает отказом. */
+  kpiExtractor?: import('../providers/kpiExtractor').KpiExtractor;
+  /** B743 · 2: подсказка следующей задачи по цели; без ключей подсказок в карточке цели нет. */
+  goalTaskSuggester?: import('../providers/goalTaskSuggester').GoalTaskSuggester;
   /** Роли называет модель по фактам кандидата (B180, срез 1в). */
   roleNamer?: RoleNamer;
   /** Выбирает id авторолей только из переданной онтологии (B267 S5). */
   campaignRoleModel?: import('../vacancies/campaignRoleSet').CampaignRoleModel;
   skillQuizModel?: import('../providers/skillQuizModel').SkillQuizModel;
+  /** B734: русские названия навыков проверки роли; без него — названия как в вакансиях. */
+  skillNameTranslator?: import('../providers/skillNameTranslator').SkillNameTranslator;
   /** Сопроводительное письмо пишет модель, шаблон — запас (B266, пункт 7). */
   coverLetterWriter?: CoverLetterWriter;
+  /** B753: сообщение знакомому и рекрутёру — своя цепочка (GLM первым); нет — писатель письма. */
+  contactMessageWriter?: CoverLetterWriter;
+  /** B642: расшифровка сегмента записи; нет подстановки — Whisper на OpenRouter. */
+  recordingTranscriber?: import('../providers/whisperTranscriber').RecordingTranscriber;
+  /** B751: разбор интервью моделью; нет подстановки — цепочка письма без Vertex. */
+  interviewDebriefWriter?: import('../providers/interviewDebriefWriter').InterviewDebriefWriter;
+  /** B780: оценка критериев ответа тренировки; без подставного — цепочка письма из конфига. */
+  interviewAnswerJudge?: import('../providers/interviewAnswerJudge').InterviewAnswerJudge;
+  /** d01: шаги плана адаптации из «Что от вас ждут»; нет — план из шаблона. */
+  adaptationStepsWriter?: import('../providers/adaptationStepsWriter').AdaptationStepsWriter;
   /** Кеш разбора названий вакансий: модельный результат приоритетнее правил (B267 S6). */
   titleParseStore: Pick<
     import('../vacancies/titleParse/sqliteTitleParseStore').SqliteTitleParseStore,
@@ -105,6 +132,8 @@ export interface RouteDeps {
   searchConsentRepo?: import('../data/sqliteSearchConsentRepository').SqliteSearchConsentRepository;
   /** Журнал согласий кандидата на возможности профиля (B263). */
   capabilityConsentStore?: import('../auth/capabilityConsentStore').SqliteCapabilityConsentStore;
+  /** Удаление аккаунта с отсрочкой 30 дней (B689). */
+  accountDeletionStore?: import('../auth/accountDeletionStore').SqliteAccountDeletionStore;
   /** Shared index of LinkedIn people and member edges, fed only with consent (B561). */
   networkIndexRepo?: import('../data/sqliteNetworkIndexRepository').SqliteNetworkIndexRepository;
   /** Candidate-scoped «Хочу в эту компанию» list and next step (B439). */

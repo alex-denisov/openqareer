@@ -8,8 +8,8 @@
 //! again and read back: only what hh.ru shows counts as applied.
 
 use crate::connector_session::{
-    eval_json, is_transient_eval_error, read_session_page, session_window_label,
-    SessionWindowRequest,
+    eval_json, is_transient_eval_error, park_session_window, read_session_page,
+    session_window_label, SessionWindowRequest,
 };
 use crate::hh_apply::{on_hh, wait_for, RunningGuard};
 use crate::hh_resume_edit_scripts::{
@@ -155,9 +155,11 @@ pub(crate) async fn open_editor(app: &AppHandle, url: &str) -> Result<tauri::Web
         url: url.to_string(),
         layout: None,
         session_key: None,
-        background: false,
+        // B787: правки, копия и видимость идут в фоне: окно hh.ru не показывается и не берёт фокус.
+        background: true,
     };
     read_session_page(app, &page).await?;
+    park_session_window(app, "hh");
     app.get_webview(label)
         .ok_or_else(|| "session_window_missing".to_string())
 }
@@ -268,18 +270,23 @@ pub(crate) fn wait_before_next_edit() -> Duration {
     wait
 }
 
+/// Clears what an earlier run on this page left behind.
+pub(crate) async fn reset_editor(window: &tauri::Webview) {
+    let _ = eval_json(window, &reset_script()).await;
+}
+
 /// Opens the editor page fresh: flags of an earlier run on the same page are cleared.
 async fn open_clean_editor(app: &AppHandle, url: &str) -> Result<Option<tauri::Webview>, String> {
     let window = open_editor(app, url).await?;
     if !on_hh(&window) {
         return Ok(None);
     }
-    let _ = eval_json(&window, &reset_script()).await;
+    reset_editor(&window).await;
     Ok(Some(window))
 }
 
 /// Presses «Сохранить» and waits for hh.ru to leave the editor; `Err` carries the failure code.
-async fn save(window: &tauri::Webview, path: &str) -> Result<(), String> {
+pub(crate) async fn save(window: &tauri::Webview, path: &str) -> Result<(), String> {
     let clicked = wait_for(window, &save_script(path), FIELD_WAIT).await;
     if clicked != "save_clicked" {
         return Err(if clicked == "timeout" {

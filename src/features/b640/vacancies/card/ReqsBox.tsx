@@ -1,15 +1,20 @@
 import { useState } from 'react';
 import type { VacancyFitView } from '../../../../../shared/vacancyFit';
 import { Icon } from '../../kit';
-import { fitRows, requirementsLabel } from './fitRows';
+import { fitRows, requirementsLabel, sourceLine } from './fitRows';
 import { RequirementList } from './RequirementList';
 
 export interface ReqsBoxProps {
   readonly view: VacancyFitView | undefined;
+  /** Площадка, с которой взят текст вакансии («hh.ru»). */
+  readonly sourceName: string;
 }
 
-/** «Требования: N из M есть в профиле»; раскрывается на месте тем же списком. */
-export function ReqsBox({ view }: ReqsBoxProps) {
+/**
+ * v04: «Требования: N из M есть в профиле» под процентом; раскрывается на месте тем же списком,
+ * что в окне «Почему N %», с пометкой у каждого требования и строкой источника.
+ */
+export function ReqsBox({ view, sourceName }: ReqsBoxProps) {
   const [open, setOpen] = useState(false);
   const rows = fitRows(view);
   if (rows.length === 0) return null;
@@ -27,6 +32,7 @@ export function ReqsBox({ view }: ReqsBoxProps) {
       {open ? (
         <div className="v4-reqs-open">
           <RequirementList rows={rows} />
+          <p className="v4-fd-src">{sourceLine(view, sourceName)}</p>
         </div>
       ) : null}
     </div>

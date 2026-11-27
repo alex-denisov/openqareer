@@ -31,11 +31,11 @@ export async function claimHhRaise(): Promise<B640HhRaiseClaim> {
   return readDataObject<B640HhRaiseClaim>(await apiFetch(`${BASE}/claim`, { method: 'POST' }));
 }
 
-export async function sendHhRaiseResult(taskId: string, outcome: HhRaiseOutcome): Promise<void> {
+export async function sendHhRaiseResult(taskId: string, outcome: HhRaiseOutcome, availableAt?: string): Promise<void> {
   const response = await apiFetch(`${BASE}/${encodeURIComponent(taskId)}/result`, {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ outcome }),
+    body: JSON.stringify({ outcome, ...(availableAt ? { availableAt } : {}) }),
   });
   await readDataObject<B640HhRaiseState>(response);
 }

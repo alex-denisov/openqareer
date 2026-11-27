@@ -5,6 +5,10 @@ import {
   type ConsultantReplyAction,
   type ConsultantReplyExtras,
 } from '../../../../shared/consultantReply';
+import {
+  factCorrectionSchema,
+  type FactCorrectionProposal,
+} from '../../../../shared/factCorrection';
 import type { CandidateMemory } from '../../coach/coachApi';
 import type { IconName } from '../kit/Icon';
 import { buildNodePath } from '../routes';
@@ -35,12 +39,22 @@ function strings(value: unknown, max: number): string[] {
     .slice(0, max);
 }
 
+function readProposals(value: unknown): FactCorrectionProposal[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): FactCorrectionProposal[] => {
+    const { place, ...change } = (item ?? {}) as Record<string, unknown>;
+    const parsed = factCorrectionSchema.safeParse(change);
+    return parsed.success && typeof place === 'string' ? [{ ...parsed.data, place }] : [];
+  });
+}
+
 /** Действия и ссылки из ответа сервера: неизвестные действия и пустые строки отбрасываются. */
 export function readReplies(value: unknown): ConsultantReplyExtras[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item): ConsultantReplyExtras[] => {
     if (!item || typeof item !== 'object') return [];
-    const { messageId, actions, memoryIds } = item as Record<string, unknown>;
+    const { messageId, actions, memoryIds, corrections, resumeFactId, resumeRewordPlace } =
+      item as Record<string, unknown>;
     if (typeof messageId !== 'string' || !messageId) return [];
     const known = Array.isArray(actions) ? actions.filter(isConsultantReplyAction) : [];
     return [
@@ -48,6 +62,9 @@ export function readReplies(value: unknown): ConsultantReplyExtras[] {
         messageId,
         actions: [...new Set(known)].slice(0, CONSULTANT_REPLY_MAX_ACTIONS),
         memoryIds: strings(memoryIds, CONSULTANT_REPLY_MAX_LINKS),
+        corrections: readProposals(corrections),
+        ...(typeof resumeFactId === 'string' && resumeFactId ? { resumeFactId } : {}),
+        ...(typeof resumeRewordPlace === 'string' && resumeRewordPlace ? { resumeRewordPlace } : {}),
       },
     ];
   });

@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { TodayQueueItem } from '../../today/todayApi';
+import { queueMobileSubtitle } from '../../today/todayFormat';
 import {
   applicationsSummary,
-  funnelLine,
+  leadText,
   moduleLayout,
+  moreTitle,
   queueAction,
   skillFit,
   vacancyRow,
+  withoutEvents,
 } from './todayModel';
 
 function item(overrides: Partial<TodayQueueItem>): TodayQueueItem {
@@ -22,18 +25,49 @@ function item(overrides: Partial<TodayQueueItem>): TodayQueueItem {
 }
 
 describe('b640 today: действие строки очереди', () => {
-  it('письмо на одобрение ведёт к письму отклика', () => {
+  it('B717: одобренное письмо зовёт отправить отклик, а не одобрить ещё раз', () => {
     const action = queueAction(
-      item({ material: 'cover_letter', applicationId: 'a1', eyebrow: 'черновик' }),
+      item({
+        material: 'cover_letter',
+        applicationId: 'a1',
+        eyebrow: 'Письмо одобрено, ничего не отправлено',
+      }),
     );
     expect(action).toMatchObject({
-      title: 'Одобрить письмо в «Гринкод»',
-      sub: 'черновик',
-      label: 'Проверить письмо',
-      shortLabel: 'Проверить',
-      icon: 'file',
+      title: 'Отправить отклик в «Гринкод»',
+      sub: 'Письмо одобрено, ничего не отправлено',
+      label: 'Отправить',
+      shortLabel: 'Отправить',
+      icon: 'send',
       path: '/app/responses/a1/letter',
     });
+    // B801 (s05b): письмо на проверку.
+    expect(
+      queueAction(
+        item({
+          material: 'letter_draft',
+          applicationId: 'a1',
+          title: 'CTO',
+          company: 'Гринкод',
+          eyebrow: 'черновик',
+        }),
+      ),
+    ).toMatchObject({
+      title: 'CTO',
+      sub: 'Гринкод · черновик',
+      label: 'Проверить письмо',
+      shortLabel: 'Проверить',
+      path: '/app/responses/a1/letter',
+    });
+    expect(queueAction(item({ material: 'cover_letter', applicationId: 'a1' })).sub).toBe(
+      'Письмо одобрено',
+    );
+    expect(queueMobileSubtitle(item({ material: 'cover_letter' }), false)).toBe(
+      'Письмо одобрено, ждёт отправки',
+    );
+    expect(queueAction(item({ material: 'cover_letter', company: null })).title).toBe(
+      'Отправить отклик',
+    );
   });
 
   it('интервью ведёт к подготовке; без отклика — к ближайшему интервью', () => {
@@ -64,28 +98,41 @@ describe('b640 today: действие строки очереди', () => {
       company: 'LinkedIn',
       eyebrow: 'сам не опубликуется',
     });
-    expect(queueAction(post).sub).toBe('LinkedIn');
+    expect(queueAction(post).sub).toBe('LinkedIn · черновик готов');
     expect(queueAction(item({ kind: 'linkedin_post', title: 'о найме' }))).toMatchObject({
       label: 'Открыть пост',
       path: '/app/profile/linkedin/posts',
     });
   });
-});
 
-describe('b640 today: строка статуса', () => {
-  it('собирает путь откликов из воронки', () => {
-    expect(funnelLine({ favorites: 4, applied: 13, responses: 2, interviews: 1, offers: 1 })).toBe(
-      '13 откликов → 1 интервью → 1 оффер',
-    );
-    expect(funnelLine({ favorites: 0, applied: 1, responses: 0, interviews: 0, offers: 0 })).toBe(
-      '1 отклик → 0 интервью → 0 офферов',
-    );
+  it('пост открывает свой черновик (B645 s03)', () => {
+    const post = item({ kind: 'linkedin_post', title: 'о найме', draftId: 'd 2' });
+    expect(queueAction(post).path).toBe('/app/profile/linkedin/posts?post=d%202');
   });
 
-  it('без числа откликов строки нет', () => {
-    expect(funnelLine(undefined)).toBeNull();
-    expect(funnelLine({ favorites: 1, responses: 0, offers: 0 })).toBeNull();
-    expect(funnelLine({ favorites: 1, applied: 0, responses: 0, offers: 0 })).toBeNull();
+  it('«Ещё N дел» со склонением (B645 s03)', () => {
+    expect(moreTitle(1)).toBe('Ещё 1 дело');
+    expect(moreTitle(3)).toBe('Ещё 3 дела');
+    expect(moreTitle(5)).toBe('Ещё 5 дел');
+    expect(moreTitle(21)).toBe('Ещё 21 дело');
+  });
+
+  it('подробность лида — вакансия, место и деньги (B645 s03, как lead-text макета)', () => {
+    expect(
+      leadText(
+        item({
+          kind: 'follow_up',
+          title: 'Руководитель платформы',
+          location: 'Москва',
+          salary: { from: 400000, currency: 'RUB' },
+        }),
+      ),
+    ).toMatch(/^Руководитель платформы · Москва · .+/u);
+    expect(leadText(item({ kind: 'interview', title: 'CTO' }))).toBe('CTO');
+    expect(leadText(item({ kind: 'linkedin_post', title: 'о найме' }))).toBeNull();
+    expect(leadText(item({ kind: 'new_vacancy', title: 'CTO', location: 'Казань' }))).toBe(
+      'Казань',
+    );
   });
 });
 
@@ -205,5 +252,16 @@ describe('b640 today: раскладка модулей по колонкам', 
     );
     expect(keys(layout.main)).toEqual(['onboarding_plan']);
     expect(layout.side).toEqual([]);
+  });
+});
+
+describe('«Сегодня»: одна вакансия — одна строка', () => {
+  const turn = (applicationId: string) =>
+    ({ kind: 'candidate_turn', applicationId, title: 'IT Director' }) as TodayQueueItem;
+
+  it('отклик из «Событий» в делах не повторяется, счёт дел меньше на него', () => {
+    const day = { queue: [turn('a1'), turn('a2')], queueTotal: 5 };
+    expect(withoutEvents(day, new Set(['a2']))).toEqual({ queue: [turn('a1')], queueTotal: 4 });
+    expect(withoutEvents(day, new Set())).toBe(day);
   });
 });

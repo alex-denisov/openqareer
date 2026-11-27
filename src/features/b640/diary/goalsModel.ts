@@ -5,8 +5,10 @@ import type {
   CareerDiaryValue,
 } from '../../../../shared/careerDiary';
 import type {
+  CareerDiaryGoalArchive,
   CareerDiaryGoalCard,
   CareerDiaryGoalSetter,
+  CareerDiaryQuarterTarget,
 } from '../../../../shared/careerDiaryCards';
 import { shortDate } from './model';
 
@@ -67,6 +69,47 @@ export function longDate(date: string, now: string): string {
   return `${day} ${MONTHS_GEN[(month ?? 1) - 1]}${tail}`;
 }
 
+/** ⓘ у цели в архиве: когда убрана и почему. */
+export function archiveNote(archive: CareerDiaryGoalArchive, now: string): string {
+  const reason = archive.reason.trim();
+  const end = /[.!?…]$/u.test(reason) ? '' : '.';
+  const day = /^\d{4}-\d{2}-\d{2}/u.test(archive.archivedAt)
+    ? ` ${longDate(archive.archivedAt, now)}`
+    : '';
+  return `Убрана в архив${day}. Причина: ${reason}${end}`;
+}
+
+/** B742 d02: «Вклад кварталов: I — 85 %, II — 88 %» у годовой цели; вклада нет — null. */
+export function quarterLine(
+  targets: readonly CareerDiaryQuarterTarget[] | null,
+  unit: string,
+): string | null {
+  if (!targets || targets.length === 0) return null;
+  const parts = [...targets]
+    .sort((a, b) => a.quarter - b.quarter)
+    .map((item) => {
+      const value = formatValue(item.value);
+      return `${QUARTERS[item.quarter - 1]} — ${unit ? `${value} ${unit}` : value}`;
+    });
+  return `Вклад кварталов: ${parts.join(', ')}`;
+}
+
+/**
+ * B645 d02: на вкладке «Квартал» годовая цель показывает цель этого квартала — «из 85 % в I кв.».
+ * Год цели ещё не начался — первый квартал, уже прошёл — последний. Вклада по кварталу нет — null.
+ */
+export function quarterTargetText(card: CareerDiaryGoalCard, now: string): string | null {
+  const targets = card.details.quarterTargets;
+  if (card.horizon !== 'year' || !targets || targets.length === 0) return null;
+  const goalYear = card.dueDate.slice(0, 4);
+  const nowYear = now.slice(0, 4);
+  const current = Math.floor((Number(now.slice(5, 7)) - 1) / 3) + 1;
+  const quarter = nowYear < goalYear ? 1 : nowYear > goalYear ? 4 : current;
+  const target = targets.find((item) => item.quarter === quarter);
+  if (!target) return null;
+  return `из ${formatValue(target.value, card.unit)} в ${QUARTERS[quarter - 1]} кв.`;
+}
+
 /** «IV квартал 2026». */
 export function quarterLabel(day: string): string {
   const month = Number(day.slice(5, 7));
@@ -96,26 +139,52 @@ export function indicatorsOf(card: CareerDiaryGoalCard): readonly CareerDiaryGoa
   return card.indicators.length > 0 ? card.indicators : [card];
 }
 
+/** Единица часто уже в названии («Срок релиза, дней») — второй раз её не дописываем. */
+export function labelWithUnit(label: string, unit: string): string {
+  if (!unit || label.trim().endsWith(`, ${unit}`)) return label;
+  return `${label}, ${unit}`;
+}
+
 export interface IndicatorView {
   readonly id: string;
   readonly title: string;
   /** Значение замера или «не внесено». */
   readonly value: string;
-  /** «из 7 и меньше»; пусто, если цель не числовая. */
+  /** « из 2» или « из 7 и меньше» — с пробелом впереди; пусто, если цель не числовая. */
   readonly target: string;
   readonly sub: string;
 }
 
+/** Цель ниже старта (срок, инциденты): как в макете d02 — «5 из 7 и меньше». */
+function decreasing(goal: CareerDiaryGoalSummary): boolean {
+  return (
+    typeof goal.targetValue === 'number' &&
+    goal.baselineValue !== null &&
+    goal.targetValue < goal.baselineValue
+  );
+}
+
+/** Хвост после значения в списке: « из 2» или « из 4 и меньше». */
 function targetText(goal: CareerDiaryGoalSummary): string {
   if (typeof goal.targetValue !== 'number') return '';
   const target = formatValue(goal.targetValue, goal.unit);
-  const less = goal.baselineValue !== null && goal.targetValue < goal.baselineValue;
-  return less ? `из ${target} и меньше` : `из ${target}`;
+  return decreasing(goal) ? ` из ${target} и меньше` : ` из ${target}`;
+}
+
+/** Значение и цель на карточке и в истории (B662) — как в списке: «0 из 2» или «9 из 4 и меньше». */
+export function valueWithTarget(
+  goal: CareerDiaryGoalSummary,
+  value: Parameters<typeof formatValue>[0],
+): string {
+  const shown = formatValue(value, goal.unit);
+  if (typeof goal.targetValue !== 'number') return shown;
+  const target = formatValue(goal.targetValue, goal.unit);
+  return decreasing(goal) ? `${shown} из ${target} и меньше` : `${shown} из ${target}`;
 }
 
 export function indicatorView(goal: CareerDiaryGoalSummary): IndicatorView {
   const latest = goal.latestMeasurement;
-  const title = goal.unit && goal.unit !== '%' ? `${goal.title}, ${goal.unit}` : goal.title;
+  const title = goal.unit === '%' ? goal.title : labelWithUnit(goal.title, goal.unit);
   const baseline =
     goal.baselineValue === null ? '' : ` · было ${formatValue(goal.baselineValue, goal.unit)}`;
   return {

@@ -2,16 +2,18 @@ import { catchupGate, type CatchupDecision } from './requirementsCatchupGate';
 import { minimizeModelText } from '../providers/modelInputPrivacy';
 import { applySqliteBusyTimeout, SQLITE_HTTP_BUSY_TIMEOUT_MS } from '../data/sqliteBusyTimeout';
 import { DatabaseSync } from 'node:sqlite';
+import { writeBriefly } from '../data/sqliteBriefLock';
+import { isSqliteBusy } from '../data/sqliteBusyRetry';
 import type { VacancyFitFailure, VacancyFitResult, VacancyFitView } from '../../shared/vacancyFit';
 import { SqliteVacancyRequirementsStore } from '../data/sqliteVacancyRequirementsStore';
-import { SqliteVacancyFitStore, type FitEnqueueOptions } from '../data/sqliteVacancyFitStore';
+import { FIT_INPUT_TOO_LARGE, SqliteVacancyFitStore, type FitEnqueueOptions } from '../data/sqliteVacancyFitStore';
 import { SealedText } from '../data/sealedText';
-import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VacancyRequirementsPausedError, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION } from './vacancyRequirements';
+import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VacancyRequirementsPausedError, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION, type VacancyRequirement } from './vacancyRequirements';
 import { labelVacancyRequirement } from './vacancyRequirementLabel';
 import { OWN_VACANCY_ID_PREFIX } from '../../shared/b640OwnVacancy';
-import { assessVacancyFit, sourcedRequirements, type VacancyFitInput } from './vacancyFit';
+import { assessVacancyFit, isSkillRequirement, sourcedRequirements, type VacancyFitInput } from './vacancyFit';
 import { assessmentFailureLine, createVacancyFitAssessor } from './vacancyFitAssessor';
-import { BULK_BUDGET_EXCEEDED, BulkChannelUnavailable, type BulkLlmClient } from '../providers/bulkLlmClient';
+import { BULK_BUDGET_EXCEEDED, BulkChannelUnavailable, BulkInputTooLarge, type BulkLlmClient } from '../providers/bulkLlmClient';
 import { measuredBulkClient, type BulkCompletion } from './measuredBulkClient';
 import {
   addMassRecount, ensureMassRecountTable, massRecountAllowance, massRecountLimit, massRecountQueued, takeMassRecountSlot, utcDay,
@@ -44,7 +46,14 @@ const FIT_FAILURES: Readonly<Record<string, VacancyFitFailure>> = {
   requirements_failed: 'requirements',
   requirements_wait_timeout: 'requirements',
   profile_changed: 'profile_changed',
+  [FIT_INPUT_TOO_LARGE]: 'too_large',
 };
+/** B654: the label names the row; only the percent's own rule says whether the row counts. */
+function shownRequirement(requirement: VacancyRequirement): VacancyRequirement {
+  const labelled = labelVacancyRequirement(requirement);
+  // Experience always counts; its label only says whether a quiz can check it.
+  return requirement.kind === 'experience' ? labelled : { ...labelled, skill: isSkillRequirement(requirement) };
+}
 interface AssessmentOutcome {
   staleProfile: boolean;
   /** The spend budget refused the call: the job waits for the next UTC day, no attempt is spent. */
@@ -55,8 +64,11 @@ interface AssessmentOutcome {
   invalid: boolean;
   /** The stage of the chain that gave the answer: the row records it (04.11). */
   answeredBy: string | null;
+  /** B757: the request fits no stage's per-call ceiling even with fewer facts: settled for good. */
+  tooLarge: boolean;
 }
 function assessmentFailure(outcome: AssessmentOutcome): string {
+  if (outcome.tooLarge) return FIT_INPUT_TOO_LARGE;
   return outcome.staleProfile
     ? 'profile_changed'
     : outcome.invalid
@@ -125,7 +137,7 @@ export class VacancyMechanicsRuntime {
     const extracted = this.requirements.getLatestOrLegacy(input.vacancyId, vacancyDescriptionHash(input.description));
     // B510: a shown vacancy without model labels jumps ahead of the background upgrade.
     if (queueRequirements && input.description.trim() && extracted?.extractorVersion !== VACANCY_REQUIREMENTS_EXTRACTOR_VERSION) {
-      this.requirements.enqueue({ vacancyId: input.vacancyId, description: input.description }, { titleStrategyPriority: SHOWN_PAGE_PRIORITY });
+      this.queueShownRequirements(input);
     }
     // Until the worker answers, the rules give the chips; the state below stays honest.
     const shown = extracted ?? extractVacancyRequirements({ vacancyId: input.vacancyId, description: input.description });
@@ -157,12 +169,23 @@ export class VacancyMechanicsRuntime {
                   : 'not_requested';
     return {
       state,
-      requirements: shown.requirements.map(labelVacancyRequirement),
+      requirements: shown.requirements.map(shownRequirement),
       ...(result ? { result } : {}),
       ...(state === 'failed' ? { failure: fitFailure(job?.lastError) } : {}),
     };
   }
+  /** B702: a read does not wait for the write lock; when it is taken, the next read queues the text. */
+  private queueShownRequirements(input: VacancyFitInput): void {
+    try {
+      writeBriefly(this.database, () =>
+        this.requirements.enqueue({ vacancyId: input.vacancyId, description: input.description }, { titleStrategyPriority: SHOWN_PAGE_PRIORITY }));
+    } catch (error) {
+      if (!isSqliteBusy(error)) throw error;
+    }
+  }
   cachedVacancyIds(candidateId: string): ReadonlySet<string> { return this.fit.cachedVacancyIds(candidateId); }
+  readSealedFitViews(candidateId: string, stamp: string): string | undefined { return this.fit.readSealedViews(candidateId, stamp); }
+  sealFitViews(candidateId: string, stamp: string, text: string): Promise<void> { return this.fit.sealViews(candidateId, stamp, text); }
   warmCachedVacancyIds(candidateId: string): Promise<void> { return this.fit.warmCachedVacancyIds(candidateId); }
   /**
    * The current result exists under this input's key, read without opening it (prod 02.11: the
@@ -173,6 +196,10 @@ export class VacancyMechanicsRuntime {
     const extracted = this.requirements.getLatestOrLegacy(input.vacancyId, vacancyDescriptionHash(input.description));
     if (!input.description.trim() || extracted?.extractorVersion !== VACANCY_REQUIREMENTS_EXTRACTOR_VERSION) return false;
     return this.fit.hasCache({ ...input, requirements: extracted.requirements });
+  }
+  /** B766: разобранные требования вакансий для роли «Технический директор», одним запросом. */
+  latestRequirementTextsMany(vacancyIds: readonly string[]): ReadonlyMap<string, readonly VacancyRequirement[]> {
+    return new Map([...this.requirements.latestManyOrLegacy(vacancyIds)].map(([id, result]) => [id, result.requirements]));
   }
   /** `enqueue` would create no job: one is waiting, or a finished one holds this input's key and its result stands. */
   fitJobHoldsKey(input: VacancyFitInput): boolean {
@@ -195,15 +222,18 @@ export class VacancyMechanicsRuntime {
    * `backgroundRank` (B580): the selection sweep queues below every page the candidate looks at.
    * `reviveSlot`: a re-read of all requirements loses every result at once, so the sweep counts them
    * under the day's ceiling; a page or a card the candidate opened passes none.
+   * B702: one short lock for the four writes; throws `SQLITE_BUSY`, the caller waits off the loop.
    */
   enqueue(input: VacancyFitInput, options: FitEnqueueOptions & { readonly reviveSlot?: () => boolean } = {}) {
     const requirementInput = { vacancyId: input.vacancyId, description: input.description };
-    // This method is reached only by an explicit authenticated POST, never by the worker retry loop.
-    this.requirements.retryFailed(requirementInput);
-    this.requirements.enqueue(requirementInput, { titleStrategyPriority: options.backgroundRank === undefined ? 1 : BACKGROUND_REQUIREMENTS_PRIORITY });
-    this.fit.retryFailed(input, undefined, options);
-    if (this.lostItsResult(input) && (options.reviveSlot?.() ?? true)) this.fit.reviveCompleted(input, undefined, options);
-    return this.fit.enqueue(input, undefined, options);
+    return writeBriefly(this.database, () => {
+      // This method is reached only by an explicit authenticated POST, never by the worker retry loop.
+      this.requirements.retryFailed(requirementInput);
+      this.requirements.enqueue(requirementInput, { titleStrategyPriority: options.backgroundRank === undefined ? 1 : BACKGROUND_REQUIREMENTS_PRIORITY });
+      this.fit.retryFailed(input, undefined, options);
+      if (this.lostItsResult(input) && (options.reviveSlot?.() ?? true)) this.fit.reviveCompleted(input, undefined, options);
+      return this.fit.enqueue(input, undefined, options);
+    });
   }
   /**
    * Worker start: one requeue of model failures recorded under an older parser revision (B522),
@@ -233,9 +263,13 @@ export class VacancyMechanicsRuntime {
     logMassRecount(log, 'fit', fit, this.fit.countFailedOnce() + this.fit.countOrphanedRequirementsTimeouts(), limits.fit, total('fit'));
     return { requirements: failures, fit, labels };
   }
+  /** One batch of superseded fit jobs left as `failed` before 23.11 (`runSupersededPurge` paces them). */
+  purgeSupersededFitBatch(): number {
+    return this.fit.purgeSupersededBatch();
+  }
   /** The background refresh of counted rows (a new algorithm version): true while the day's ceiling has room. */
   takeFitRefreshSlot(limit = massRecountLimit('OPENQAREER_MASS_FIT_REFRESH_DAY_LIMIT', MASS_FIT_REFRESH_DAY_LIMIT)): boolean {
-    return takeMassRecountSlot(this.database, 'fit_refresh', limit);
+    return writeBriefly(this.database, () => takeMassRecountSlot(this.database, 'fit_refresh', limit));
   }
   /** Counters since the previous call: the worker writes one journal line per batch. */
   takeStats(): VacancyMechanicsStats {
@@ -300,8 +334,11 @@ export class VacancyMechanicsRuntime {
     } else if (outcome.channelDown) {
       this.pauseForChannel();
       this.waitForChannel(job);
+    } else if (outcome.staleProfile && this.validateCurrentProfile) {
+      // Superseded: the current profile has its own key and job; without a validator it fails closed below.
+      this.recordFailure(this.fit.discard(job), 'profile_changed');
     } else if (hasClient && result.reason === 'assessment_unavailable' && !outcome.returned) {
-      this.settleFailure(job, assessmentFailure(outcome), !outcome.staleProfile && job.attempts < 3);
+      this.settleFailure(job, assessmentFailure(outcome), !outcome.staleProfile && !outcome.tooLarge && job.attempts < 3);
     } else if (this.fit.complete(job, result, undefined, resolved, outcome.answeredBy)) this.stats.completed += 1;
   }
 
@@ -311,7 +348,7 @@ export class VacancyMechanicsRuntime {
     runId: string,
     resolved: VacancyFitInput,
   ) {
-    const outcome: AssessmentOutcome = { staleProfile: false, budgetPaused: false, channelDown: false, returned: false, invalid: false, answeredBy: null };
+    const outcome: AssessmentOutcome = { staleProfile: false, budgetPaused: false, channelDown: false, returned: false, invalid: false, answeredBy: null, tooLarge: false };
     const base = client
       ? createVacancyFitAssessor({
           complete: async (request) => {
@@ -340,6 +377,10 @@ export class VacancyMechanicsRuntime {
               }
               if (error instanceof BulkChannelUnavailable) {
                 outcome.channelDown = true;
+                throw error;
+              }
+              if (error instanceof BulkInputTooLarge) {
+                outcome.tooLarge = true;
                 throw error;
               }
               // The model answered, but not with the assessment shape: not an outage.

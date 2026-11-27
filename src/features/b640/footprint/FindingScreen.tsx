@@ -1,21 +1,22 @@
 import type { FootprintRiskItem } from '../../../../shared/footprintRisk';
 import { FOOTPRINT_CATEGORY_TITLES } from '../../../../shared/footprintRisk';
-import { Button, Icon, Link, StatusLine, useToast } from '../kit';
+import { Icon, Link, StatusLine, useToast } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
-import { useReview } from './FindingRow';
+import { FindingDock, RemovalDoneLine } from './FindingDock';
+import { reviewTarget, useReview } from './FindingRow';
 import { FootprintLoad, StartPage, hasSummary } from './FootprintScreen';
 import {
   GOOGLE_REMOVAL_URL,
   YANDEX_REMOVAL_URL,
+  confirmsOwner,
   letterText,
   mailtoHref,
   openRisks,
   pageAttrs,
-  shortDate,
+  riskLine,
 } from './footprintModel';
 import type { FootprintData } from './useFootprint';
-import { repeatIds, useStartSearch } from './useStartSearch';
 import { reportFailure } from './reportFailure';
 
 interface ViewProps {
@@ -34,26 +35,29 @@ function Facts({ item }: { readonly item: FootprintRiskItem }) {
           <dd>{item.mismatch.field}: «{item.mismatch.foundValue}», в профиле — «{item.mismatch.profileValue}»</dd>
         </>
       ) : null}
-      {item.levelLabel ? (<><dt>Риск</dt><dd>{item.levelLabel}</dd></>) : null}
+      {item.levelLabel ? (<><dt>Риск</dt><dd>{riskLine(item)}</dd></>) : null}
     </dl>
   );
 }
 
 function QuietRow({ item, onDone }: { readonly item: FootprintRiskItem; readonly onDone: () => void }) {
   const review = useReview(onDone);
-  const { findingId } = item;
-  if (!findingId) return null;
+  const target = reviewTarget(item);
+  if (!target) return null;
   return (
     <>
       <div className="actions fp-quiet-row">
         <button className="row-act" type="button"
-          onClick={() => void review.mark(findingId, 'hidden', 'Отмечено: не проблема')}>
+          onClick={() => void review.mark(target, 'hidden', 'Отмечено: не проблема')}>
           Это не проблема
         </button>
-        <button className="row-act" type="button"
-          onClick={() => void review.mark(findingId, 'not_self', 'Отмечено: это не вы')}>
-          Это не я
-        </button>
+        {/* Расхождение — данные о самом кандидате: «Это не я» к нему не относится. */}
+        {target.kind === 'finding' ? (
+          <button className="row-act" type="button"
+            onClick={() => void review.mark(target, 'not_self', 'Отмечено: это не вы')}>
+            Это не я
+          </button>
+        ) : null}
       </div>
       {review.error ? <StatusLine state="err" text={review.error} /> : null}
     </>
@@ -108,21 +112,33 @@ function ExternalRow({ item }: { readonly item: FootprintRiskItem }) {
   );
 }
 
-/** «Проверено DD.MM · Проверить снова»: новая проверка, ход виден в «Цифровом следе». */
-function RecheckDock({ data }: { readonly data: FootprintData }) {
-  const { navigate } = useShell();
-  const repeat = useStartSearch(data, () => navigate(buildNodePath('p02')));
-  const checked = shortDate(data.summary.checkedAt);
+/**
+ * B382: страница найдена по нику, чья она — неизвестно. Сама страница открывается отсюда (из списка
+ * внешних ссылок нет); «Это моё» подтверждает её, «Это не моё» убирает из сводки.
+ */
+function OwnerRow({ item, onDone }: { readonly item: FootprintRiskItem; readonly onDone: () => void }) {
+  const review = useReview(onDone);
+  const target = reviewTarget(item);
+  if (!item.url || !target) return null;
   return (
     <>
-      {repeat.error ? <StatusLine state="err" text={repeat.error} /> : null}
-      <div className="fp-dock fp-dock-ico">
-        {checked ? <span className="fp-dock-d">Проверено <span className="num">{checked}</span></span> : null}
-        <Button variant="primary" icon="refresh" busy={repeat.busy}
-          onClick={() => void repeat.start(repeatIds(data))}>
-          Проверить снова
-        </Button>
+      <div className="actions fp-owner-row">
+        <a className="btn is-primary" href={item.url} rel="noopener noreferrer" target="_blank"
+          aria-label={`Открыть страницу ${item.title}, откроется в новой вкладке`}>
+          Открыть страницу
+          <Icon name="out" />
+        </a>
+        <button className="btn" type="button" disabled={review.busy}
+          onClick={() => void review.confirm(target, 'Отмечено: это ваша страница')}>
+          <Icon name="check" />
+          Это моё
+        </button>
+        <button className="row-act" type="button" disabled={review.busy}
+          onClick={() => void review.mark(target, 'not_self', 'Отмечено: это не ваша страница')}>
+          Это не моё
+        </button>
       </div>
+      {review.error ? <StatusLine state="err" text={review.error} /> : null}
     </>
   );
 }
@@ -142,10 +158,16 @@ function Finding({ data, item, reload }: ViewProps) {
       <h2 className="lead-title is-long" id="pf-t">{item.title}</h2>
       <p className="lead-sub">{position}{FOOTPRINT_CATEGORY_TITLES[item.category].toLowerCase()}</p>
       <Facts item={item} />
-      <QuietRow item={item} onDone={toSummary} />
-      <Letter item={item} />
-      <ExternalRow item={item} />
-      <RecheckDock data={data} />
+      {confirmsOwner(item) ? (
+        <OwnerRow item={item} onDone={toSummary} />
+      ) : (
+        <>
+          <QuietRow item={item} onDone={toSummary} />
+          <Letter item={item} />
+          <ExternalRow item={item} />
+          <FindingDock data={data} item={item} reload={reload} />
+        </>
+      )}
     </section>
   );
 }
@@ -173,6 +195,7 @@ export function FindingScreen({ node, findingId }: { readonly node: B640Node; re
         const item = data.summary.items.find((entry) => entry.id === findingId);
         return (
           <div className="page pf" {...pageAttrs(node)}>
+            {item ? <RemovalDoneLine item={item} /> : null}
             <div className="col">
               {item ? <Finding data={data} item={item} reload={reload} /> : <Missing />}
             </div>

@@ -3,8 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { pruneClustersInBatchesAsync } from './poolPruneBatches';
+import { PrunePassStopped, pruneClustersInBatchesAsync } from './poolPruneBatches';
 import { SqliteVacancyPoolStore, type PoolWriteEvent } from './sqliteVacancyPoolStore';
+import { STALE_CLUSTERS_SQL } from './poolPruneBatches';
 
 const directories: string[] = [];
 const stores: SqliteVacancyPoolStore[] = [];
@@ -260,6 +261,30 @@ describe('prune after readiness yields between transactions (B649-2)', () => {
     ]);
   });
 
+  it('pauses between transactions when asked (B759: prune in the background)', async () => {
+    const { store, seed } = openStore({ writeChunkSize: 10 });
+    seedPool(seed, 'gone', 25, 'g');
+    const startedAt = performance.now();
+    await store.pruneAsync(['board'], '2026-08-01T00:00:00.000Z', { pauseMs: 25 });
+    expect(countOf(seed, 'vacancy_pool')).toBe(0);
+    // Three transactions, a pause after each step boundary: at least two pauses.
+    expect(performance.now() - startedAt).toBeGreaterThanOrEqual(45);
+  });
+
+  it('stops between transactions when the process stops (B759)', async () => {
+    const { store, seed } = openStore({ writeChunkSize: 10 });
+    seedPool(seed, 'gone', 25, 'g');
+    let steps = 0;
+    const pending = store.pruneAsync(['board'], '2026-08-01T00:00:00.000Z', {
+      shouldStop: () => {
+        steps += 1;
+        return steps > 1;
+      },
+    });
+    await expect(pending).rejects.toBeInstanceOf(PrunePassStopped);
+    expect(countOf(seed, 'vacancy_pool')).toBeGreaterThan(0);
+  });
+
   it('keeps the half-loaded registry guard', async () => {
     const { store, seed, events } = openStore();
     const ids = Array.from({ length: 10 }, (_, index) => `s${index}`);
@@ -285,26 +310,77 @@ describe('prune after readiness yields between transactions (B649-2)', () => {
   });
 });
 
-describe('cluster prune reads rowid windows (B649-3: one scan of 630 000 clusters held the loop 26 s)', () => {
-  it('finds stale clusters past the first window and reads them window by window', async () => {
-    const { seed } = openStore();
+describe('cluster prune reads stale clusters by the freshness index (B759: 919 000 clusters read 160 s a pass)', () => {
+  function seedClusters(seed: DatabaseSync, stale: number, fresh: number): void {
     const insert = seed.prepare(
       `INSERT INTO vacancy_clusters (id, fingerprint, title, company, cluster_json, items_count, updated_at)
        VALUES (?, ?, 't', 'c', '{}', 1, ?)`,
     );
-    for (let index = 1; index <= 35; index += 1) {
-      const stale = index === 3 || index === 33;
-      insert.run(`c${index}`, `c${index}`, stale ? 0 : Date.now());
-    }
-    const reads = watchReads({ database: seed } as unknown as SqliteVacancyPoolStore);
+    for (let index = 0; index < fresh; index += 1) insert.run(`f${index}`, `f${index}`, Date.now());
+    for (let index = 0; index < stale; index += 1) insert.run(`s${index}`, `s${index}`, index);
+  }
+
+  it('finds stale clusters through vacancy_clusters_freshness, not a scan of the table', () => {
+    const { seed } = openStore();
+    const plan = seed
+      .prepare(`EXPLAIN QUERY PLAN ${STALE_CLUSTERS_SQL}`)
+      .all(Date.parse('2026-01-01'), 1000)
+      .map((row) => String((row as { detail: string }).detail));
+    expect(plan.join(' ')).toMatch(/USING (COVERING )?INDEX vacancy_clusters_freshness/);
+    expect(plan.join(' ')).not.toMatch(/SCAN vacancy_clusters/);
+  });
+
+  it('removes every stale cluster portion by portion and leaves fresh ones', async () => {
+    const { seed } = openStore();
+    seedClusters(seed, 2_500, 40);
     const { clusters } = await pruneClustersInBatchesAsync(seed, Date.parse('2026-01-01'), {
+      chunkRows: 500,
+      budgetMs: 1000,
+    });
+    expect(clusters).toBe(2_500);
+    expect(countOf(seed, 'vacancy_clusters')).toBe(40);
+  });
+
+  it('drops keys of removed clusters and orphan keys window by window, never one read of all keys', async () => {
+    const { seed } = openStore();
+    seedClusters(seed, 3, 5);
+    const key = seed.prepare(
+      'INSERT INTO vacancy_cluster_keys (kind, key, cluster_id) VALUES (?, ?, ?)',
+    );
+    for (const id of ['s0', 's1', 's2', 'f0', 'f1', 'f2', 'f3', 'f4'])
+      key.run('title', `k-${id}`, id);
+    for (let index = 0; index < 25; index += 1) key.run('title', `lost-${index}`, `gone-${index}`);
+    const reads: string[] = [];
+    const prepare = seed.prepare.bind(seed);
+    seed.prepare = ((sql: string) => {
+      if (/vacancy_cluster_keys/.test(sql) && /^\s*SELECT/i.test(sql)) reads.push(sql);
+      return prepare(sql);
+    }) as DatabaseSync['prepare'];
+    await pruneClustersInBatchesAsync(seed, Date.parse('2026-01-01'), {
       chunkRows: 100,
       budgetMs: 1000,
-      scanWindowRows: 10,
+      keyWindowRows: 4,
     });
-    expect(clusters).toBe(2);
-    expect(countOf(seed, 'vacancy_clusters')).toBe(33);
-    // 35 rows in windows of 10: at least four reads for stale clusters.
-    expect(reads.length).toBeGreaterThanOrEqual(4);
+    seed.prepare = prepare;
+    const left = seed
+      .prepare('SELECT cluster_id AS id FROM vacancy_cluster_keys ORDER BY cluster_id')
+      .all()
+      .map((row) => (row as { id: string }).id);
+    expect(left).toEqual(['f0', 'f1', 'f2', 'f3', 'f4']);
+    // 33 key rows in windows of 4 distinct clusters: many bounded reads, no LEFT JOIN over all keys.
+    expect(reads.length).toBeGreaterThan(5);
+    expect(reads.some((sql) => /LEFT JOIN/i.test(sql))).toBe(false);
+  });
+
+  it('nothing stale — one indexed read and no transaction', async () => {
+    const { seed } = openStore();
+    seedClusters(seed, 0, 30);
+    const { clusters, report } = await pruneClustersInBatchesAsync(seed, Date.parse('2026-01-01'), {
+      chunkRows: 100,
+      budgetMs: 1000,
+    });
+    expect(clusters).toBe(0);
+    expect(report.transactions).toBe(0);
+    expect(countOf(seed, 'vacancy_clusters')).toBe(30);
   });
 });

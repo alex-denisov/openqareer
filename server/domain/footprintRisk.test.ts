@@ -5,7 +5,7 @@ import type {
 } from '../../shared/candidateFootprint';
 import type { ConsistencyDiscrepancy } from '../../shared/candidateReputation';
 import { FOOTPRINT_RISK_CATEGORIES } from '../../shared/footprintRisk';
-import { buildFootprintRiskSummary } from './footprintRisk';
+import { buildFootprintRiskSummary, footprintFindingCounts } from './footprintRisk';
 
 let counter = 0;
 function finding(overrides: Partial<CandidateFootprintFinding>): CandidateFootprintFinding {
@@ -152,9 +152,10 @@ describe('buildFootprintRiskSummary', () => {
     expect([byId.gh.category, byId.gh.level, byId.gh.action]).toEqual([
       'useful_evidence',
       'useful',
-      { kind: 'add_to_profile', label: 'В профиль' },
+      // B382: профиль площадки в профиль не переносится — только «Это не моё».
+      { kind: 'not_mine', label: 'Это не моё' },
     ]);
-    expect([byId.who.category, byId.who.level]).toEqual(['needs_check', 'important']);
+    expect([byId.who.category, byId.who.level]).toEqual(['needs_check', 'low']);
     expect(byId.odd.category).toBe('needs_check');
     expect([byId['mismatch:d1'].category, byId['mismatch:d1'].action]).toEqual([
       'resume_mismatch',
@@ -201,6 +202,18 @@ describe('buildFootprintRiskSummary', () => {
       levelLabel: null,
       where: '',
     });
+  });
+
+  it('B801: уведомление считает находки так же, как экран', () => {
+    const page = { url: 'https://duolingo.com/profile/ad' };
+    const own = audit([
+      finding(page),
+      finding({ url: 'https://www.duolingo.com/profile/ad/' }),
+      finding({ review: 'hidden' }),
+      finding({ review: 'not_self' }),
+    ]);
+    expect(footprintFindingCounts([own], [mismatch]).get('a1')).toBe(2);
+    expect(buildFootprintRiskSummary(own, [mismatch]).total).toBe(2);
   });
 
   it('порядок: рисковые, затем нейтральные, затем полезные', () => {
@@ -324,8 +337,263 @@ describe('buildFootprintRiskSummary', () => {
     );
   });
 
+  it('путь удаления: запрос и итог проверки идут в находку; «удалено» снимает её из «стоит убрать» (B382)', () => {
+    const sent = finding({
+      id: 'sent',
+      kind: 'breach',
+      removal: { requestedAt: '2026-11-11T10:00:00.000Z' },
+    });
+    const gone = finding({
+      id: 'gone',
+      kind: 'breach',
+      removal: {
+        requestedAt: '2026-11-11T10:00:00.000Z',
+        checkedAt: '2026-11-12T10:00:00.000Z',
+        result: 'removed',
+      },
+    });
+    const summary = buildFootprintRiskSummary(audit([sent, gone]), []);
+    const byId = new Map(summary.items.map((item) => [item.id, item]));
+    expect(byId.get('sent')).toMatchObject({
+      resolved: false,
+      removal: { requestedAt: '2026-11-11T10:00:00.000Z' },
+    });
+    expect(byId.get('gone')).toMatchObject({ resolved: true, removal: { result: 'removed' } });
+    expect(summary.toRemove).toBe(1);
+  });
+
   it('ссылку отдаёт только http(s)', () => {
     const summary = buildFootprintRiskSummary(audit([finding({ url: 'javascript:alert(1)' })]), []);
     expect(summary.items[0].url).toBeNull();
+  });
+
+  it('B645 p02: одна страница — одна находка; счёт после склейки', () => {
+    const detail = 'Открытая страница найдена по нику; владение нужно подтвердить.';
+    const summary = buildFootprintRiskSummary(
+      audit([
+        finding({ title: 'Duolingo', url: 'https://www.duolingo.com/profile/adenisov', detail }),
+        finding({ title: 'Duolingo', url: 'https://duolingo.com/profile/adenisov/', detail }),
+        finding({ title: 'Duolingo', url: 'https://duolingo.com/profile/a.denisov', detail }),
+      ]),
+      [],
+    );
+    expect(summary.total).toBe(2);
+    expect(summary.items.map((item) => item.detail)).toEqual([
+      'duolingo.com/profile/adenisov · Открытая страница найдена по нику.',
+      'duolingo.com/profile/a.denisov · Открытая страница найдена по нику.',
+    ]);
+  });
+
+  it('B645 p02: из двух копий остаётся разобранная', () => {
+    const summary = buildFootprintRiskSummary(
+      audit([
+        finding({ title: 'Topcoder', url: 'https://topcoder.com/members/ad' }),
+        finding({
+          title: 'Topcoder',
+          url: 'https://topcoder.com/members/ad',
+          checklistMark: 'account_kept',
+        }),
+      ]),
+      [],
+    );
+    expect(summary.items).toHaveLength(1);
+    expect(summary.items[0].resolved).toBe(true);
+  });
+
+  it('B668: находка о самой странице важнее её копии в архиве', () => {
+    const archived = (stamp: string) =>
+      finding({
+        adapter: 'wayback',
+        title: 'Архивная копия',
+        url: `https://web.archive.org/web/${stamp}/https://www.youtube.com/@Google`,
+      });
+    const summary = buildFootprintRiskSummary(
+      audit([
+        archived('20240101000000'),
+        archived('20250101000000'),
+        finding({
+          adapter: 'youtube',
+          title: 'Канал YouTube @Google',
+          url: 'https://www.youtube.com/@Google',
+          detail: 'Канал по вашей ссылке существует',
+        }),
+      ]),
+      [],
+    );
+    expect(summary.items.map((item) => item.title)).toEqual(['Канал YouTube @Google']);
+  });
+
+  it('B668: разобранная архивная копия остаётся важнее неразобранной страницы', () => {
+    const summary = buildFootprintRiskSummary(
+      audit([
+        finding({
+          adapter: 'wayback',
+          url: 'https://web.archive.org/web/2024/https://site.test/page',
+          checklistMark: 'account_kept',
+        }),
+        finding({ url: 'https://site.test/page' }),
+      ]),
+      [],
+    );
+    expect(summary.items).toHaveLength(1);
+    expect(summary.items[0].resolved).toBe(true);
+  });
+
+  it('B645 p02: адрес уже в описании — второй раз не пишем', () => {
+    const summary = buildFootprintRiskSummary(
+      audit([finding({ url: 'https://site.test/u/x', detail: 'Страница site.test/u/x открыта' })]),
+      [],
+    );
+    expect(summary.items[0].detail).toBe('Страница site.test/u/x открыта');
+  });
+
+  describe('B727: страница по нику без подтверждения — «Нужно проверить сейчас»', () => {
+    const nick = (overrides: Partial<CandidateFootprintFinding> = {}) =>
+      finding({
+        title: 'Duolingo',
+        url: 'https://www.duolingo.com/profile/alexey_denisov',
+        detail: 'Открытая страница найдена по нику; владение нужно подтвердить.',
+        review: 'unreviewed',
+        ...overrides,
+      });
+
+    it('не «важно», «Проверить» открывает страницу, полезные её не считают', () => {
+      const summary = buildFootprintRiskSummary(audit([nick(), finding({ title: 'GitHub' })]), []);
+      const item = summary.items.find((entry) => entry.title === 'Duolingo');
+      expect(item).toMatchObject({
+        category: 'needs_check',
+        level: 'low',
+        action: { kind: 'confirm_owner', label: 'Проверить' },
+        url: 'https://www.duolingo.com/profile/alexey_denisov',
+      });
+      expect(summary.categories.find((entry) => entry.id === 'useful_evidence')?.count).toBe(1);
+      expect(summary.categories.find((entry) => entry.id === 'needs_check')?.count).toBe(1);
+    });
+
+    it('строка без «владение нужно подтвердить» — действие уже в кнопке', () => {
+      const [item] = buildFootprintRiskSummary(audit([nick()]), []).items;
+      expect(item!.detail).toBe(
+        'duolingo.com/profile/alexey_denisov · Открытая страница найдена по нику.',
+      );
+    });
+
+    it('подтверждённая или добавленная в профиль — остаётся полезной', () => {
+      const summary = buildFootprintRiskSummary(
+        audit([
+          nick({ review: 'confirmed_self' }),
+          nick({
+            url: 'https://profiles.topcoder.com/alexey_denisov',
+            checklistMark: 'added_to_profile',
+          }),
+        ]),
+        [],
+      );
+      expect(summary.items.map((entry) => entry.category)).toEqual([
+        'useful_evidence',
+        'useful_evidence',
+      ]);
+    });
+
+    it('«стоит убрать» не считает страницы, владелец которых не подтверждён (B645 p02)', () => {
+      const pages = Array.from({ length: 7 }, (_, index) =>
+        nick({ url: `https://site${index}.test/alexey_denisov` }),
+      );
+      expect(buildFootprintRiskSummary(audit(pages), []).headline).toBe('7 находок');
+      const mixed = buildFootprintRiskSummary(
+        audit([
+          ...pages.slice(0, 2),
+          finding({ title: 'Телефон', category: 'personal_data' } as never),
+        ]),
+        [],
+      );
+      expect(mixed.toRemove).toBe(
+        mixed.items.filter(
+          (item) => item.action?.kind !== 'confirm_owner' && item.level !== 'useful',
+        ).length,
+      );
+    });
+
+    it('«стоит убрать» не считает и непроверенные страницы с «Проверить» (B645 p02)', () => {
+      const pages = Array.from({ length: 6 }, (_, index) =>
+        nick({ url: `https://site${index}.test/alexey_denisov` }),
+      );
+      const unsure = finding({
+        kind: 'mention',
+        review: 'unreviewed',
+        automatedMatch: 'unknown',
+      } as never);
+      const summary = buildFootprintRiskSummary(audit([...pages, unsure]), []);
+      expect(summary.items.map((item) => item.action?.kind)).toContain('check_now');
+      expect(summary.toRemove).toBe(0);
+      expect(summary.headline).toBe('7 находок');
+    });
+
+    it('«Это не моё» — находка уходит из сводки', () => {
+      const summary = buildFootprintRiskSummary(audit([nick({ review: 'not_self' })]), []);
+      expect(summary.items).toEqual([]);
+    });
+  });
+});
+
+describe('B645 f03b: строка «Риск» — уровень и почему', () => {
+  const reasonOf = (overrides: Partial<CandidateFootprintFinding>): string | undefined =>
+    buildFootprintRiskSummary(audit([finding(overrides)]), []).items[0]?.levelReason;
+
+  it('у каждой находки есть причина уровня по её виду', () => {
+    expect(reasonOf({ kind: 'breach', adapter: 'hibp' })).toBe(
+      'старые аккаунты на эту почту ещё открыты',
+    );
+    expect(reasonOf({ review: 'unreviewed', automatedMatch: 'unknown' })).toBe(
+      'страницу находят по нику, чья она — неизвестно',
+    );
+    expect(
+      reasonOf({
+        kind: 'mention',
+        adapter: 'exa',
+        review: 'unreviewed',
+        automatedMatch: 'unknown',
+      }),
+    ).toBe('совпадение по имени не подтверждено');
+    expect(reasonOf({ kind: 'profile', review: 'confirmed_self' })).toBe('подтверждает ваш опыт');
+    expect(reasonOf({ kind: 'archive', adapter: 'wayback' })).toBe(
+      'старая копия страницы ещё открыта',
+    );
+    const all = ['breach', 'metadata', 'secret', 'archive', 'profile', 'mention'].map((kind) =>
+      reasonOf({
+        kind: kind as CandidateFootprintFinding['kind'],
+        staleAccount: kind === 'profile',
+      }),
+    );
+    // Кандидату не называем инструменты и не пугаем словами «утечка», «пароль» (B667).
+    expect(all.join(' · ')).not.toMatch(/sherlock|maigret|hibp|wayback|exa\b|утечк|парол/iu);
+  });
+});
+
+describe('B645 f03b: база контактов — короткое название и одна строка «Где»', () => {
+  it('без заголовка страницы и разметки', () => {
+    const summary = buildFootprintRiskSummary(
+      audit([
+        finding({
+          id: 'broker',
+          url: 'https://aeroleads.com/in/alexeydenisov',
+          title: 'Alexey Denisov Email & Phone Number @ Россети Цифра | AeroLeads',
+          detail: '# Alexey Denisov Email & Phone Number\n\n**Россети Цифра**',
+        }),
+      ]),
+      [],
+    );
+    const [broker] = summary.items;
+    expect(broker.title).toBe('Почта и телефон в базе контактов');
+    expect(broker.detail).toBe('aeroleads.com/in/alexeydenisov');
+  });
+});
+
+describe('описание находки без разметки', () => {
+  it('снимает # и ** из текста страницы', () => {
+    const summary = buildFootprintRiskSummary(
+      audit([finding({ id: 'md', detail: '# Заголовок\n\n**Жирный** текст' })]),
+      [],
+    );
+    expect(summary.items[0].detail).not.toMatch(/[#*]/u);
   });
 });

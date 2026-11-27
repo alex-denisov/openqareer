@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { pressSend } from '../apply/applyIntent';
+import { createContext, useContext, type ReactNode } from 'react';
 import { Button, Icon, Link, StatusLine, type IconName } from '../kit';
 
 export interface ScreenAction {
@@ -6,6 +7,13 @@ export interface ScreenAction {
   readonly icon: IconName;
   readonly path: string;
 }
+
+/**
+ * Макет s04 на 390: пока внизу полоса вопроса о статусе, кнопка ведущего блока контурная
+ * и стоит в потоке под ним, а не своей полосой под полосой вопроса (B645-2). То же с событием
+ * отклика (s05b): залитая кнопка — в его карточке.
+ */
+export const LeadQuietContext = createContext(false);
 
 /** Скелет блока, пока идёт чтение. */
 export function BlockSkeleton({
@@ -60,11 +68,12 @@ export function LeadActions({
   readonly primary?: ScreenAction;
   readonly children?: ReactNode;
 }) {
+  const quiet = useContext(LeadQuietContext);
   if (!primary && !children) return null;
   return (
     <div className="actions">
       {primary ? (
-        <Link className="btn is-primary" to={primary.path}>
+        <Link className={quiet ? 'btn' : 'btn is-primary'} to={primary.path} onClick={() => pressSend(primary, primary.path)}>
           <Icon name={primary.icon} />
           {primary.label}
         </Link>
@@ -77,7 +86,7 @@ export function LeadActions({
 /** Вторая и следующие кнопки блока: контурные ссылки. */
 export function ActionLink({ action }: { readonly action: ScreenAction }) {
   return (
-    <Link className="btn" to={action.path}>
+    <Link className="btn" to={action.path} onClick={() => pressSend(action, action.path)}>
       <Icon name={action.icon} />
       {action.label}
     </Link>

@@ -30,6 +30,11 @@ export interface VacancyApplicationSnapshot {
    * missing data.
    */
   readonly companyHidden?: boolean;
+  /**
+   * B635: описание вакансии на момент отклика (до 1500 знаков). По нему
+   * строятся вопросы подготовки к интервью. Нет у старых откликов.
+   */
+  readonly description?: string;
 }
 
 export interface VacancyApplication {
@@ -43,15 +48,11 @@ export interface VacancyApplication {
 }
 
 /** Подтверждённые отклики — единственное, что имеет право считаться откликом. */
-export function countConfirmedApplications(
-  applications: readonly VacancyApplication[],
-): number {
+export function countConfirmedApplications(applications: readonly VacancyApplication[]): number {
   return applications.filter((application) => application.status === 'applied').length;
 }
 
 /** Сколько вакансий кандидат открыл на площадке — отдельная ступень воронки. */
-export function countOpenedApplications(
-  applications: readonly VacancyApplication[],
-): number {
+export function countOpenedApplications(applications: readonly VacancyApplication[]): number {
   return applications.length;
 }

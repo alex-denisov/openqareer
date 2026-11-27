@@ -7,7 +7,7 @@ import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { watchWriteHolds } from '../observability/sqliteWriteHolds';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
-import { forgetMatchedListsForTests, MATCHED_LIST_MAX_AGE_MS, readSealedMatchedList, sealMatchedList } from './matchedVacancyList';
+import { forgetMatchedListsForTests, MATCHED_LIST_MAX_AGE_MS, SEALED_MATCHED_LIST_MAX_AGE_MS, readSealedMatchedList, sealMatchedList } from './matchedVacancyList';
 import { SEALED_MATCHED_LIST_MAX_BYTES, SEALED_MATCHED_LIST_VERSION, sealedListText } from './sealedMatchedList';
 
 const row = (id: string, summary = 'Описание вакансии.') =>
@@ -76,8 +76,11 @@ async function sealedApp(rows = pool(40)) {
     });
     expect(response.statusCode).toBe(200);
     const timing = lines.map((line) => JSON.parse(line)).filter((line) => line.msg === 'matched-vacancies-timing').at(-1);
-    const body = response.json() as { data: { cluster: { id: string } }[]; meta: { total: number } };
-    return { timing, ids: body.data.map((item) => item.cluster.id), total: body.meta.total };
+    const body = response.json() as {
+      data: { cluster: { id: string } }[];
+      meta: { total: number; facets?: { filtered?: { dates?: unknown } } };
+    };
+    return { timing, ids: body.data.map((item) => item.cluster.id), total: body.meta.total, facets: body.meta.facets };
   };
   const logged = (message: string) => lines.map((line) => JSON.parse(line)).filter((line) => line.msg === message);
   return { app, candidateStore, candidate, engine, read, logged };
@@ -145,6 +148,16 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     expect((await read('offset=0&sort=money')).timing.listServed).toBe('built');
   });
 
+  it('two choices both survive a restart: the list by role does not overwrite the general one (B770)', async () => {
+    const { read, logged } = await sealedApp();
+    await read();
+    await read('offset=0&sort=money');
+    await settle(logged, 'matched-list-sealed', 2);
+    forgetMatchedListsForTests();
+
+    expect((await read()).timing.listServed).toBe('sealed');
+  });
+
   it('a row of another version is not served, and a later page beyond the stored ones goes the usual way', async () => {
     const { read, candidateStore, candidate } = await sealedApp(pool(400));
     await read();
@@ -154,17 +167,17 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     forgetMatchedListsForTests();
     const stored = candidateStore.sealedMatchedLists.read(candidate.id, 0)!;
     const older = { ...JSON.parse(stored.text), version: SEALED_MATCHED_LIST_VERSION - 1 };
-    candidateStore.sealedMatchedLists.write(candidate.id, Date.now(), JSON.stringify(older));
+    candidateStore.sealedMatchedLists.write(candidate.id, Date.now(), JSON.stringify(older), stored.choice);
     expect((await read()).timing.listServed).toBe('built');
   });
 
-  it('a closed vacancy stays in the stored list no longer than in a held one: same limit, downtime counts', async () => {
+  it('a stored list answers a new process for a day, as the stored snapshot does (B702); downtime counts', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     const before = await sealedApp();
     await before.read();
     before.engine.rows = pool(40).slice(1);
     forgetMatchedListsForTests();
-    vi.advanceTimersByTime(MATCHED_LIST_MAX_AGE_MS - 1);
+    vi.advanceTimersByTime(SEALED_MATCHED_LIST_MAX_AGE_MS - 1);
     expect((await before.read()).ids).toContain('v-0');
     await settle(before.logged, 'matched-list-warmed');
     forgetMatchedListsForTests();
@@ -173,13 +186,13 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     await after.read();
     after.engine.rows = pool(40).slice(1);
     forgetMatchedListsForTests();
-    vi.advanceTimersByTime(MATCHED_LIST_MAX_AGE_MS);
+    vi.advanceTimersByTime(SEALED_MATCHED_LIST_MAX_AGE_MS);
     const cold = await after.read();
     // Past the limit the stored list does not answer; the read goes to the pool as any other.
     expect(cold.timing.listServed).toBe('built');
   });
 
-  it('a held list at the same age is rebuilt too: the limit is the same number', async () => {
+  it('a held list past its own limit is rebuilt', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     const { read } = await sealedApp();
     await read();
@@ -191,24 +204,24 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     const { read, candidateStore, candidate } = await sealedApp();
     await read();
     const database = (candidateStore as never as { database: import('node:sqlite').DatabaseSync }).database;
-    const cipher = database.prepare('SELECT cipher FROM sealed_matched_lists').get() as { cipher: string };
+    const cipher = database.prepare('SELECT cipher FROM sealed_matched_list_choices').get() as { cipher: string };
     expect(cipher.cipher).not.toContain('Инженер');
 
     candidateStore.deleteCandidate(candidate.id);
 
-    expect(database.prepare('SELECT COUNT(*) AS n FROM sealed_matched_lists').get()).toEqual({ n: 0 });
+    expect(database.prepare('SELECT COUNT(*) AS n FROM sealed_matched_list_choices').get()).toEqual({ n: 0 });
   });
 
   it('a write is one short transaction per build, and the journal has its length', async () => {
     const holds: string[] = [];
     const stop = watchWriteHolds((hold) => {
-      if (hold.statement.includes('sealed_matched_lists')) holds.push(hold.statement);
+      if (hold.statement.includes('sealed_matched_list')) holds.push(hold.statement);
     }, 0);
     try {
       const { read, logged } = await sealedApp();
       await read();
       await read();
-      expect(holds).toEqual(['INSERT INTO sealed_matched_lists']);
+      expect(holds).toEqual(['INSERT INTO sealed_matched_list_choices']);
       expect(logged('matched-list-sealed')[0]).toMatchObject({
         heldMs: expect.any(Number),
         lockWaitMs: expect.any(Number),
@@ -228,8 +241,8 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     await read();
     forgetMatchedListsForTests();
     const database = (candidateStore as never as { database: import('node:sqlite').DatabaseSync }).database;
-    const { cipher } = database.prepare('SELECT cipher FROM sealed_matched_lists').get() as { cipher: string };
-    database.prepare('UPDATE sealed_matched_lists SET cipher = ?').run(spoil(cipher));
+    const { cipher } = database.prepare('SELECT cipher FROM sealed_matched_list_choices').get() as { cipher: string };
+    database.prepare('UPDATE sealed_matched_list_choices SET cipher = ?').run(spoil(cipher));
 
     expect((await read()).timing.listServed).toBe('built');
 
@@ -247,7 +260,8 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     const { read, candidateStore, candidate } = await sealedApp();
     await read();
     forgetMatchedListsForTests();
-    candidateStore.sealedMatchedLists.write(candidate.id, Date.now(), typeof text === 'string' ? text : text());
+    const { choice } = candidateStore.sealedMatchedLists.read(candidate.id, 0)!;
+    candidateStore.sealedMatchedLists.write(candidate.id, Date.now(), typeof text === 'string' ? text : text(), choice);
 
     expect((await read()).timing.listServed).toBe('built');
   });
@@ -256,8 +270,9 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     const { read, candidateStore, candidate } = await sealedApp();
     await read();
     forgetMatchedListsForTests();
-    const stored = JSON.parse(candidateStore.sealedMatchedLists.read(candidate.id, 0)!.text);
-    candidateStore.sealedMatchedLists.write(candidate.id, Date.now(), JSON.stringify({ ...stored, pages: undefined }));
+    const row = candidateStore.sealedMatchedLists.read(candidate.id, 0)!;
+    const stored = JSON.parse(row.text);
+    candidateStore.sealedMatchedLists.write(candidate.id, Date.now(), JSON.stringify({ ...stored, pages: undefined }), row.choice);
 
     expect((await read()).timing.listServed).toBe('built');
   });
@@ -313,11 +328,35 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     expect((await read()).timing).toMatchObject({ listServed: 'sealed', sealedRows: 40 });
   });
 
+  it('the sealed answer counts the «Дата» periods like the built one (B729)', async () => {
+    const { read } = await sealedApp();
+    const built = await read('offset=0&tz=Europe/Moscow');
+    forgetMatchedListsForTests();
+    const sealed = await read('offset=0&tz=Europe/Moscow');
+    expect(sealed.timing).toMatchObject({ listServed: 'sealed' });
+    expect(sealed.facets?.filtered?.dates).toBeDefined();
+    expect(sealed.facets?.filtered).toEqual(built.facets?.filtered);
+  });
+
+  it('a list sealed before B729 still answers, only without the «Дата» counts', async () => {
+    const { read, candidateStore, candidate } = await sealedApp();
+    await read('offset=0&tz=Europe/Moscow');
+    const stored = candidateStore.sealedMatchedLists.read(candidate.id, 0)!;
+    const { filteredObserved: _observed, ...old } = JSON.parse(stored.text);
+    const { filtered: _filtered, ...oldFacets } = old.facets;
+    candidateStore.sealedMatchedLists.write(candidate.id, stored.builtAt + 1, JSON.stringify({ ...old, facets: oldFacets }), stored.choice);
+    forgetMatchedListsForTests();
+    const sealed = await read('offset=0&tz=Europe/Moscow');
+    expect(sealed.timing).toMatchObject({ listServed: 'sealed' });
+    expect(sealed.total).toBe(40);
+    expect(sealed.facets?.filtered).toBeUndefined();
+  });
+
   it('an older build does not replace a newer one', async () => {
     const { candidateStore, candidate } = await sealedApp();
-    candidateStore.sealedMatchedLists.write(candidate.id, 2_000, 'newer');
-    candidateStore.sealedMatchedLists.write(candidate.id, 1_000, 'older');
-    expect(candidateStore.sealedMatchedLists.read(candidate.id, 0)).toEqual({ builtAt: 2_000, text: 'newer' });
+    candidateStore.sealedMatchedLists.write(candidate.id, 2_000, 'newer', 'all');
+    candidateStore.sealedMatchedLists.write(candidate.id, 1_000, 'older', 'all');
+    expect(candidateStore.sealedMatchedLists.read(candidate.id, 0, 'all')).toEqual({ builtAt: 2_000, text: 'newer', choice: 'all' });
   });
 
   it('keeps the first pages of a long list, and nothing when even they would not be short', () => {
@@ -332,6 +371,67 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     expect(sealedListText(list([]), 'c')).toBeUndefined();
   });
 
+  it('B725: the lean variant keeps the first 5 pages of 20 lean rows, and gives way first over the limit', () => {
+    const list = (rows: MatchedVacancyItem[]) =>
+      ({ filtered: rows, pageOffsets: rows.map((_, index) => index), facets: {}, campaignWithHypotheses: {} }) as never;
+    const sealed = JSON.parse(sealedListText(list(pool(130)), 'c')!);
+    expect(sealed.leanPages.map((page: { offset: number }) => page.offset)).toEqual([0, 20, 40, 60, 80]);
+    expect(sealed.leanPages[0].items).toHaveLength(20);
+    expect(sealed.leanPages[0].items[0].cluster.descriptionSummary).toBe('');
+
+    // ~25 KB a row: the usual 5 pages of one row fit, the lean pages of 20 do not all fit.
+    const wide = Array.from({ length: 100 }, (_, index) => ({
+      ...row(`w-${index}`),
+      explanation: { ...row(`w-${index}`).explanation, summary: 'ж'.repeat(12_000) },
+    })) as MatchedVacancyItem[];
+    const trimmed = JSON.parse(sealedListText(list(wide), 'c')!);
+    expect(trimmed.pages).toHaveLength(5);
+    expect(trimmed.leanPages.length).toBeLessThan(5);
+  });
+
+  it('B725: a B640 account is answered from the lean sealed pages', async () => {
+    const { createB640Harness, poolItem } = await import('../testHelpers/b640VacancyHarness');
+    // ~2.6 KB a row: a byte page of 40 KB holds fewer than 20, so only the lean pages give 20.
+    const rows = Array.from({ length: 45 }, (_, index) => {
+      const item = poolItem({ id: `v-${index}`, title: `Инженер ${index}`, company: 'К' });
+      return { ...item, explanation: { ...item.explanation, summary: 'с'.repeat(1_300) } } as MatchedVacancyItem;
+    });
+    const lines: string[] = [];
+    const harness = await createB640Harness({ pool: () => rows, logLines: lines });
+    try {
+      const url = '/api/v1/candidate/matched-vacancies?offset=20';
+      const live = (await harness.get(url, 'flagged.test')).json();
+      await vi.waitFor(() => expect(lines.some((line) => line.includes('matched-list-sealed'))).toBe(true));
+      forgetMatchedListsForTests();
+      const sealed = (await harness.get(url, 'flagged.test')).json();
+      const timing = lines.map((line) => JSON.parse(line)).filter((line) => line.msg === 'matched-vacancies-timing').at(-1);
+      expect(timing.listServed).toBe('sealed');
+      expect(sealed.data).toHaveLength(20);
+      expect(sealed.data.map((item: { cluster: { id: string } }) => item.cluster.id)).toEqual(
+        live.data.map((item: { cluster: { id: string } }) => item.cluster.id),
+      );
+      const first = (await harness.get('/api/v1/candidate/matched-vacancies?offset=0', 'flagged.test')).json();
+      expect(first.meta.pageOffsets).toEqual([0, 20, 40]);
+
+      // A row sealed before B725 has no lean pages: the first lean page comes from its usual ones.
+      const id = harness.candidateIds['flagged.test'];
+      const stored = harness.candidates.sealedMatchedLists.read(id, 0)!;
+      const { leanPages: _lean, ...older } = JSON.parse(stored.text);
+      harness.candidates.sealedMatchedLists.write(id, Date.now(), JSON.stringify(older), stored.choice);
+      forgetMatchedListsForTests();
+      const fromUsual = (await harness.get('/api/v1/candidate/matched-vacancies?offset=0', 'flagged.test')).json();
+      const lastTiming = lines.map((line) => JSON.parse(line)).filter((line) => line.msg === 'matched-vacancies-timing').at(-1);
+      expect(lastTiming.listServed).toBe('sealed');
+      expect(fromUsual.data).toHaveLength(20);
+      expect(fromUsual.data.map((item: { cluster: { id: string } }) => item.cluster.id)).toEqual(
+        first.data.map((item: { cluster: { id: string } }) => item.cluster.id),
+      );
+      expect(fromUsual.meta.pageOffsets).toEqual([0, 20, 40]);
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('the switch off stops the write', async () => {
     const { candidateStore, candidate } = await sealedApp();
     const writing = vi.spyOn(candidateStore.sealedMatchedLists, 'write');
@@ -341,6 +441,30 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     expect(writing).not.toHaveBeenCalled();
     sealMatchedList(input, 'c', list, 1, undefined, true);
     expect(writing).toHaveBeenCalledOnce();
+  });
+
+  it('B776: a busy database skips the seal without an exception, a slow seal is logged with its size', () => {
+    const list = { filtered: pool(1), pageOffsets: [0], facets: {}, campaignWithHypotheses: {} } as never;
+    const store = (written: object) => ({ sealedMatchedLists: { write: () => written } });
+    const log = { info: vi.fn(), error: vi.fn() };
+    const busy = { candidateId: 'c1', candidateStore: store({ skipped: 'busy', lockWaitMs: 51 }) } as never;
+    expect(() => sealMatchedList(busy, 'all', list, 1, log, true)).not.toThrow();
+    expect(log.info).toHaveBeenCalledWith(expect.objectContaining({ lockWaitMs: 51, bytes: expect.any(Number) }), 'matched-list-seal-skipped');
+    expect(log.error).not.toHaveBeenCalled();
+
+    log.info.mockClear();
+    const slow = { candidateId: 'c1', candidateStore: store({ heldMs: 700, lockWaitMs: 3 }) } as never;
+    sealMatchedList(slow, 'all', list, 1, log, true);
+    expect(log.info).toHaveBeenCalledWith(
+      expect.objectContaining({ heldMs: 700, sealMs: expect.any(Number), bytes: expect.any(Number) }),
+      'matched-list-seal-slow',
+    );
+
+    log.info.mockClear();
+    const quick = { candidateId: 'c1', candidateStore: store({ heldMs: 20, lockWaitMs: 0 }) } as never;
+    sealMatchedList(quick, 'all', list, 1, log, true);
+    expect(log.info).toHaveBeenCalledTimes(1);
+    expect(log.info).toHaveBeenCalledWith(expect.anything(), 'matched-list-sealed');
   });
 
   it('the switch off stops the read', async () => {

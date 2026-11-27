@@ -1,6 +1,7 @@
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../../kit';
+import { useScreenActive } from '../../kit/screenActive';
 import { useModalFocus } from '../../kit/useModalFocus';
 import { FilterPane, type PaneProps } from './FilterPanes';
 import { HiddenChip, type HiddenChipProps } from './HiddenChip';
@@ -9,7 +10,8 @@ import { SORT_COLUMNS, type SortKey, type SortState } from './sortModel';
 
 export interface FilterSheetProps extends PaneProps, HiddenChipProps {
   readonly open: boolean;
-  readonly shown: number;
+  /** `null` — подборка ещё читается и число неполное (B728). */
+  readonly shown: number | null;
   readonly sort: SortState;
   readonly onSort: (key: SortKey) => void;
   readonly onClose: () => void;
@@ -92,7 +94,13 @@ export function FilterSheet(props: FilterSheetProps) {
   useLayoutEffect(() => {
     setHost(anchor.current?.closest<HTMLElement>('.b640') ?? null);
   }, []);
-  const shown = open && host !== null;
+  // Макет v08 (M9-3): список ушёл под другой экран («Назад», «Сегодня») — лист закрыт,
+  // а не висит над чужой страницей; при возврате к списку он не открывается сам.
+  const active = useScreenActive();
+  useEffect(() => {
+    if (open && !active) onClose();
+  }, [open, active, onClose]);
+  const shown = open && active && host !== null;
   useModalFocus(shown, { host, dialog, back }, onClose);
   return (
     <>
@@ -106,7 +114,7 @@ export function FilterSheet(props: FilterSheetProps) {
                 <div className="vt-sheet-head">
                   <h2 id={titleId}>Фильтры</h2>
                   <button className="btn is-primary vt-sheet-go" type="button" onClick={onClose}>
-                    Показать {props.shown}
+                    {props.shown === null ? 'Показать' : `Показать ${props.shown}`}
                   </button>
                   <button className="icon-btn" type="button" aria-label="Закрыть фильтры" onClick={onClose}>
                     <Icon name="close" />

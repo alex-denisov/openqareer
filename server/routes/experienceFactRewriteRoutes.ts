@@ -1,6 +1,7 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { SqliteTextVariantRepository } from '../candidate/sqliteTextVariantRepository';
 import type { CandidateSnapshot } from '../data/candidateStore';
 import { CandidateStoreConflictError } from '../data/store/errors';
 import { applyBulletTranslation, pendingTranslation } from '../domain/experienceBulletLanguage';
@@ -8,15 +9,20 @@ import {
   arithmeticFails,
   buildFactRewriteRequest,
   checkFactRewrite,
+  factRewriteDigest,
   InvalidBulletEditError,
   withBulletEdits,
+  withOnlyBullets,
   type FactRewriteModelOutput,
   type FactRewriteProposal,
   type FactRewriteRequest,
 } from '../domain/experienceFactRewrite';
-import { EMPTY_RESUME_DRAFT, type ResumePendingFactRewrite } from '../domain/resumeDraft';
+import { withBulletVariant } from '../domain/factRewriteVariant';
+import { EMPTY_RESUME_DRAFT, MAX_REWRITE_BULLETS, type ResumePendingFactRewrite } from '../domain/resumeDraft';
 import type { ExperienceFactRewriter } from '../providers/experienceFactRewriter';
 import type { RouteDeps } from './deps';
+import { factRewriteSubject, registerFactRewriteVariantRoutes } from './factRewriteVariantRoutes';
+import { keptRewordTarget, registerFactRewordRoutes } from './factRewordRoutes';
 import {
   authenticateCandidate,
   csrfError,
@@ -32,12 +38,7 @@ type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) =
  * profile text that already is, and a proposal kept before 01.11 must still
  * match so it is translated rather than written anew.
  */
-function requestDigest(request: FactRewriteRequest): string {
-  const places = request.places.map(({ language: _language, ...place }) => place);
-  return createHash('sha256')
-    .update(JSON.stringify({ ...request, places }))
-    .digest('hex');
-}
+const requestDigest = factRewriteDigest;
 
 function rewriteRequestOf(snapshot: CandidateSnapshot): FactRewriteRequest {
   return buildFactRewriteRequest(snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT, snapshot.memory);
@@ -188,8 +189,15 @@ function proposeHandler(running: RunningRewrites): Handler {
 
 const idParams = z.object({ id: z.string().trim().min(1).max(80) });
 const applyBody = z
-  .object({ edits: z.record(z.string().max(160), z.string().max(400).nullable()).optional() })
+  .object({
+    edits: z.record(z.string().max(160), z.string().max(400).nullable()).optional(),
+    /** Only these bullets are applied; with `only`, edits are not taken. */
+    only: z.array(z.string().max(160)).min(1).max(MAX_REWRITE_BULLETS).optional(),
+    /** B786: вариант единственного пункта из `only`; его текст берётся из хранилища. */
+    variantId: z.string().max(80).optional(),
+  })
   .strict()
+  .refine((body) => !body.variantId || body.only?.length === 1)
   .optional();
 
 function staleError(request: FastifyRequest, reply: FastifyReply) {
@@ -218,9 +226,13 @@ function editError(request: FastifyRequest, reply: FastifyReply) {
 function editedProposal(
   proposal: FactRewriteProposal,
   edits: Readonly<Record<string, string | null>>,
+  only: readonly string[] | undefined,
+  variantText?: string,
 ): FactRewriteProposal | null {
   try {
-    const edited = withBulletEdits(proposal, edits);
+    const [key] = only ?? [];
+    if (key && variantText) return withBulletVariant(proposal, key, variantText);
+    const edited = only ? withOnlyBullets(proposal, only) : withBulletEdits(proposal, edits);
     return edited.places.length ? edited : null;
   } catch (error) {
     if (error instanceof InvalidBulletEditError) return null;
@@ -228,15 +240,54 @@ function editedProposal(
   }
 }
 
-const handleApply: Handler = async (deps, request, reply) => {
+/** Текст сохранённого варианта; `null` — такого варианта у пункта нет. */
+function variantTextOf(
+  variants: SqliteTextVariantRepository,
+  candidateId: string,
+  proposalId: string,
+  body: z.infer<typeof applyBody>,
+): string | null | undefined {
+  const [key] = body?.only ?? [];
+  if (!body?.variantId || !key) return undefined;
+  const { variants: stored } = variants.list(factRewriteSubject(candidateId, proposalId, key));
+  return stored.find((variant) => variant.id === body.variantId)?.text ?? null;
+}
+
+/** The proposal of new facts or, B786, the rewording of a line (k06). */
+function pendingById(snapshot: CandidateSnapshot, id: string): ResumePendingFactRewrite | null {
+  const draft = snapshot.resume?.draft;
+  return (
+    [draft?.factRewriteProposal, draft?.factRewordProposal].find(
+      (pending) => pending?.proposal.id === id,
+    ) ?? null
+  );
+}
+
+/** Variants of a rewording read their facts from memory: they are not the facts on offer. */
+function variantSourceOf(snapshot: CandidateSnapshot, id: string) {
+  const pending = pendingById(snapshot, id);
+  const request = rewriteRequestOf(snapshot);
+  if (pending?.digest !== requestDigest(request)) return null;
+  if (pending !== snapshot.resume?.draft.factRewordProposal) {
+    return { proposal: pending.proposal, request };
+  }
+  // Факты строятся заново, как при подготовке: ставшие чувствительными или неподтверждёнными к модели не идут.
+  const target = keptRewordTarget(snapshot, pending.proposal);
+  if (!target) return null;
+  return { proposal: pending.proposal, request: { ...request, facts: target.facts } };
+}
+
+const handleApply = (variants: SqliteTextVariantRepository): Handler => async (deps, request, reply) => {
   const candidate = signedInCandidate(deps, request, reply);
   if (!candidate) return undefined;
   const { id } = idParams.parse(request.params);
   const body = applyBody.safeParse(request.body ?? undefined);
   if (!body.success) return editError(request, reply);
-  const pending = deps.candidateStore.getSnapshot(candidate.id).resume?.draft.factRewriteProposal;
-  if (pending?.proposal.id !== id) return staleError(request, reply);
-  const proposal = editedProposal(pending.proposal, body.data?.edits ?? {});
+  const pending = pendingById(deps.candidateStore.getSnapshot(candidate.id), id);
+  if (!pending) return staleError(request, reply);
+  const variantText = variantTextOf(variants, candidate.id, id, body.data);
+  if (variantText === null) return editError(request, reply);
+  const proposal = editedProposal(pending.proposal, body.data?.edits ?? {}, body.data?.only, variantText);
   if (!proposal) return editError(request, reply);
   try {
     const rewrite = deps.candidateStore.applyExperienceFactRewrite(
@@ -266,7 +317,18 @@ export async function registerExperienceFactRewriteRoutes(
   deps: RouteDeps,
 ): Promise<void> {
   const running = new RunningRewrites();
+  const variants = new SqliteTextVariantRepository({
+    databasePath: deps.config.databasePath,
+    encryptionKey: deps.config.dataEncryptionKey,
+  });
+  app.addHook('onClose', async () => variants.close());
   app.post('/api/v1/candidate/experience-fact-rewrite', withDeps(deps, proposeHandler(running)));
-  app.post('/api/v1/candidate/experience-fact-rewrite/:id/apply', withDeps(deps, handleApply));
+  app.post('/api/v1/candidate/experience-fact-rewrite/:id/apply', withDeps(deps, handleApply(variants)));
   app.post('/api/v1/candidate/experience-fact-rewrite/:id/revert', withDeps(deps, handleRevert));
+  registerFactRewriteVariantRoutes(app, deps, {
+    variants,
+    current: (bound, candidateId, id) =>
+      variantSourceOf(bound.candidateStore.getSnapshot(candidateId), id),
+  });
+  registerFactRewordRoutes(app, deps);
 }

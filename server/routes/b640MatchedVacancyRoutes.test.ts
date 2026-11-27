@@ -145,3 +145,65 @@ describe('B640 sort does not touch the old route', () => {
     expect((await get(`${OLD}?sort=company`, 'plain.test')).statusCode).toBe(400);
   });
 });
+
+describe('GET b640/matched-vacancies: «Дата» на сервере (B726)', () => {
+  const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+  const RECENT: PoolRow[] = [
+    { id: 'fresh-1', title: 'CTO', company: 'Альфа', observedAt: daysAgo(2) },
+    { id: 'fresh-2', title: 'CTO', company: 'Бета', observedAt: daysAgo(20) },
+    { id: 'old-1', title: 'CTO', company: 'Гамма', observedAt: daysAgo(45) },
+  ];
+
+  it('days=30 — только строки за 30 дней, число подборки по ним', async () => {
+    const { get } = await setup(RECENT);
+    const response = await get(`${NEW}?sort=date&direction=desc&days=30&tz=Europe%2FMoscow`, 'flagged.test');
+    expect(response.statusCode).toBe(200);
+    expect(ids(response)).toEqual(['fresh-1', 'fresh-2']);
+    expect(response.json().meta.total).toBe(2);
+    expect(response.json().meta.nextOffset).toBeNull();
+  });
+
+  it('без days — все строки; неверные days — 400', async () => {
+    const { get } = await setup(RECENT);
+    expect(ids(await get(`${NEW}?sort=date&direction=desc`, 'flagged.test'))).toHaveLength(3);
+    expect((await get(`${NEW}?days=-1`, 'flagged.test')).statusCode).toBe(400);
+    expect((await get(`${NEW}?days=abc`, 'flagged.test')).statusCode).toBe(400);
+  });
+});
+
+describe('GET b640/matched-vacancies: «Зарплата от» на сервере (B765, B645 s07)', () => {
+  it('money — суммы в месяц не ниже порога и строки без суммы, число подборки по ним', async () => {
+    const { get } = await setup();
+    const response = await get(`${NEW}?sort=date&direction=desc&money=200000&moneyCurrency=RUB`, 'flagged.test');
+    expect(response.statusCode).toBe(200);
+    expect([...ids(response)].sort()).toEqual(['cluster-1', 'cluster-3', 'cluster-4', 'cluster-5']);
+    expect(response.json().meta.total).toBe(4);
+  });
+
+  it('без money — все строки; неверные money и валюта — 400', async () => {
+    const { get } = await setup();
+    expect(ids(await get(`${NEW}?sort=date&direction=desc`, 'flagged.test'))).toHaveLength(5);
+    expect((await get(`${NEW}?money=-1&moneyCurrency=RUB`, 'flagged.test')).statusCode).toBe(400);
+    expect((await get(`${NEW}?money=100000&moneyCurrency=XYZ`, 'flagged.test')).statusCode).toBe(400);
+  });
+});
+
+describe('GET b640/matched-vacancies: первое чтение с ролями поиска', () => {
+  it('roles=campaign отвечает тем же, что явные роли, и называет их; с role — не подставляет', async () => {
+    const { get } = await setup([...ROWS, { id: 'cluster-6', title: 'Инженер данных', company: 'Зета', location: 'Москва' }]);
+    const auto = (await get(`${NEW}?roles=campaign&tz=Europe/Moscow`, 'flagged.test')).json();
+    const { value, origin } = auto.meta.campaign.roles as { value: string[]; origin: string };
+    expect(auto.meta.roles).toEqual(origin === 'default' ? [] : value);
+    const query = (auto.meta.roles as string[]).map((role) => `&role=${encodeURIComponent(role)}`).join('');
+    const explicit = (await get(`${NEW}?tz=Europe/Moscow${query}`, 'flagged.test')).json();
+    expect(auto.data).toEqual(explicit.data);
+    expect(auto.meta.total).toBe(1);
+    expect(auto.meta.total).toBe(explicit.meta.total);
+    expect(auto.meta.facets).toEqual(explicit.meta.facets);
+    expect(explicit.meta.roles).toBeUndefined();
+    const own = (await get(`${NEW}?roles=campaign&role=${encodeURIComponent('Инженер данных')}`, 'flagged.test')).json();
+    expect(own.data).toEqual(auto.data);
+    expect(own.meta.roles).toBeUndefined();
+    expect((await get(`${NEW}?roles=all`, 'flagged.test')).statusCode).toBe(400);
+  });
+});

@@ -1,7 +1,15 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { expectGates } from './gates';
-import { mockResponses, type ResponsesMockOptions } from './responsesFixture';
+import {
+  mockResponses,
+  RESUME_ASK,
+  RESUME_BEFORE,
+  RESUME_BULLET,
+  RESUME_VARIANT,
+  responseFixtures,
+  type ResponsesMockOptions,
+} from './responsesFixture';
 
 const SHOTS = process.env.B640_SHOTS;
 
@@ -34,6 +42,34 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expectGates(page);
   });
 
+  test('«не отправлен» не рвётся по буквам при окне 1176 (B678)', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop-1440', 'ширина окна приложения');
+    const applications = responseFixtures().map((item) =>
+      item.id === 'a-draft' ? { ...item, materials: { coverLetter: true, resume: true } } : item,
+    );
+    await open(page, '/app/responses', 'o01', { applications });
+    const cell = row(page, 'a-draft').locator('.ot-c-sent');
+    await expect(cell).toHaveText('не отправлен');
+    for (const width of [1176, 1024, 768, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const fit = await cell.evaluate((node) => {
+        const text = node.firstChild!;
+        const at = node.textContent!.indexOf('отправлен');
+        const range = document.createRange();
+        range.setStart(text, at);
+        range.setEnd(text, at + 'отправлен'.length);
+        return {
+          lines: range.getClientRects().length,
+          over: node.scrollWidth - node.clientWidth,
+          page: document.documentElement.scrollWidth - window.innerWidth,
+        };
+      });
+      expect(fit.lines, `${width}`).toBe(1);
+      expect(fit.over, `${width}`).toBeLessThanOrEqual(0);
+      expect(fit.page, `${width}`).toBeLessThanOrEqual(0);
+    }
+  });
+
   test('раскрытый отклик: что дальше, что было, отметка ответа на месте', async ({ page }) => {
     const mock = await open(page, '/app/responses', 'o01');
     await row(page, 'a-interview')
@@ -42,7 +78,12 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expect(page).toHaveURL(/\/app\/responses\/a-interview$/u);
     const detail = page.locator('#otklik-a-interview');
     await expect(detail.getByRole('heading', { name: 'Что дальше' })).toBeVisible();
-    await expect(detail.getByRole('link', { name: 'Подготовиться к интервью' })).toBeVisible();
+    // B645-2: до интервью отклик ведёт в подготовку (I1); путей в разбор ещё нет.
+    await expect(detail.locator('a[href*="/interview"], a[href*="/debrief"]')).toHaveCount(1);
+    await expect(detail.getByRole('link', { name: 'Подготовиться к интервью' })).toHaveAttribute(
+      'href',
+      '/app/responses/a-interview/interview',
+    );
     await expect(detail.getByText('Интервью назначено')).toBeVisible();
     await expect(detail.getByLabel('Ваша заметка')).toHaveValue(
       'Спросить про размер команды платформы.',
@@ -54,6 +95,33 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expect(detail.getByText('Отмечено: отказ').first()).toBeVisible();
     await expect(row(page, 'a-interview').locator('.tag')).toHaveText('отказ');
     expect(mock.calls.some((call) => call.includes('"rejected"'))).toBe(true);
+  });
+
+  test('B698: сообщение знакомому после «Отправил» видно в «Что было» отклика', async ({
+    page,
+  }) => {
+    await open(page, '/app/responses', 'o01');
+    await page.route('**/api/v1/candidate/b640/contact-messages/sent?*', (route) => {
+      const vacancyId = new URL(route.request().url()).searchParams.get('vacancyId');
+      const items =
+        vacancyId === 'cluster-a-interview'
+          ? [
+              {
+                id: 'm1',
+                kind: 'known_contact',
+                recipientName: 'Роман Ефимов',
+                sentAt: '2026-11-06T09:00:00.000Z',
+              },
+            ]
+          : [];
+      return route.fulfill({ json: { data: { items } } });
+    });
+    await row(page, 'a-interview')
+      .getByRole('button', { name: /Руководитель платформы/u })
+      .click();
+    const history = page.locator('#otklik-a-interview .od-was');
+    await expect(history).toContainText('Написали знакомому');
+    await expect(history).toContainText('Роман Ефимов');
   });
 
   test('напоминание компании: текст готов, отметка «Я напомнил»', async ({ page }) => {
@@ -95,11 +163,18 @@ test.describe('B656: «Отклики» нового кабинета', () => {
 
   test('автоотклики: счётчик дня, настройка в листе, выключение', async ({ page }) => {
     const mock = await open(page, '/app/responses', 'o01');
+    await page.route('**/api/v1/candidate/campaign', (route) =>
+      route.fulfill({
+        json: { data: { roles: { value: ['Руководитель проектного офиса'], origin: 'explicit' } } },
+      }),
+    );
     const bar = page.getByRole('group', { name: 'Автоотклики' });
     await expect(bar.getByText('12 сегодня из 30')).toBeVisible();
     await bar.getByRole('button', { name: 'Настроить' }).click();
     const dialog = page.getByRole('dialog', { name: 'Настроить автоотклики' });
     await expect(dialog).toBeVisible();
+    // a04e: роль поиска вне правил видна и не отмечена.
+    await expect(dialog.getByLabel('Руководитель проектного офиса')).not.toBeChecked();
     await expectGates(page, { only: ['modal_fit', 'field_height'] });
     await dialog.getByLabel('Лимит в день').fill('99');
     await dialog.getByRole('button', { name: 'Сохранить' }).click();
@@ -132,15 +207,37 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expectGates(page, { only: ['modal_fit'] });
   });
 
-  test('без согласий на автоотклики строки нет, список работает', async ({ page }) => {
-    await open(page, '/app/responses', 'o01', { automation: false });
+  test('без согласий строка есть: включение открывает лист с согласием (B645)', async ({
+    page,
+  }) => {
+    const mock = await open(page, '/app/responses', 'o01', { automation: false });
     await expect(page.locator('tr.ot-row')).toHaveCount(7);
-    await expect(page.getByRole('group', { name: 'Автоотклики' })).toHaveCount(0);
+    const bar = page.getByRole('group', { name: 'Автоотклики' });
+    await expect(bar.getByRole('switch', { name: 'Автоотклики' })).not.toBeChecked();
+    await bar.getByRole('switch', { name: 'Автоотклики' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Настроить автоотклики' });
+    await sheet.getByRole('button', { name: 'Сохранить' }).click();
+    await expect(sheet.getByText('Отметьте согласие, чтобы включить автоотклики.')).toBeVisible();
+    expect(mock.calls.some((call) => call.includes('/enable'))).toBe(false);
+    await sheet.getByRole('checkbox', { name: /Разрешаю готовить отклики/u }).check();
+    await sheet.getByRole('button', { name: 'Сохранить' }).click();
+    await expect(sheet).toBeHidden();
+    await expect(bar.getByRole('switch', { name: 'Автоотклики' })).toBeChecked();
+  });
+
+  test('«Откликнулся сам — добавить» ведёт к своей вакансии (B645)', async ({ page }) => {
+    await open(page, '/app/responses', 'o01');
+    await expect(page.getByRole('link', { name: 'Откликнулся сам — добавить' })).toHaveAttribute(
+      'href',
+      '/app/vacancies?own=1',
+    );
+    await expect(page.getByRole('button', { name: 'Авто', exact: true })).toBeVisible();
   });
 
   test('откликов нет: одна строка и путь к вакансиям', async ({ page }) => {
     await open(page, '/app/responses', 'o01', { applications: [] });
     await expect(page.getByRole('heading', { name: 'Откликов пока нет' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Откликнулся сам — добавить' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Подобрать вакансии' })).toHaveAttribute(
       'href',
       '/app/vacancies',
@@ -168,6 +265,14 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expectGates(page);
   });
 
+  test('воронка: автоотклики не входят в числа и названы в подсказке (B645)', async ({ page }) => {
+    await open(page, '/app/responses/funnel', 'o01e', { autoIds: ['a-interview'] });
+    await expect(page.locator('.fv-mini')).toContainText('5 отправлено');
+    await expect(page.locator('.fv-mini')).toContainText('1 интервью');
+    await expect(page.getByRole('button', { name: 'Что не входит в числа' })).toBeVisible();
+    await expect(page.getByText(/не входят 1 автоотклик и 1 ответ на них/u)).toBeAttached();
+  });
+
   test('разбор отказов: мало данных, отказ с догадкой, первый шаг', async ({ page }) => {
     await open(page, '/app/responses/review', 'o07');
     await expect(
@@ -181,6 +286,20 @@ test.describe('B656: «Отклики» нового кабинета', () => {
       '/app/responses',
     );
     await expect(page.getByRole('heading', { name: 'Разбор помог?' })).toHaveCount(0);
+    // B645, O7c: три проверки и путь к 20 откликам.
+    await expect(
+      page.getByRole('heading', { name: 'Три проверки, которым данные не нужны' }),
+    ).toBeVisible();
+    await expect(page.getByText('Незавершённых откликов — 3 из 6.')).toBeVisible();
+    await expect(
+      page.getByText(/В 2 из 6 вакансий верх вилки ниже ваших 500 000 ₽\./u),
+    ).toBeVisible();
+    await expect(page.getByText('4 из 6 откликов — позже 10 дней после публикации.')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Что будет при 20 откликах' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Посмотреть вакансии' })).toHaveAttribute(
+      'href',
+      '/app/vacancies',
+    );
     await expectGates(page);
   });
 
@@ -207,6 +326,145 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     expect(mock.calls).toContain('PUT feedback true');
   });
 
+  test('«Поправить резюме»: готовая правка у консультанта, пишет её кандидат (o07 → k06)', async ({
+    page,
+  }, info) => {
+    const options = { reviewReady: true, resumeFact: true };
+    const mock = await open(page, '/app/responses/review', 'o07', options);
+    await expectGates(page);
+    await page.getByRole('button', { name: 'Поправить резюме' }).click();
+    // Решение владельца 26.11: правка стоит над «Резюме» отклика, как в макете k06.
+    await expect(page).toHaveURL(/\/app\/responses\/a-rejected\/letter\?step=resume$/u);
+    await expect(page.locator('[data-apply-step="resume"]')).toBeAttached();
+    const panel = page.getByRole('dialog', { name: 'Консультант · Резюме' });
+    const card = panel.locator('.ec');
+    await expect(card.locator('.now dd')).toHaveText(RESUME_BULLET);
+    await expect(panel.locator('.msg.bot')).toContainText('из беседы 11.11');
+    await expect(panel.getByRole('alert')).toHaveCount(0);
+    await card.scrollIntoViewIfNeeded();
+    if (SHOTS) {
+      mkdirSync(SHOTS, { recursive: true });
+      await page.screenshot({ path: `${SHOTS}/k06-${info.project.name}.png` });
+    }
+    expect(mock.calls).toEqual([]);
+    await card.getByRole('button', { name: 'Другой вариант' }).click();
+    const wish = page.getByRole('dialog', { name: 'Что поменять' });
+    await expect(wish).toBeVisible();
+    await wish.getByRole('button', { name: 'Сделать вариант' }).scrollIntoViewIfNeeded();
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/k06-wish-${info.project.name}.png` });
+    await page.keyboard.press('Escape');
+    await expect(wish).toHaveCount(0);
+    await expect(card).toBeVisible();
+    await card.getByRole('button', { name: 'Другой вариант' }).click();
+    await wish.getByRole('button', { name: 'Сделать вариант' }).click();
+    await expect(card.locator('.now dd')).toHaveText(RESUME_VARIANT);
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/k06-variant-${info.project.name}.png` });
+    await card.getByRole('button', { name: 'Предыдущий вариант' }).click();
+    await expect(card.locator('.now dd')).toHaveText(RESUME_BULLET);
+    await card.getByRole('button', { name: 'Следующий вариант' }).click();
+    expect(mock.calls).toEqual(['variant']);
+    await card.getByRole('button', { name: 'Применить' }).click();
+    await expect(panel.getByText('Применено', { exact: true })).toBeVisible();
+    expect(mock.calls).toEqual(['variant', 'apply e1#0 v1']);
+    await panel.getByRole('button', { name: 'Отменить' }).click();
+    await expect(card).toBeVisible();
+    expect(mock.calls).toEqual(['variant', 'apply e1#0 v1', 'revert']);
+  });
+
+  test('B786: в «Мало данных» правка резюме — прямой просьбой консультанту (o07c → k06)', async ({
+    page,
+  }, info) => {
+    const mock = await open(page, '/app/responses/review', 'o07', { askedResumeEdit: true });
+    await expect(
+      page.getByRole('heading', { name: 'Мало данных для вывода: 6 откликов' }),
+    ).toBeVisible();
+    // Макет o07c: кнопки «Поправить резюме» здесь нет, путь к k06 — через консультанта.
+    await expect(page.getByRole('button', { name: 'Поправить резюме' })).toHaveCount(0);
+    const opener =
+      info.project.name === 'mobile-390'
+        ? page.getByRole('link', { name: /Консультант: открыть/u })
+        : page.locator('.b640 .top-actions .btn-panel');
+    await opener.click({ timeout: 15_000 });
+    const panel = page.locator('.b640 .app.has-panel > aside.panel-col');
+    await expect(panel.getByText(RESUME_ASK)).toBeVisible();
+    const card = panel.locator('.ec');
+    await expect(card.locator('.now dd')).toHaveText(RESUME_BULLET);
+    await expect(card.getByRole('button', { name: 'Применить' })).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Отклонить' })).toBeVisible();
+    await card.scrollIntoViewIfNeeded();
+    if (SHOTS) {
+      mkdirSync(SHOTS, { recursive: true });
+      await page.screenshot({ path: `${SHOTS}/k06-ask-${info.project.name}.png` });
+    }
+    await card.getByRole('button', { name: 'Другой вариант' }).click();
+    const wish = page.getByRole('dialog', { name: 'Что поменять' });
+    await wish.getByRole('button', { name: 'Сделать вариант' }).click();
+    await expect(card.locator('.now dd')).toHaveText(RESUME_VARIANT);
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/k06-ask-variant-${info.project.name}.png` });
+    expect(mock.calls).toEqual(['variant']);
+    await card.getByRole('button', { name: 'Применить' }).click();
+    await expect(panel.getByText('Применено', { exact: true })).toBeVisible();
+    expect(mock.calls).toEqual(['variant', 'apply e1#0 v1']);
+    await panel.getByRole('button', { name: 'Отменить' }).click();
+    expect(mock.calls).toEqual(['variant', 'apply e1#0 v1', 'revert']);
+  });
+
+  test('B786: новых фактов нет — k06 переписывает строку места: «Было», «Другой вариант», сбой с повтором', async ({
+    page,
+  }, info) => {
+    const mock = await open(page, '/app/responses/review', 'o07', {
+      askedResumeEdit: 'reword',
+      rewordFails: 1,
+    });
+    const mobile = info.project.name === 'mobile-390';
+    const opener = mobile
+      ? page.getByRole('link', { name: /Консультант: открыть/u })
+      : page.locator('.b640 .top-actions .btn-panel');
+    await opener.click({ timeout: 15_000 });
+    const panel = page.locator('.b640 .app.has-panel > aside.panel-col');
+    const failed = panel.getByRole('alert');
+    await expect(failed).toContainText('Не получилось подготовить правку');
+    await expect(failed).not.toContainText('Ответ не пришёл');
+    await failed.getByRole('button', { name: 'Попробовать ещё раз' }).click();
+    const card = panel.locator('.ec');
+    await expect(card.locator('.ec-title')).toContainText('Сфера Платежи · первая строка');
+    await expect(card.locator('.now dd')).toHaveText(RESUME_BULLET);
+    if (mobile) {
+      await expect(card.locator('.ec-diff .was')).toBeHidden();
+      await card.getByText('Показать, что было').click();
+      await expect(card.locator('.ec-was p')).toHaveText(RESUME_BEFORE);
+    } else {
+      await expect(card.locator('.ec-diff .was dd')).toHaveText(RESUME_BEFORE);
+      await expect(card.locator('.ec-was')).toBeHidden();
+    }
+    await card.scrollIntoViewIfNeeded();
+    if (SHOTS) {
+      mkdirSync(SHOTS, { recursive: true });
+      await page.screenshot({ path: `${SHOTS}/k06-reword-${info.project.name}.png` });
+    }
+    await card.getByRole('button', { name: 'Другой вариант' }).click();
+    await page
+      .getByRole('dialog', { name: 'Что поменять' })
+      .getByRole('button', { name: 'Сделать вариант' })
+      .click();
+    await expect(card.locator('.now dd')).toHaveText(RESUME_VARIANT);
+    if (SHOTS)
+      await page.screenshot({ path: `${SHOTS}/k06-reword-variant-${info.project.name}.png` });
+    await card.getByRole('button', { name: 'Применить' }).click();
+    await expect(panel.getByText('Применено', { exact: true })).toBeVisible();
+    await panel.getByRole('button', { name: 'Отменить' }).click();
+    await expect(card).toBeVisible();
+    // После «Отменить» карточка снова читает сохранённую правку.
+    expect(mock.calls).toEqual([
+      'reword',
+      'reword',
+      'variant',
+      'apply e1#0 v1',
+      'revert',
+      'reword',
+    ]);
+  });
+
   test('отказ в раскрытом отклике: догадка и отметка «чего не хватило»', async ({ page }) => {
     const mock = await open(page, '/app/responses/a-rejected', 'o01c');
     const detail = page.locator('#otklik-a-rejected');
@@ -225,6 +483,27 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     const mock = await open(page, '/app/responses/wanted', 'o08');
     await expect(page.locator('.cw-row')).toHaveCount(4);
     await expect(page.locator('.cw-row').first().locator('.tag')).toHaveText('новые вакансии');
+    // B801: черновик письма — главное действие, остальное ведёт в карточку этой компании.
+    const rows = page.locator('.cw-row');
+    await expect(rows.first().getByRole('link', { name: /Проверить письмо/u })).toHaveAttribute(
+      'href',
+      '/app/responses/a-draft/letter',
+    );
+    await expect(rows.first()).toHaveClass(/is-next/u);
+    await expect(rows.nth(1).getByRole('link', { name: /Смотреть вакансии/u })).toHaveAttribute(
+      'href',
+      /^\/app\/vacancies\/companies\/[^/]+$/u,
+    );
+    await expect(rows.locator('a.cw-co[href^="/app/vacancies/companies/"]')).toHaveCount(4);
+    // B645: действие строки — цель 44 px и 14px/600, как a.btn в макете.
+    const action = await page
+      .locator('.cw-act .btn')
+      .first()
+      .evaluate((node) => {
+        const style = getComputedStyle(node);
+        return [Math.round(node.getBoundingClientRect().height), style.fontSize, style.fontWeight];
+      });
+    expect(action).toEqual([44, '14px', '600']);
     await page.getByRole('button', { name: 'Жду вакансию · 1' }).click();
     await expect(page.locator('.cw-row')).toHaveCount(1);
     await page.getByRole('button', { name: 'Все · 4' }).click();

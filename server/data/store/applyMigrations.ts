@@ -49,6 +49,9 @@ import { MIGRATION_47 as MIGRATION_ROLE_SKILL_ASSESSMENT } from '../roleSkillAss
 import { MIGRATION_48 as MIGRATION_STAR_STORIES } from '../starStoriesSchema';
 import { MIGRATION_49 as MIGRATION_INTERVIEW_SIMULATOR } from '../interviewSimulatorSchema';
 import { COMPANY_DIRECTORY_MIGRATION } from '../companyDirectorySchema';
+import { MIGRATION_INTERVIEW_REVIEW_HELPFUL } from '../interviewReviewHelpfulSchema';
+import { MIGRATION_INTERVIEW_DESIGN_SCHEMA } from '../interviewDesignSchemaSchema';
+import { MIGRATION_INTERVIEW_DESIGN_TASK } from '../interviewDesignTaskSchema';
 
 export const MIGRATIONS = [
   MIGRATION_1,
@@ -106,6 +109,12 @@ export const MIGRATIONS = [
   SEO_GOAL_MIGRATION,
   MIGRATION_TARIFF_QUOTAS,
   COMPANY_DIRECTORY_MIGRATION,
+  // B681: только новая таблица «разбор помог».
+  MIGRATION_INTERVIEW_REVIEW_HELPFUL,
+  // B647: только новая таблица исправленной схемы System Design.
+  MIGRATION_INTERVIEW_DESIGN_SCHEMA,
+  // B750: только новая таблица задачи System Design по отклику.
+  MIGRATION_INTERVIEW_DESIGN_TASK,
 ] as const;
 
 export function applyMigrations(

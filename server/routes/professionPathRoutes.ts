@@ -6,6 +6,7 @@ import type { SqliteCandidateStatusRepository } from '../candidate/sqliteCandida
 import { SqliteProfessionPathRepository } from '../candidate/sqliteProfessionPathRepository';
 import { getCurrencyRates } from '../currency/cbrRates';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
+import { professionForms } from '../domain/professionForms';
 import {
   LOWER_INCOME_ANSWERS,
   professionResponses,
@@ -16,7 +17,9 @@ import { buildRoleSkillDemand } from '../domain/roleSkillDemand';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
-import { readRoleSnapshot, toAssessmentVacancies } from './roleSkillAssessmentRoutes';
+import { runStepsYielding } from '../vacancies/yieldingSteps';
+import { assessmentVacancySteps } from './roleAssessmentVacancies';
+import { readRoleSnapshot } from './roleSkillAssessmentRoutes';
 import { createRoleRequirementReader } from './roleSkillRequirementSource';
 import { signalApplicationOf } from './statusSignalRoutes';
 
@@ -64,11 +67,8 @@ async function readPath(deps: BoundDeps, candidateId: string, target: string) {
   if (snapshot.state !== 'matched') return { state: 'source_unavailable', target } as const;
   const roleId = titleKey(target);
   const now = new Date();
-  const vacancies = toAssessmentVacancies(
-    snapshot.vacancies,
-    roleId,
-    now,
-    createRoleRequirementReader(deps),
+  const vacancies = await runStepsYielding(
+    assessmentVacancySteps(snapshot.vacancies, roleId, now, createRoleRequirementReader(deps)),
   );
   const skills = deps.candidateStore.getSnapshot(candidateId)?.resume?.draft.skills ?? [];
   const demand = buildRoleSkillDemand(
@@ -108,7 +108,10 @@ const getPath: Handler = async (deps, request, reply) => {
   const candidateId = candidateOf(deps, request, reply);
   if (!candidateId) return reply;
   const target = targetOf(deps, candidateId);
-  const data = target ? await readPath(deps, candidateId, target) : { state: 'no_target' };
+  // B669: падежные формы профессии для текстов пути; без форм — общие тексты.
+  const data = target
+    ? { ...(await readPath(deps, candidateId, target)), forms: professionForms(target) }
+    : { state: 'no_target' };
   return { data, meta: { requestId: request.id } };
 };
 

@@ -138,6 +138,34 @@ function registerWrites(app: FastifyInstance, deps: CandidateDraftRouteDeps, fee
   });
 }
 
+const skipParams = z.object({ draftId: z.string().min(1).max(100) });
+
+/**
+ * B694 (a05): «Пропустить» снимает пост с ленты — черновик отклоняется. Черновик и одобренный
+ * без слота; стоящий в очереди или опубликованный так не снимается — очередь осталась бы без текста.
+ */
+function registerSkip(app: FastifyInstance, deps: CandidateDraftRouteDeps, feed: FeedPostRepository): void {
+  app.post(`${BASE}/:draftId/skip`, APPROVE_LIMIT, async (request, reply) => {
+    const ctx = context(deps, request, reply);
+    if (!ctx) return reply;
+    const params = skipParams.safeParse(request.params);
+    if (!params.success) return sendError(reply, request, 400, 'invalid_draft_id', 'Проверьте черновик.', false);
+    const { draftId } = params.data;
+    const state = feed.stateOf(ctx.candidate.id, draftId);
+    if (!state) return sendError(reply, request, 404, 'draft_not_found', 'Черновик не найден.', false);
+    if (state === 'queued' || state === 'published') {
+      const code = state === 'published' ? 'already_published' : 'already_queued';
+      return sendError(reply, request, 409, code, 'Этот комментарий уже в очереди или опубликован.', false);
+    }
+    deps.candidateDraftRepository.setStatus(ctx.candidate.id, draftId, 'rejected');
+    // Одобренный без слота тоже снимается: его отметка одобрения больше не нужна.
+    deps.candidateActionRepository?.getDatabase()
+      .prepare('DELETE FROM candidate_draft_workflow WHERE candidate_id = ? AND draft_id = ?')
+      .run(ctx.candidate.id, draftId);
+    return ok(request, { draftId, skipped: true });
+  });
+}
+
 /**
  * B396: комментарии к постам ленты за флагом `cabinetB640`. Пост приносит кандидат, на linkedin.com
  * с сервера не уходит ни одного запроса. Черновик живёт в общем механизме (`kind: comment`),
@@ -151,4 +179,5 @@ export function registerB640FeedPostRoutes(app: FastifyInstance, deps: Candidate
   const queue = new LinkedinQueueRepository(database);
   registerReads(app, deps, feed);
   registerWrites(app, deps, feed, queue);
+  registerSkip(app, deps, feed);
 }

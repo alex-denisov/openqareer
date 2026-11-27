@@ -11,13 +11,8 @@ import {
   planFocusSkills,
   type ValidatedFocus,
 } from './roleSkillAssessmentFocus';
-import {
-  createInitialAssessmentRun,
-  readRoleSnapshot,
-  summarizeAssessmentContext,
-  toAssessmentVacancies,
-  type AssessmentContext,
-} from './roleSkillAssessmentRoutes';
+import { toAssessmentVacancies } from './roleAssessmentVacancies';
+import { createInitialAssessmentRun, readRoleSnapshot, summarizeAssessmentContext, type AssessmentContext } from './roleSkillAssessmentRoutes';
 
 /** Besides the selected role, at most this many other campaign roles are searched. */
 const MAX_OTHER_ROLES = 3;

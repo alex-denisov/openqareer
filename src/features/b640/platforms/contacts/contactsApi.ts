@@ -1,5 +1,5 @@
 import type { B640Contact, B640ContactList, B640ContactSort, B640ContactState, B640ContactStatusResult } from '../../../../../shared/b640Contacts';
-import { apiFetch, readData } from '../../../coach/apiClient';
+import { apiFetch, CoachApiError, readData } from '../../../coach/apiClient';
 import type { ContactFilters } from './contactsFilters';
 
 const BASE = '/api/v1/candidate/b640/contacts';
@@ -28,6 +28,29 @@ export function contactsQueryString(query: ContactsQuery): string {
 export async function listB640Contacts(query: ContactsQuery): Promise<B640ContactList> {
   const response = await apiFetch(`${BASE}?${contactsQueryString(query)}`, { method: 'GET' });
   return readData<B640ContactList>(response);
+}
+
+const RETRY_ATTEMPTS = 4;
+const RETRY_DELAY_MS = 3_000;
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * B645 a02: a cold match recompute answers 503 `retryable`; the screen keeps «Загружаем…»
+ * and asks again instead of showing «Контакты не загрузились». A final refusal is thrown at once.
+ */
+export async function listB640ContactsRetrying(
+  query: ContactsQuery,
+  { attempts = RETRY_ATTEMPTS, delayMs = RETRY_DELAY_MS }: { attempts?: number; delayMs?: number } = {},
+): Promise<B640ContactList> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await listB640Contacts(query);
+    } catch (error) {
+      const retryable = error instanceof CoachApiError && error.retryable;
+      if (!retryable || attempt >= attempts) throw error;
+      await wait(delayMs);
+    }
+  }
 }
 
 export async function setB640ContactStatus(contactId: string, state: B640ContactState): Promise<B640ContactStatusResult> {

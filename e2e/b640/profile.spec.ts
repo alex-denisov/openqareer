@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
 import { expectGates } from './gates';
+import { expectLastActionReachable } from './lastActionReachable';
 
 const SHOTS = process.env.B640_SHOTS;
 const API = '**/api/v1/candidate';
@@ -44,7 +45,15 @@ function preview(body: { status: string; targetProfession?: string }) {
     stays: [],
     options:
       body.status === 'working'
-        ? [{ key: 'pauseAutoApply', label: 'Поставить автоотклики на паузу', checked: true }]
+        ? [
+            { key: 'pauseAutoApply', label: 'Поставить автоотклики на паузу', checked: true },
+            // B779: как на сервере — подборка раз в неделю, отметка по тому, включена ли она.
+            {
+              key: 'weeklySelection',
+              label: 'Подборку в своей роли — раз в неделю',
+              checked: false,
+            },
+          ]
         : [],
   };
 }
@@ -54,6 +63,69 @@ interface Mocks {
   readonly statusSaveFailures?: number;
   /** Профиль не загрузился с первого раза. */
   readonly resumeFailures?: number;
+  /** Правая колонка s01: условия, связи и резюме под вакансии. */
+  readonly aside?: boolean;
+}
+
+const VERSIONS = [
+  ['v-1', 'Head of Engineering', 'draft', '2026-11-10T09:00:00.000Z'],
+  ['v-2', 'Engineering Manager', 'sent', '2026-11-08T09:00:00.000Z'],
+  ['v-3', 'Руководитель платформы', 'sent', '2026-11-04T09:00:00.000Z'],
+].map(([id, title, status, updatedAt]) => ({
+  id,
+  title,
+  status,
+  updatedAt,
+  createdAt: updatedAt,
+  requirements: [],
+  revision: 1,
+  sourceMasterRevision: 'm-1',
+}));
+
+async function mockAside(page: Page, full: boolean): Promise<void> {
+  await page.route(`${API}/campaign`, (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          roles: { value: full ? ['Руководитель разработки'] : [], origin: 'explicit' },
+          regions: { value: [], origin: 'default' },
+        },
+      },
+    }),
+  );
+  if (!full) return;
+  await page.route(`${API}/decision-profile`, (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          salaryFloor: 500_000,
+          searchLocations: ['Москва'],
+          workFormats: ['remote_home', 'home_market'],
+        },
+      },
+    }),
+  );
+  await page.route(`${API}/connection-contacts?*`, (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          items: [],
+          total: 512,
+          offset: 0,
+          limit: 100,
+          nextOffset: null,
+          linkedinImport: { state: 'unknown', importedAt: null, importedCount: null },
+        },
+      },
+    }),
+  );
+  await page.route(`${API}/resume/versions?*`, (route) =>
+    route.fulfill({
+      json: {
+        data: { items: VERSIONS, nextCursor: null, totalCount: 14, currentMasterRevision: 'm-1' },
+      },
+    }),
+  );
 }
 
 interface Calls {
@@ -109,6 +181,7 @@ async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise
     }
     return route.fallback();
   });
+  await mockAside(page, mocks.aside ?? false);
   await page.route(`${API}/profile/experience/*/confirm`, (route) => {
     calls.confirmed.push(new URL(route.request().url()).pathname.split('/').at(-2) ?? '');
     return route.fulfill({ json: { data: { confirmed: true } } });
@@ -140,9 +213,12 @@ test.describe('B651: «Статус» (s02)', () => {
     await expectGates(page);
 
     await screen.getByRole('checkbox', { name: 'Поставить автоотклики на паузу' }).uncheck();
+    await screen.getByRole('checkbox', { name: 'Подборку в своей роли — раз в неделю' }).check();
     await page.getByRole('button', { name: 'Сменить статус' }).click();
     await expect(page).toHaveURL(/\/app\/today$/u);
-    expect(calls.statusPuts).toEqual([{ status: 'working', options: { pauseAutoApply: false } }]);
+    expect(calls.statusPuts).toEqual([
+      { status: 'working', options: { pauseAutoApply: false, weeklySelection: true } },
+    ]);
   });
 
   test('предложение из адреса: статус и профессия подставлены, чужое значение отброшено', async ({
@@ -163,6 +239,52 @@ test.describe('B651: «Статус» (s02)', () => {
     await expect(node(page, 's02').getByRole('radio', { name: /Ищу работу/u })).toBeChecked();
   });
 
+  test('раскладка как в макете: список справа, «Что изменится» и история слева', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-1440', 'две колонки — на 1440');
+    await openCabinet(page, '/app/profile/status');
+    await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-main-right', '1');
+    await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-mtight', '1');
+    const screen = node(page, 's02');
+    await screen.getByRole('radio', { name: 'Меняю профессию' }).check();
+    await expect(screen.locator('#pv-title')).toContainText('Меняю профессию');
+    const box = async (selector: string) => (await screen.locator(selector).boundingBox())!;
+    const [page2, pick, lead, history] = await Promise.all([
+      screen.boundingBox(),
+      box('.pick'),
+      box('section.lead'),
+      box('#hist-title'),
+    ]);
+    expect(page2!.width).toBeGreaterThan(1000);
+    expect(pick.x).toBeGreaterThan(lead.x + lead.width / 2);
+    expect(Math.abs(history.x - lead.x)).toBeLessThan(40);
+    expect(history.y).toBeLessThan(lead.y);
+  });
+
+  test('s15 «Работаю»: одна колонка 640, список сверху, истории нет, план до выхода', async ({
+    page,
+  }, testInfo) => {
+    await openCabinet(page, '/app/profile/status');
+    const screen = node(page, 's02');
+    await screen.getByRole('radio', { name: 'Работаю' }).check();
+    await expect(screen.locator('.optin h3')).toHaveText('Что можно поменять');
+    await expect(page.locator('#hist-title')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'До выхода: план в дневнике' })).toHaveAttribute(
+      'href',
+      /before-start$/u,
+    );
+    const pick = (await screen.locator('.pick').boundingBox())!;
+    const lead = (await screen.locator('section.lead').boundingBox())!;
+    expect(pick.y + pick.height).toBeLessThanOrEqual(lead.y);
+    expect(Math.abs(pick.x - lead.x)).toBeLessThan(2);
+    if (testInfo.project.name === 'desktop-1440') {
+      expect([Math.round(pick.x), Math.round(pick.width)]).toEqual([438, 640]);
+    }
+    await expectGates(page);
+    await page.screenshot({ path: `.s13-shots/s15-${testInfo.project.name}.png` });
+  });
+
   test('сбой сохранения: строка на месте, выбор сохранён, повтор проходит', async ({ page }) => {
     const calls = await openCabinet(page, '/app/profile/status', { statusSaveFailures: 1 });
     const screen = node(page, 's02');
@@ -177,6 +299,46 @@ test.describe('B651: «Статус» (s02)', () => {
 });
 
 test.describe('B651: «Профиль» (s01)', () => {
+  test('шапка по фото, «Уточнить · N», пустые разделы с «Добавить» (B645); гейты', async ({
+    page,
+  }) => {
+    await openCabinet(page, '/app/profile');
+    const screen = node(page, 's01');
+    // Без фото — круг 72 с инициалами, роль одной строкой.
+    await expect(screen.locator('.phead-ini')).toHaveText('МС');
+    // Круг по размеру фото макета: 72 на 1440, 56 на 390; на 1440 роль одной строкой.
+    const mobile = (page.viewportSize()?.width ?? 0) < 768;
+    const pic = await screen.locator('.phead-ini').boundingBox();
+    expect(Math.round(pic?.width ?? 0)).toBe(mobile ? 56 : 72);
+    if (!mobile) {
+      const head = await screen.locator('.phead').boundingBox();
+      expect(Math.round(head?.height ?? 0)).toBe(72);
+      await expect(screen.locator('.phead-role')).toHaveCSS('white-space', 'nowrap');
+    }
+    await expect(screen.locator('#sec-exp .exp-check')).toContainText('Уточнить · 3 вопроса');
+    await expect(screen.locator('#unk-title ~ .actions')).toContainText('Ответить на 3 вопроса');
+    // B645 s01: пустые разделы — подзаголовки макета и «Не указано · Добавить» под каждым.
+    const empty: Record<string, readonly string[]> = {
+      'sec-recs': [],
+      'sec-awards': ['Награды', 'Публикации и выступления'],
+      'sec-orgs': ['Организации'],
+    };
+    for (const [id, subs] of Object.entries(empty)) {
+      const section = screen.locator(`#${id}`);
+      await section.locator('summary').click();
+      await expect(section.locator('h3.psec-sub')).toHaveText([...subs]);
+      const rows = Math.max(subs.length, 1);
+      await expect(section.getByText('Не указано')).toHaveCount(rows);
+      const add = section.getByRole('link', { name: 'Добавить' });
+      await expect(add).toHaveCount(rows);
+      for (const link of await add.all()) {
+        await expect(link).toHaveAttribute('href', '/app/profile/sources');
+      }
+    }
+    await expect(screen.locator('.psec-addmore .row-act')).toHaveText(['Патенты', 'Волонтёрство']);
+    await expectGates(page);
+  });
+
   test('шапка, статус, опыт и разделы; переходы к статусу и правке; гейты', async ({ page }) => {
     await openCabinet(page, '/app/profile');
     const screen = node(page, 's01');
@@ -188,7 +350,9 @@ test.describe('B651: «Профиль» (s01)', () => {
     await expect(screen.locator('#sec-exp .job-org').first()).toContainText(
       'FinCloud · 2022 — сейчас',
     );
-    await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(0);
+    await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(
+      (await screen.locator('#unk-title').count()) > 0 ? 1 : 0,
+    );
     await expectGates(page);
 
     await screen.getByRole('link', { name: 'Изменить запись: FinCloud' }).click();
@@ -196,6 +360,49 @@ test.describe('B651: «Профиль» (s01)', () => {
     await page.goBack();
     await node(page, 's01').getByRole('link', { name: 'Сменить' }).click();
     await expect(page).toHaveURL(/\/app\/profile\/status$/u);
+  });
+
+  test('B720: последняя ссылка правой колонки не под закреплённой панелью', async ({ page }) => {
+    await openCabinet(page, '/app/profile', { aside: true });
+    await expect(node(page, 's01').locator('.phead')).toBeVisible({ timeout: 15_000 });
+    await page.setViewportSize({ width: page.viewportSize()?.width ?? 390, height: 569 });
+    await expectLastActionReachable(page);
+  });
+
+  test('правая колонка: условия, связи, чего мы не знаем, резюме под роль (B645); гейты', async ({
+    page,
+  }) => {
+    await openCabinet(page, '/app/profile', { aside: true });
+    const screen = node(page, 's01');
+    const desk = (page.viewportSize()?.width ?? 0) >= 768;
+    const terms = desk ? screen.locator('.mod.terms') : screen.locator('details.terms-row');
+    if (!desk) {
+      await expect(terms.locator('.terms-sum')).toHaveText(
+        'Руководитель разработки · от 500 000 ₽ на руки · Москва',
+      );
+      await terms.locator('summary').click();
+    }
+    await expect(terms.locator('dd')).toHaveText([
+      'Руководитель разработки',
+      'от 500 000 ₽ на руки',
+      'Москва',
+      'удалённо или гибрид',
+    ]);
+    await expect(screen.locator('#ln-t')).toHaveText('Связи · 512');
+    await expect(screen.locator('#unk-title')).toHaveText('Чего мы не знаем');
+    await expect(screen.getByRole('link', { name: 'Ответить на 3 вопроса' })).toBeVisible();
+    await expect(screen.locator('.cv-base .cv-main b')).toHaveText('Руководитель разработки');
+    await expect(screen.locator('.cv-sub')).toHaveText('Под вакансии · 14');
+    await expect(screen.locator('.cv-row .tag')).toHaveText([
+      'черновик',
+      'отправлено',
+      'отправлено',
+    ]);
+    await expect(screen.getByRole('link', { name: 'Ещё 11 — в «Откликах»' })).toBeVisible();
+    await expectGates(page);
+
+    await screen.getByRole('link', { name: 'Ответить на 3 вопроса' }).click();
+    await expect(page).toHaveURL(/\/app\/profile\/question$/u);
   });
 
   test('профиль не загрузился: строка на месте и «Повторить»', async ({ page }) => {
@@ -214,6 +421,15 @@ test.describe('B651: «Проверка записей» (p06)', () => {
     const calls = await openCabinet(page, '/app/profile/review');
     const screen = node(page, 'p06');
     await expect(screen.locator('.pw').first().locator('.pw-ok')).toHaveText('Подтверждено');
+    if ((page.viewportSize()?.width ?? 0) >= 768) {
+      // Д13: «Дальше» видно на первом экране, полоса у низа окна.
+      const dock = screen.locator('.act-dock');
+      const box = await dock.boundingBox();
+      const next = await dock.getByRole('link', { name: 'Дальше' }).boundingBox();
+      expect(next?.x).toBe(box?.x);
+      expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(page.viewportSize()?.height);
+      await expect(dock.getByRole('link', { name: 'Дальше' })).toBeInViewport();
+    }
     const card = screen.locator('.pw').nth(1);
     await expect(card.locator('.pg-t')).toHaveText('Старший продуктовый менеджер');
     await expectGates(page);

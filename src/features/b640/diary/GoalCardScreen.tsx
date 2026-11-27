@@ -10,7 +10,8 @@ import { listGoalCards } from './diaryApi';
 import { GoalEntries } from './GoalEntries';
 import { GoalHistory } from './GoalHistory';
 import { GoalMenu } from './GoalMenu';
-import { SETTERS, formatValue, indicatorsOf, longDate, riskTag } from './goalsModel';
+import { SETTERS, indicatorsOf, longDate, riskTag, valueWithTarget } from './goalsModel';
+import { GoalTasks } from './GoalTasks';
 import { MeasureDialog } from './MeasureDialog';
 import { today } from './model';
 import { RetryButton } from './parts';
@@ -44,13 +45,11 @@ function useGoalCard(goalId: string, version: number): readonly [Loaded, () => v
   return [loaded, useCallback(() => setAttempt((value) => value + 1), [])];
 }
 
+/** Без замеров состояние — исходное значение, как строка «старт» в истории. */
 function stateNumber(goal: CareerDiaryGoalSummary): string {
-  const latest = goal.latestMeasurement;
-  if (!latest) return 'не внесено';
-  const value = formatValue(latest.value, goal.unit);
-  return typeof goal.targetValue === 'number'
-    ? `${value} из ${formatValue(goal.targetValue, goal.unit)}`
-    : value;
+  const current = goal.latestMeasurement?.value ?? goal.baselineValue;
+  if (current === null) return 'не внесено';
+  return valueWithTarget(goal, current);
 }
 
 function GoalHead({
@@ -88,7 +87,10 @@ function GoalState({ card, goal, onMeasure }: GoalStateProps) {
       <span className="gt-tag">
         <span className={tag.className}>{tag.text}</span>
         {card.risk.explanation ? (
-          <InfoTip label="Как считается" text={card.risk.explanation} />
+          <InfoTip
+            label={card.risk.status === 'at_risk' ? 'Почему отстаёт' : 'Как считается'}
+            text={card.risk.explanation}
+          />
         ) : null}
       </span>
       {card.details.archive ? null : (
@@ -114,7 +116,7 @@ function Nears({ goals, selected, onSelect }: NearsProps) {
   return (
     <section className="gt-sec" aria-labelledby="ga-p">
       <h3 className="gt-sec-h" id="ga-p">
-        Другие показатели
+        Показатели рядом
       </h3>
       <ul className="gt-nears">
         {others.map((goal) => (
@@ -141,7 +143,8 @@ function GoalCardView({ card, version, onChanged }: GoalCardViewProps) {
   const [selected, setSelected] = useState(goals[0]!.id);
   const [measuring, setMeasuring] = useState(false);
   const goal = goals.find((item) => item.id === selected) ?? goals[0]!;
-  useScreenChrome({ crumb: card.title });
+  // Как у макета d02a (`data-mtight`).
+  useScreenChrome({ crumb: card.title, rootData: { mtight: '1' } });
   const saved = () => {
     setMeasuring(false);
     onChanged();
@@ -152,6 +155,7 @@ function GoalCardView({ card, version, onChanged }: GoalCardViewProps) {
         <GoalHead card={card} onChanged={onChanged} />
         <GoalState card={card} goal={goal} onMeasure={() => setMeasuring(true)} />
         <GoalHistory goal={goal} version={version} />
+        <GoalTasks goalId={card.id} />
         <GoalEntries goal={card} />
       </div>
       <div className="col">

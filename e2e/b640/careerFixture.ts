@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
 
 /** Свои данные «Карьеры» для B653: роли по профилю, кампания, условия поиска. */
@@ -10,6 +10,7 @@ function observed(
   sampleSize: number,
   wage: { min: number; max: number; sampleSize: number } | null,
   matched: string[],
+  sources: readonly { source: string; count: number }[] = [{ source: 'hh', count: sampleSize }],
 ) {
   return {
     id,
@@ -23,7 +24,7 @@ function observed(
       sampleSize,
       observedFrom: '2026-10-11',
       observedTo: '2026-11-10T09:00:00.000Z',
-      sources: [{ source: 'hh', count: sampleSize }],
+      sources,
       repeatedRequirements: ['Управление командой', 'Бюджет', 'Найм'],
       matchedRequirementNames: matched,
       ...(wage ? { wage } : {}),
@@ -52,7 +53,19 @@ const ROLES = [
     { min: 350_000, max: 420_000, sampleSize: 24 },
     ['Управление командой', 'Бюджет'],
   ),
-  observed('r3', 'Директор по разработке', 31, { min: 600_000, max: 750_000, sampleSize: 31 }, []),
+  // B645 s09: длинная строка источников, как на проде, — не должна выходить за ячейку.
+  observed(
+    'r3',
+    'Директор по разработке',
+    31,
+    { min: 600_000, max: 750_000, sampleSize: 31 },
+    [],
+    [
+      { source: 'json_api', count: 12 },
+      { source: 'html', count: 10 },
+      { source: 'hh', count: 9 },
+    ],
+  ),
   notFound('r4', 'Head of Platform'),
   notFound('r5', 'Руководитель платформы'),
 ];
@@ -77,6 +90,8 @@ export interface CareerOptions {
   readonly failProfileSave?: boolean;
   /** Ответ пути в профессию (S11); без него — «цель не выбрана». */
   readonly professionPath?: unknown;
+  /** B741: состояние проверки навыков роли; по умолчанию `ready`. */
+  readonly assessmentState?: string;
   /** Нынешний доход на руки из профиля. */
   readonly income?: number | null;
   /** Ответ цели роста (S12); выбор цели возвращает `growthAfter`, если он задан. */
@@ -92,11 +107,17 @@ export interface CareerOptions {
   readonly relocationCities?: readonly unknown[];
   /** Вилка города России по названию. */
   readonly relocationCityPay?: Readonly<Record<string, unknown>>;
+  /** B737: русские названия ролей поиска в ответе кампании. */
+  readonly titlesRu?: Readonly<Record<string, string>>;
+  /** B764: псевдонимы ролей по названию и ответ «checked-roles» вместо прежнего. */
+  readonly roleAliases?: Readonly<Record<string, readonly string[]>>;
+  readonly checkedRoles?: readonly unknown[];
 }
 
-function campaign(roles: string[]) {
+function campaign(roles: string[], titlesRu?: Readonly<Record<string, string>>) {
   return {
     roles: { value: roles, origin: 'explicit' },
+    ...(titlesRu ? { titlesRu } : {}),
     regions: { value: [], origin: 'default' },
     remoteOnly: false,
   };
@@ -149,8 +170,23 @@ export async function openCareer(
   };
   let stop = [{ company: 'Гринкод', origin: 'manual' }];
   await mockSignedInCabinet(page, { cabinetB640: true });
-  await page.route(`${API}/candidate/role-hypotheses`, (route) =>
-    route.fulfill({ json: { data: ROLES } }),
+  // Полоса «Роль поиска» берёт число из того же итога, что список «Вакансии» (единый счётчик s07).
+  await page.route(`${API}/candidate/b640/matched-vacancies*`, (route) =>
+    route.fulfill({ json: { data: [], meta: { total: 64, nextOffset: null } } }),
+  );
+  // «Карьера» шлёт пояс кандидата (`?tz=`, B726): ловим по пути, без запроса.
+  await page.route(
+    (url) => url.pathname.endsWith('/candidate/role-hypotheses'),
+    (route) =>
+      route.fulfill({
+        json: {
+          data: ROLES.map((role) =>
+            options.roleAliases?.[role.title]
+              ? { ...role, aliases: options.roleAliases[role.title] }
+              : role,
+          ),
+        },
+      }),
   );
   await page.route(`${API}/candidate/campaign`, (route) => {
     if (route.request().method() === 'POST') {
@@ -158,18 +194,18 @@ export async function openCareer(
       calls.campaigns.push(body);
       roles = body.roles;
     }
-    return route.fulfill({ json: { data: campaign(roles) } });
+    return route.fulfill({ json: { data: campaign(roles, options.titlesRu) } });
   });
   await page.route(`${API}/candidate/career-roles`, (route) => {
     const body = route.request().postDataJSON() as { title: string };
     calls.ownRoles.push(body);
     roles = [...roles, body.title];
-    return route.fulfill({ json: { data: campaign(roles) } });
+    return route.fulfill({ json: { data: campaign(roles, options.titlesRu) } });
   });
   await page.route(`${API}/candidate/role-skill-assessments/checked-roles`, (route) =>
     route.fulfill({
       json: {
-        data: [
+        data: options.checkedRoles ?? [
           {
             roleTitle: 'Технический продакт-менеджер',
             completedAt: '2026-11-09',
@@ -182,7 +218,8 @@ export async function openCareer(
   // Проверка навыков готова для любой роли: полоса «Проверьте» берёт первую роль поиска.
   await page.route(`${API}/candidate/role-skill-assessments/current*`, (route) => {
     const role = new URL(route.request().url()).searchParams.get('role') ?? '';
-    return route.fulfill({ json: { data: { state: 'ready', roleTitle: role, skills: [] } } });
+    const state = options.assessmentState ?? 'ready';
+    return route.fulfill({ json: { data: { state, roleTitle: role, skills: [] } } });
   });
   await page.route(`${API}/candidate/role-skill-demand`, (route) =>
     route.fulfill({
@@ -322,4 +359,31 @@ export async function openCareer(
   );
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   return calls;
+}
+
+/**
+ * B645-2 s10: длины последнего слова заголовка, при которых «Как посчитано» уходит
+ * со строки этого слова, или он выходит за край блока. Перед заголовком с прода
+ * («Вице-президент по операциям») — короткие слова растущей длины, чтобы последнее
+ * слово встало ровно в край строки.
+ */
+export function tipAloneLengths(head: Locator): Promise<string[]> {
+  return head.evaluate((el) => {
+    const title = el.querySelector('.lead-title')!;
+    const misses: string[] = [];
+    for (let extra = 0; extra < 60; extra += 1) {
+      const lead = 'и'
+        .repeat(extra)
+        .replace(/(.{5})/gu, '$1 ')
+        .trim();
+      title.textContent = `${lead} Ближе всего — Вице-президент по операциям`;
+      const lines = title.getClientRects();
+      const last = lines[lines.length - 1];
+      const tip = el.querySelector('.tip')!.getBoundingClientRect();
+      const mid = tip.top + tip.height / 2;
+      const edge = el.getBoundingClientRect().right;
+      if (mid < last.top || mid > last.bottom || tip.right > edge + 0.5) misses.push(`+${extra}`);
+    }
+    return misses;
+  });
 }

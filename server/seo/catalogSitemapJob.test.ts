@@ -239,7 +239,7 @@ describe('computeCatalogSitemaps', () => {
     ]);
   });
 
-  it('remembers published listings and when they last qualified', () => {
+  it('remembers published listings and when they last qualified', async () => {
     const db = database([
       ...berlinRows('h'),
       { id: 'p1', place: 'paris', role: null },
@@ -248,7 +248,7 @@ describe('computeCatalogSitemaps', () => {
       { id: 'one', place: 'oslo', role: null },
     ]);
     computeCatalogSitemaps(db, NOW);
-    const history = readListingHistory(db);
+    const history = await readListingHistory(db);
     expect(history.get('berlin/')).toEqual({
       firstQualifiedAt: NOW.toISOString(),
       lastQualifiedAt: NOW.toISOString(),
@@ -312,9 +312,10 @@ describe('buildSitemapFiles', () => {
     expect(urls).toContain('https://openqareer.com/tools/interview-questions/accountant');
     // B616: the guides hub and three guides.
     expect(urls).toContain('https://openqareer.com/guides/cant-find-a-job');
-    // B617: the blog hub and nine posts.
+    // B617: the blog hub and ten posts.
     expect(urls).toContain('https://openqareer.com/blog/probation-period');
-    expect(urls).toHaveLength(60);
+    expect(urls).toContain('https://openqareer.com/blog/reason-for-leaving-a-job');
+    expect(urls).toHaveLength(62);
   });
 
   it('splits 0, 1, 10,000, 10,001 and 25,000 URLs without truncation', () => {

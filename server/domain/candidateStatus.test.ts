@@ -39,6 +39,8 @@ describe('buildStatusPreview', () => {
     const toWorking = buildStatusPreview({ status: 'job_search', targetProfession: null }, { status: 'working', targetProfession: null }, idle);
     expect(toWorking.options).toEqual([
       { key: 'pauseAutoApply', label: 'Поставить автоотклики на паузу', checked: true },
+      // B779: подборка раз в неделю — отметка по тому, включена ли она сейчас.
+      { key: 'weeklySelection', label: 'Подборку в своей роли — раз в неделю', checked: false },
     ]);
     const toLooking = buildStatusPreview({ status: 'job_search', targetProfession: null }, { status: 'looking', targetProfession: null }, idle);
     expect(toLooking.options[0]?.checked).toBe(false);
@@ -50,7 +52,7 @@ describe('buildStatusPreview', () => {
       { status: 'working', targetProfession: null },
       { autoApplyPaused: true },
     );
-    expect(preview.options).toEqual([]);
+    expect(preview.options.map((option) => option.key)).toEqual(['weeklySelection']);
   });
 
   it('marks the same status with the same profession as unchanged', () => {

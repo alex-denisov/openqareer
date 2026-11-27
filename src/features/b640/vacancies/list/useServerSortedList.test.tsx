@@ -2,10 +2,10 @@
 import { act, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, mount } from '../../kit/testDom';
-import { getSortedMatchedPage } from '../b640Api';
+import { getSortedMatchedPage, type ServerMoney } from '../b640Api';
 import { makeItem } from './fixtures';
-import type { SortState } from './sortModel';
-import { useServerSortedList } from './useServerSortedList';
+import { DEFAULT_LIST_SORT, type SortState } from './sortModel';
+import { firstPortionOf, useServerSortedList, type FirstPortion } from './useServerSortedList';
 
 vi.mock('../b640Api', () => ({ getSortedMatchedPage: vi.fn() }));
 const read = vi.mocked(getSortedMatchedPage);
@@ -17,12 +17,22 @@ const page = (ids: string[], total: number, nextOffset: number | null) => ({
 
 const OTHER: SortState = { key: 'role', dir: 'asc' };
 
-function Probe({ active, sort: initial }: { active: boolean; sort: SortState }) {
+interface ProbeProps {
+  readonly active: boolean;
+  readonly sort: SortState;
+  readonly first?: FirstPortion;
+}
+
+function Probe({ active, sort: initial, first }: ProbeProps) {
   const [sort, setSort] = useState(initial);
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
-  const list = useServerSortedList(active, sort, ['CTO'], hidden);
+  const [days, setDays] = useState<number | null>(null);
+  const [money, setMoney] = useState<ServerMoney | null>(null);
+  const list = useServerSortedList(active, sort, ['CTO'], hidden, days, money, first);
   return (
     <div>
+      <button id="days" onClick={() => setDays(30)} />
+      <button id="money" onClick={() => setMoney({ from: 350_000, currency: 'RUB' })} />
       <button id="sort" onClick={() => setSort(OTHER)} />
       <button id="hide" onClick={() => setHidden(new Set(['a']))} />
       <button id="unhide" onClick={() => setHidden(new Set())} />
@@ -49,12 +59,80 @@ describe('серверная сортировка неполной подбор�
     view.unmount();
   });
 
+  it('порция пула с теми же ролями — без запроса, продолжение и другой столбец — запросом', async () => {
+    const first = { rows: [makeItem({ id: 'a' }), makeItem({ id: 'b' })], total: 5, roles: ['CTO'] };
+    read.mockResolvedValue(page(['c'], 5, null));
+    const view = mount(<Probe active sort={DEFAULT_LIST_SORT} first={first} />);
+    await flush();
+    expect(read).not.toHaveBeenCalled();
+    expect(out(view.container).textContent).toBe('a,b');
+    expect(out(view.container).dataset.more).toBe('true');
+    click(view.container.querySelector('#more'));
+    await flush();
+    expect(read.mock.calls[0]?.[2]).toBe(2);
+    click(view.container.querySelector('#sort'));
+    await flush();
+    expect(read).toHaveBeenLastCalledWith(OTHER, ['CTO'], 0, expect.anything(), null, null);
+    view.unmount();
+  });
+
+  it('порция пула с датой не подменяет отбор сервера', async () => {
+    read.mockResolvedValue(page(['d'], 1, null));
+    const first = { rows: [makeItem({ id: 'a' })], total: 5, roles: ['CTO'] };
+    const view = mount(<Probe active sort={DEFAULT_LIST_SORT} first={first} />);
+    click(view.container.querySelector('#days'));
+    await flush();
+    expect(out(view.container).textContent).toBe('d');
+    view.unmount();
+  });
+
+  it.each([
+    ['пул ещё читается', null],
+    ['пул прочитан с другими ролями', { rows: [], total: 0, roles: [] }],
+  ])('%s — список ждёт, запроса нет', async (_, first) => {
+    const view = mount(<Probe active sort={DEFAULT_LIST_SORT} first={first} />);
+    await flush();
+    expect(read).not.toHaveBeenCalled();
+    expect(out(view.container).dataset.status).toBe('loading');
+    view.unmount();
+  });
+
+  it('чтение пула упало без ролей — список перестаёт ждать и читает сам', async () => {
+    read.mockResolvedValue(page(['a'], 1, null));
+    const cached = { matched: [makeItem({ id: 'old' })], total: 9, readRoles: undefined };
+    function Failing() {
+      const [reading, setReading] = useState(true);
+      return (
+        <div>
+          <button id="fail" onClick={() => setReading(false)} />
+          <Probe active sort={DEFAULT_LIST_SORT} first={firstPortionOf({ ...cached, reading })} />
+        </div>
+      );
+    }
+    const waiting = mount(<Failing />);
+    await flush();
+    expect(read).not.toHaveBeenCalled();
+    click(waiting.container.querySelector('#fail'));
+    await flush();
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(out(waiting.container).dataset.status).toBe('ready');
+    expect(out(waiting.container).textContent).toBe('a');
+    waiting.unmount();
+  });
+
   it('первая порция, затем дочитывание со следующего смещения', async () => {
     read.mockResolvedValueOnce(page(['a', 'b'], 5, 2)).mockResolvedValueOnce(page(['c'], 5, null));
     const view = mount(<Probe active sort={{ key: 'money', dir: 'desc' }} />);
     expect(out(view.container).dataset.status).toBe('loading');
     await flush();
-    expect(read).toHaveBeenCalledWith({ key: 'money', dir: 'desc' }, ['CTO'], 0, expect.anything());
+    expect(read).toHaveBeenCalledWith(
+      { key: 'money', dir: 'desc' },
+      ['CTO'],
+      0,
+      expect.anything(),
+      null,
+      null,
+    );
     expect(out(view.container).textContent).toBe('a,b');
     expect(out(view.container).dataset.more).toBe('true');
     click(view.container.querySelector('#more'));
@@ -64,6 +142,8 @@ describe('серверная сортировка неполной подбор�
       ['CTO'],
       2,
       expect.anything(),
+      null,
+      null,
     );
     expect(out(view.container).textContent).toBe('a,b,c');
     expect(out(view.container).dataset.more).toBe('false');
@@ -85,6 +165,8 @@ describe('серверная сортировка неполной подбор�
       ['CTO'],
       0,
       expect.anything(),
+      null,
+      null,
     );
     expect(out(next.container).textContent).toBe('z');
     next.unmount();
@@ -103,6 +185,8 @@ describe('серверная сортировка неполной подбор�
       ['CTO'],
       0,
       expect.anything(),
+      null,
+      null,
     );
     expect(out(view.container).dataset.status).toBe('ready');
     view.unmount();
@@ -121,6 +205,8 @@ describe('серверная сортировка неполной подбор�
       ['CTO'],
       1,
       expect.anything(),
+      null,
+      null,
     );
     view.unmount();
   });
@@ -140,6 +226,8 @@ describe('серверная сортировка неполной подбор�
       ['CTO'],
       0,
       expect.anything(),
+      null,
+      null,
     );
     expect(out(view.container).dataset.total).toBe('5');
     view.unmount();
@@ -161,6 +249,44 @@ describe('серверная сортировка неполной подбор�
     expect(out(view.container).textContent).toBe('new');
     await act(async () => resolveOld(page(['old'], 1, null)));
     expect(out(view.container).textContent).toBe('new');
+    view.unmount();
+  });
+
+  it('B726: «Дата» уходит на сервер и начинает чтение с первой порции', async () => {
+    read.mockResolvedValueOnce(page(['a', 'b'], 9, 2)).mockResolvedValueOnce(page(['c'], 1, null));
+    const view = mount(<Probe active sort={{ key: 'date', dir: 'desc' }} />);
+    await flush();
+    click(view.container.querySelector('#days'));
+    await flush();
+    expect(read).toHaveBeenLastCalledWith(
+      { key: 'date', dir: 'desc' },
+      ['CTO'],
+      0,
+      expect.anything(),
+      30,
+      null,
+    );
+    expect(out(view.container).textContent).toBe('c');
+    expect(out(view.container).dataset.total).toBe('1');
+    view.unmount();
+  });
+
+  it('«Зарплата от» читает подборку заново с первой порции, число — от сервера (B765)', async () => {
+    read.mockResolvedValueOnce(page(['a', 'b'], 9, 2)).mockResolvedValueOnce(page(['c'], 1, null));
+    const view = mount(<Probe active sort={{ key: 'fit', dir: 'desc' }} />);
+    await flush();
+    click(view.container.querySelector('#money'));
+    await flush();
+    expect(read).toHaveBeenLastCalledWith(
+      { key: 'fit', dir: 'desc' },
+      ['CTO'],
+      0,
+      expect.anything(),
+      null,
+      { from: 350_000, currency: 'RUB' },
+    );
+    expect(out(view.container).textContent).toBe('c');
+    expect(out(view.container).dataset.total).toBe('1');
     view.unmount();
   });
 });

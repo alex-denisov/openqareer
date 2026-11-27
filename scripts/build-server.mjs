@@ -1,4 +1,6 @@
 import { build } from 'esbuild';
+import { SERVER_MINIFY } from './serverMinify.mjs';
+import { writeFingerprints } from './maintenanceFingerprint.mjs';
 
 const release = process.env.VITE_OPENQAREER_RELEASE || 'local';
 
@@ -8,7 +10,7 @@ const shared = {
   format: 'esm',
   target: 'node24',
   sourcemap: false,
-  minify: true,
+  ...SERVER_MINIFY,
   legalComments: 'none',
   define: {
     __OPENQAREER_RELEASE__: JSON.stringify(release),
@@ -24,13 +26,25 @@ const shared = {
 
 // HTTP, pool maintenance and isolated bounded fit worker share one release artifact.
 // Worker activation is a separate release operation.
-await build({ ...shared, entryPoints: ['server/index.ts'], outfile: 'dist/server.mjs' });
+// B759: the web build's metafile lists its schema sources for the maintenance fingerprint.
+const web = await build({
+  ...shared,
+  entryPoints: ['server/index.ts'],
+  outfile: 'dist/server.mjs',
+  metafile: true,
+});
 await build({ ...shared, entryPoints: ['server/maintenance.ts'], outfile: 'dist/maintenance.mjs' });
 // B643: site render runs on its own event loop; maintenance.mjs spawns it from the same directory.
 await build({
   ...shared,
   entryPoints: ['server/vacancies/siteRenderWorker.ts'],
   outfile: 'dist/site-render-worker.mjs',
+});
+// B756: hh.ru fetch (request and body) on its own event loop; maintenance.mjs spawns it.
+await build({
+  ...shared,
+  entryPoints: ['server/vacancies/hhFetchWorker.ts'],
+  outfile: 'dist/hh-fetch-worker.mjs',
 });
 // B645: freehire pages pass in its own thread of the maintenance process.
 await build({
@@ -83,3 +97,13 @@ await mkdir('dist/data/careerOps', { recursive: true });
 for (const name of ['employer-boards.ndjson', 'LICENSE', 'CONTRIBUTIONS.md']) {
   await copyFile(`server/companyDirectory/careerOps/data/${name}`, `dist/data/careerOps/${name}`);
 }
+
+// B803: salary slices from stdin into the database, run by hand.
+await build({
+  ...shared,
+  entryPoints: ['server/vacancies/salaryBenchmarks/salaryImportRun.ts'],
+  outfile: 'dist/salary-import.mjs',
+});
+
+// B759: deploy restarts maintenance and the mechanics worker only when these change.
+writeFingerprints('dist', release, web.metafile);

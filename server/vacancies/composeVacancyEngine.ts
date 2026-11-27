@@ -1,4 +1,5 @@
 import { readRolloutPlacementBoards } from './placementBoardRollout';
+import { abortableSleep } from './abortableSleep';
 import { readVerifiedRequestedAts } from './verifiedRequestedAts';
 import { DatabaseSync } from 'node:sqlite';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
@@ -9,7 +10,8 @@ import { searchHhVacancies } from '../connectors/hhVacancySearch';
 import { searchRemotiveVacancies } from '../connectors/remotiveVacancySearch';
 import { HhCrawlCoordinator } from './hhCrawlCoordinator';
 import { createHhCrawlSettings, type SqliteHhCrawlSettings } from './hhCrawlSettings';
-import { buildHhPageFetcher } from './hhSearchTransport';
+import { buildHhPageFetcher, type HhFetchEvent } from './hhSearchTransport';
+import type { HhSearchTransport } from './hhSearchFetcher';
 import { HhTextRateController } from './hhTextRate';
 import { HhVacancyDescriptionLoader } from './hhVacancyDescription';
 import { createHttpLinkProbe } from './linkLivenessProbe';
@@ -59,6 +61,12 @@ export interface ComposeVacancyEngineOptions {
   readonly recluster?: ReclusterMode;
   /** Свидетель транзакций записи пула — журнал обслуживателя (PRB-043 срез 2). */
   readonly onPoolWrite?: (event: PoolWriteEvent) => void;
+  /** Каждая прямая выборка hh.ru: время до заголовков, тело, задержка цикла (B756). */
+  readonly onHhFetch?: (event: HhFetchEvent) => void;
+  /** Прямая выборка hh.ru в своём потоке (B756): строка и замеры приходят сообщением. */
+  readonly hhDirect?: HhSearchTransport;
+  /** Остановка процесса (B759): обход hh сохраняет курсор по прочитанному и выходит. */
+  readonly signal?: AbortSignal;
   /** Ожидание между транзакциями записи кластеров: только у фонового процесса. */
   readonly clusterWritePause?: () => void;
   /** Подбор по смыслу вместо LIKE (B267 S3); по умолчанию старое поведение. */
@@ -255,10 +263,13 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
   // Настройки веера обхода hh.ru: набор ролей выбирает владелец, отметка
   // глубокого прохода переживает выкат (B214).
   const hhCrawlSettings = createHhCrawlSettings({ databasePath: options.databasePath });
-  const hhPageFetcher = buildHhPageFetcher();
+  const hhPageFetcher = buildHhPageFetcher(process.env, options.onHhFetch, options.hhDirect);
   const hhCrawlCoordinator = new HhCrawlCoordinator(hhCrawlSettings, {
     fetchPage: hhPageFetcher,
-    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    sleep: (ms) => abortableSleep(ms, options.signal),
+    ...(options.signal ? { signal: options.signal } : {}),
+    // Быстрый проход останавливается на странице, где пул всё уже знает (B219).
+    // Движок собирается ниже, поэтому спрашивается через замыкание, а не значением.
     isKnown: (id: string): boolean => engine.hasVacancy(id),
     demandTerms: currentFanDemand,
   });
@@ -281,6 +292,7 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
       rate: new HhTextRateController(),
     }),
     ...(options.recluster ? { recluster: options.recluster } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
   });
   return {
     engine,

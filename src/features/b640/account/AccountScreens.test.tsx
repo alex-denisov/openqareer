@@ -20,17 +20,29 @@ const api = vi.hoisted(() => ({
   revokeAccountSession: vi.fn(),
   revokeOtherSessions: vi.fn(),
   getNotificationPreferences: vi.fn(),
+  getInvitationPreference: vi.fn(),
+  putInvitationPreference: vi.fn(),
+  getDeliverySettings: vi.fn(),
+  putDeliverySettings: vi.fn(),
   getNotificationChannelStatus: vi.fn(),
   updateNotificationPreference: vi.fn(),
   startTelegramLink: vi.fn(),
   disconnectTelegram: vi.fn(),
+  getTelegramLinkState: vi.fn(),
   getAccountCapabilityConsents: vi.fn(),
+  getSearchConsent: vi.fn(),
   getCandidateBillingSummary: vi.fn(),
   getPendingAccountEmailChange: vi.fn(),
   getResumeStudio: vi.fn(),
   requestAccountEmailChange: vi.fn(),
   verifyAccountEmailChange: vi.fn(),
+  getHhSessionState: vi.fn(),
 }));
+vi.mock('./hhSessionApi', () => ({ getHhSessionState: api.getHhSessionState }));
+vi.mock('../../connections/HhConnectModal', () => ({
+  HhConnectModal: ({ isOpen }: { readonly isOpen: boolean }) => (isOpen ? <div className="hh-connect-modal" /> : null),
+}));
+vi.mock('./twoFactorApi', () => ({ getTwoFactorStatus: async () => ({ enabled: false, backupCodesLeft: 0 }) }));
 
 vi.mock('../../coach/coachApi', async (original) => ({
   ...(await original<typeof import('../../coach/coachApi')>()),
@@ -49,8 +61,30 @@ vi.mock('../../account/notificationPreferencesApi', () => ({
   startTelegramLink: api.startTelegramLink,
   disconnectTelegram: api.disconnectTelegram,
 }));
+const early = vi.hoisted(() => ({
+  delivery: { start: vi.fn(), drop: vi.fn() },
+  telegram: { start: vi.fn(), drop: vi.fn() },
+}));
+vi.mock('./telegramStateApi', () => ({
+  getTelegramLinkState: api.getTelegramLinkState,
+  telegramStateRead: early.telegram,
+}));
+vi.mock('./invitationPreferenceApi', () => ({
+  INVITATION_KEY: 'ev-invitation',
+  getInvitationPreference: api.getInvitationPreference,
+  putInvitationPreference: api.putInvitationPreference,
+}));
+vi.mock('./deliverySettingsApi', () => ({
+  getDeliverySettings: api.getDeliverySettings,
+  putDeliverySettings: api.putDeliverySettings,
+  deliverySettingsRead: early.delivery,
+}));
 vi.mock('../../account/accountCapabilityConsentApi', () => ({
   getAccountCapabilityConsents: api.getAccountCapabilityConsents,
+}));
+vi.mock('../../vacancies/recruiterContactsApi', async (original) => ({
+  ...(await original<typeof import('../../vacancies/recruiterContactsApi')>()),
+  getSearchConsent: api.getSearchConsent,
 }));
 vi.mock('../../resume/resumeApi', () => ({ getResumeStudio: api.getResumeStudio }));
 vi.mock('../../shell/candidateBillingApi', () => ({
@@ -147,12 +181,17 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.getAccount.mockResolvedValue(account);
   api.getConnections.mockResolvedValue([hh, linkedin]);
+  api.getHhSessionState.mockResolvedValue({ expired: false, since: null });
   api.getNotificationPreferences.mockResolvedValue(events);
+  api.getInvitationPreference.mockResolvedValue({ key: 'ev-invitation', app: true, email: true, telegram: true });
   api.getNotificationChannelStatus.mockResolvedValue(channels(false));
+  api.getDeliverySettings.mockResolvedValue({ frequency: 'immediate', hideCompany: false });
+  api.getTelegramLinkState.mockResolvedValue({ state: 'none', expiresAt: null, username: null });
   api.getAccountCapabilityConsents.mockResolvedValue([
     { id: 'c1', capability: 'profile_activity', versionId: 'v1', grantedAt: '2026-11-01', revokedAt: null },
     { id: 'c2', capability: 'digital_footprint', versionId: 'v1', grantedAt: '2026-11-01', revokedAt: '2026-11-05' },
   ]);
+  api.getSearchConsent.mockResolvedValue({ granted: true, policyVersion: 'v', updatedAt: '' });
   api.getCandidateBillingSummary.mockResolvedValue({ currentPlan: 'pro', subscription: null, plans: [] });
   api.getPendingAccountEmailChange.mockResolvedValue(null);
   api.getResumeStudio.mockResolvedValue({ draft: { candidate: { photoMediaId: null } } });
@@ -163,6 +202,13 @@ afterEach(() => {
 });
 
 describe('n00 «Аккаунт»: разделы', () => {
+  it('«Вы в поиске» не прочиталось — подпись согласий остаётся, без числа', async () => {
+    api.getSearchConsent.mockRejectedValue(new Error('down'));
+    const root = await open(<SectionsScreen node={node('n00')} />);
+    const row = root.querySelector('a[href="/app/account/data"]')?.closest('.set-row');
+    expect(row?.querySelector('.set-v')?.textContent).toBe('Выгрузка, удаление');
+  });
+
   it('шесть разделов со ссылками и подписями по данным', async () => {
     const root = await open(<SectionsScreen node={node('n00')} />);
     expect(root.querySelector('.lead-title')?.textContent).toBe('Марина Соколова');
@@ -175,7 +221,7 @@ describe('n00 «Аккаунт»: разделы', () => {
       ['/app/account/security', 'Вход и безопасность', 'Пароль, 2 устройства'],
       ['/app/account/connections', 'Подключения', 'hh.ru подключён'],
       ['/app/account/notifications', 'Уведомления', 'В приложении и на почту'],
-      ['/app/account/data', 'Согласия и данные', '1 согласие, выгрузка, удаление'],
+      ['/app/account/data', 'Согласия и данные', '2 согласия, выгрузка, удаление'],
       ['/app/account/app', 'Приложение', 'Тема и часовой пояс'],
       ['/app/account/billing', 'Подписка и платежи', 'Pro'],
     ]);
@@ -231,6 +277,17 @@ describe('n03 «Подключения»', () => {
     expect(root.querySelector('.cn-menu-t')?.textContent).toBe('Обновлено 3 ноября');
   });
 
+  it('B774: у подключённой площадки — чей аккаунт, как в макете', async () => {
+    api.getConnections.mockResolvedValue([
+      { ...hh, account: 'Марина Соколова' },
+      { ...hh, platform: 'linkedin', account: 'linkedin.com/in/msokolova' },
+    ]);
+    const root = await open(<ConnectionsScreen node={node('n03')} />);
+    const lines = [...root.querySelectorAll('.set-row.cn-row .set-v')].map((item) => item.textContent);
+    expect(lines).toContain('Марина Соколова · подключено');
+    expect(lines).toContain('linkedin.com/in/msokolova · подключено');
+  });
+
   it('отключение подтверждается на месте; сбой показан там же, успех перечитывает список', async () => {
     const root = await open(<ConnectionsScreen node={node('n03')} />);
     click(root.querySelector('.cn-off'));
@@ -257,6 +314,29 @@ describe('n03 «Подключения»', () => {
     expect(root.querySelector('.cn-off')).toBeNull();
   });
 
+  it('a11b: hh.ru не подключён — «Подключить» в строке открывает окно входа', async () => {
+    api.getConnections.mockResolvedValue([{ ...linkedin, platform: 'hh' }, linkedin]);
+    const root = await open(<ConnectionsScreen node={node('n03')} />);
+    expect(root.querySelector('.hh-connect-modal')).toBeNull();
+    expect(root.querySelector('button[aria-label="Подключить LinkedIn"]')).toBeNull();
+    click(root.querySelector('button[aria-label="Подключить hh.ru"]'));
+    expect(root.querySelector('.hh-connect-modal')).not.toBeNull();
+  });
+
+  it('B690: вход в hh.ru истёк — в строке hh предупреждение вместо «подключено»', async () => {
+    api.getHhSessionState.mockResolvedValue({ expired: true, since: '2026-11-19T10:00:00.000Z' });
+    const root = await open(<ConnectionsScreen node={node('n03')} />);
+    const warn = root.querySelector('.set-row.cn-row .set-v.is-warn');
+    expect(warn?.textContent).toBe('вход истёк');
+    expect(warn?.querySelector('.ico')).not.toBeNull();
+    // Признак не прочитался — строка остаётся как была.
+    api.getHhSessionState.mockRejectedValue(new Error('сеть'));
+    view?.unmount();
+    const again = await open(<ConnectionsScreen node={node('n03')} />);
+    expect(again.querySelector('.set-v.is-warn')).toBeNull();
+    expect(again.querySelectorAll('.set-row.cn-row .set-v')[1]?.textContent).toBe('подключено');
+  });
+
   it('«Оставить» закрывает подтверждение без запроса', async () => {
     const root = await open(<ConnectionsScreen node={node('n03')} />);
     click(root.querySelector('.cn-off'));
@@ -276,18 +356,76 @@ describe('n03 «Подключения»', () => {
 });
 
 describe('n02 «Уведомления»', () => {
-  it('таблица: все события сервера по каналам, без строк без механики', async () => {
+  it('n02: чтения «Как присылать» и Telegram начинаются при открытии, не после таблицы', async () => {
+    let release: (value: unknown) => void = () => undefined;
+    api.getNotificationPreferences.mockImplementationOnce(() => new Promise((done) => (release = done)));
+    const view = mount(<NotificationSettingsScreen node={node('n02')} />);
+    expect(early.delivery.start).toHaveBeenCalledTimes(1);
+    expect(early.telegram.start).toHaveBeenCalledTimes(1);
+    view.unmount();
+    expect(early.delivery.drop).toHaveBeenCalled();
+    release(null);
+  });
+
+  it('таблица: все события сервера по каналам', async () => {
     const root = await open(<NotificationSettingsScreen node={node('n02')} />);
     expect([...root.querySelectorAll('.set-mx.is-head .set-ch')].map((cell) => cell.textContent)).toEqual([
       'Приложение',
       'Почта',
       'Telegram',
     ]);
-    expect(root.querySelectorAll('.set-mx:not(.is-head)')).toHaveLength(6);
+    expect(root.querySelectorAll('.set-mx:not(.is-head)')).toHaveLength(7);
+    expect(root.querySelector('.set-mx:not(.is-head) .set-t')?.textContent).toBe('Приглашения');
     const reply = root.querySelector('input[aria-label="Ответы: Приложение"]') as HTMLInputElement;
     expect(reply.checked).toBe(true);
     expect((root.querySelector('input[aria-label="Итоги недели: Приложение"]') as HTMLInputElement).checked).toBe(false);
-    expect(root.textContent).not.toMatch(/Приглашения|Как часто|название компании/u);
+  });
+
+  it('«Приглашения» сохраняются своим маршрутом, прежний ключ не трогают', async () => {
+    api.putInvitationPreference.mockResolvedValueOnce({ key: 'ev-invitation', app: true, email: false, telegram: true });
+    const root = await open(<NotificationSettingsScreen node={node('n02')} />);
+    const input = () => root.querySelector('input[aria-label="Приглашения: Почта"]') as HTMLInputElement;
+    expect(input().checked).toBe(true);
+    click(input());
+    await settle();
+    expect(api.putInvitationPreference).toHaveBeenCalledWith({ app: true, email: false, telegram: true });
+    expect(api.updateNotificationPreference).not.toHaveBeenCalled();
+    expect(input().checked).toBe(false);
+  });
+
+  it('«Как часто» и «Не показывать название компании» под таблицей, сохраняются сразу', async () => {
+    api.putDeliverySettings.mockImplementation(async (value: object) => value);
+    const root = await open(<NotificationSettingsScreen node={node('n02')} />);
+    const group = root.querySelector('section.set-group[aria-label="Как присылать"]') as HTMLElement;
+    expect(group).not.toBeNull();
+    const radios = [...group.querySelectorAll<HTMLInputElement>('.seg-ctl input[type="radio"]')];
+    expect(radios.map((radio) => radio.parentElement?.textContent)).toEqual(['Сразу', 'Раз в день', 'Раз в неделю']);
+    expect(radios[0]!.checked).toBe(true);
+    const hide = () => group.querySelector('input[role="switch"]') as HTMLInputElement;
+    expect(document.getElementById(hide().getAttribute('aria-labelledby')!)?.textContent).toContain(
+      'Не показывать название компании',
+    );
+    expect(group.querySelector('.tip-bubble')?.textContent).toBe(
+      'На заблокированном экране, в письме и в Telegram будет «Ответ работодателя».',
+    );
+
+    click(radios[1]!);
+    await settle();
+    expect(api.putDeliverySettings).toHaveBeenLastCalledWith({ frequency: 'daily', hideCompany: false });
+    expect(radios[1]!.checked).toBe(true);
+
+    click(hide());
+    await settle();
+    expect(api.putDeliverySettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ frequency: 'daily', hideCompany: true }),
+    );
+    expect(hide().checked).toBe(true);
+
+    api.putDeliverySettings.mockRejectedValueOnce(new Error('сеть'));
+    click(radios[2]!);
+    await settle();
+    expect(radios[1]!.checked).toBe(true);
+    expect(group.querySelector('.set-res.is-err span')?.textContent).toBe('Настройка не сохранилась');
   });
 
   it('переключатель сохраняется сразу; сбой возвращает значение и показан на месте', async () => {
@@ -369,27 +507,66 @@ describe('n02 «Уведомления»', () => {
     expect(root.querySelector('a.sw-gate')).not.toBeNull();
   });
 
+  it('B690: подключённый Telegram показан с именем, устаревшая ссылка видна после перезагрузки', async () => {
+    api.getNotificationChannelStatus.mockResolvedValue(channels(true));
+    api.getTelegramLinkState.mockResolvedValue({ state: 'connected', expiresAt: null, username: '@msokolova_dev' });
+    const root = await open(<NotificationSettingsScreen node={node('n02')} />);
+    expect(root.querySelector('p.set-res[role=status] span')?.textContent).toBe('Telegram · @msokolova_dev');
+    view?.unmount();
+    api.getNotificationChannelStatus.mockResolvedValue(channels(false));
+    api.getTelegramLinkState.mockResolvedValue({ state: 'expired', expiresAt: null, username: null });
+    const again = await open(<NotificationSettingsScreen node={node('n02')} />);
+    expect(again.querySelector('p.set-res.is-err span')?.textContent).toBe('Ссылка устарела');
+    expect(again.textContent).toContain('Получить новую');
+  });
+
+  it('B690: подтверждение в боте приходит с сервера вместе с именем', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      api.startTelegramLink.mockResolvedValue({
+        startUrl: 'https://t.me/openqareer_bot?start=code',
+        expiresAt: new Date(Date.now() + 600_000).toISOString(),
+      });
+      const root = await open(<NotificationSettingsScreen node={node('n02')} />);
+      click(root.querySelector('a.sw-gate'));
+      await settle();
+      api.getTelegramLinkState.mockResolvedValue({ state: 'connected', expiresAt: null, username: '@msokolova_dev' });
+      api.getNotificationChannelStatus.mockResolvedValue(channels(true));
+      await act(async () => {
+        vi.advanceTimersByTime(3_000);
+      });
+      await settle();
+      expect(root.querySelector('p.set-res[role=status] span')?.textContent).toBe('Telegram · @msokolova_dev');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('канала Telegram нет — колонки и строки о нём нет', async () => {
     api.getNotificationChannelStatus.mockResolvedValue(channels(false, false));
     const root = await open(<NotificationSettingsScreen node={node('n02')} />);
     expect([...root.querySelectorAll('.set-ch')].map((cell) => cell.textContent)).toEqual(['Приложение', 'Почта']);
     expect(root.textContent).not.toContain('Telegram');
+    expect(root.querySelector('.tip-bubble')?.textContent).toBe(
+      'На заблокированном экране и в письме будет «Ответ работодателя».',
+    );
   });
 });
 
 describe('n04 «Вход и безопасность»', () => {
-  it('разделы по макету; двухфакторной защиты и входа по отпечатку нет', async () => {
+  it('разделы по макету; двухфакторная защита выключена, входа по отпечатку нет', async () => {
     const root = await open(<SecurityScreen node={node('n04')} />);
     expect([...root.querySelectorAll('.set-h')].map((item) => item.textContent)).toEqual([
       'Почта и имя',
       'Вход',
       'Устройства · 2',
     ]);
-    expect(root.textContent).not.toMatch(/Двухфакторная|Touch ID|Face ID/u);
+    expect(root.textContent).not.toMatch(/Touch ID|Face ID/u);
     const values = [...root.querySelectorAll('.set-row .set-v')].map((item) => item.textContent);
     expect(values).toEqual([
       'm.sokolova@mail.test · подтверждена',
       'Марина Соколова',
+      'выключена',
       'сейчас · эта сессия',
       '3 ноября',
     ]);

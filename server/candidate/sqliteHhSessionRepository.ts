@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import type { HhApplyOutcome, HhResumeSnapshot } from '../../shared/hhCandidateSession';
+import {
+  HH_LATE_SENT_MS,
+  HH_WINDOW_LEFT_OPEN_FAILURES,
+  type HhApplyOutcome,
+  type HhResumeSnapshot,
+} from '../../shared/hhCandidateSession';
 import { SealedText } from '../data/sealedText';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 
@@ -27,6 +32,10 @@ CREATE TABLE IF NOT EXISTS hh_apply_attempts (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS hh_apply_attempts_candidate
   ON hh_apply_attempts (candidate_id, started_at);
+CREATE TABLE IF NOT EXISTS hh_apply_attempt_cards (
+  attempt_id TEXT PRIMARY KEY REFERENCES hh_apply_attempts(id) ON DELETE CASCADE,
+  card_id TEXT NOT NULL
+) STRICT;
 `;
 
 /** Отклик без исхода дольше этого считается брошенным: приложение закрыли посреди отклика. */
@@ -65,6 +74,11 @@ function toAttempt(row: AttemptRow): HhAttemptRow {
   };
 }
 
+/** Связанные данные снимка резюме hh.ru; выгрузка открывает снимок тем же ключом (B738 · 8). */
+export function hhResumeSnapshotScope(candidateId: string): string {
+  return `hh-resumes:${candidateId}`;
+}
+
 export class SqliteHhSessionRepository {
   private readonly database: DatabaseSync;
   private readonly sealedText: SealedText;
@@ -82,7 +96,7 @@ export class SqliteHhSessionRepository {
   }
 
   private scope(candidateId: string): string {
-    return `hh-resumes:${candidateId}`;
+    return hhResumeSnapshotScope(candidateId);
   }
 
   getSnapshot(candidateId: string): HhResumeSnapshot | null {
@@ -132,7 +146,23 @@ export class SqliteHhSessionRepository {
     ).map(toAttempt);
   }
 
-  startAttempt(candidateId: string, input: { vacancyId: string; resumeId: string; now: Date }): string {
+  /** Вакансия hh.ru, на которую прямо сейчас уходит отклик с этой карточки. */
+  vacancyInProgress(candidateId: string, cardId: string, now: Date): string | null {
+    const row = this.database
+      .prepare(
+        `SELECT a.vacancy_id FROM hh_apply_attempts a JOIN hh_apply_attempt_cards c ON c.attempt_id = a.id
+         WHERE a.candidate_id = ? AND a.started_at > ? AND a.outcome IS NULL AND c.card_id = ?
+         ORDER BY a.started_at DESC LIMIT 1`,
+      )
+      .get(candidateId, new Date(now.getTime() - HH_ATTEMPT_STALE_MS).toISOString(), cardId) as
+      { vacancy_id: string } | undefined;
+    return row?.vacancy_id ?? null;
+  }
+
+  startAttempt(
+    candidateId: string,
+    input: { vacancyId: string; resumeId: string; cardId?: string; now: Date },
+  ): string {
     const id = randomUUID();
     this.database
       .prepare(
@@ -140,6 +170,11 @@ export class SqliteHhSessionRepository {
          VALUES (?, ?, ?, ?, ?)`,
       )
       .run(id, candidateId, input.vacancyId, input.resumeId, input.now.toISOString());
+    if (input.cardId) {
+      this.database
+        .prepare('INSERT INTO hh_apply_attempt_cards (attempt_id, card_id) VALUES (?, ?)')
+        .run(id, input.cardId);
+    }
     return id;
   }
 
@@ -165,6 +200,30 @@ export class SqliteHhSessionRepository {
          WHERE candidate_id = ? AND id = ? AND outcome IS NULL`,
       )
       .run(input.outcome, input.failureCode, input.now.toISOString(), candidateId, attemptId);
+    return Number(result.changes) === 1;
+  }
+
+  /**
+   * B708: кандидат завершил отклик в том же окне hh.ru после неуспешной попытки. Код сбоя
+   * остаётся: на нём держится пауза площадки после проверки.
+   */
+  markSentLater(candidateId: string, attemptId: string, input: { vacancyId: string; now: Date }): boolean {
+    const since = new Date(input.now.getTime() - HH_LATE_SENT_MS).toISOString();
+    const codes = HH_WINDOW_LEFT_OPEN_FAILURES.map(() => '?').join(', ');
+    const result = this.database
+      .prepare(
+        `UPDATE hh_apply_attempts SET outcome = 'sent', finished_at = ?
+         WHERE candidate_id = ? AND id = ? AND vacancy_id = ? AND outcome = 'failed'
+           AND finished_at >= ? AND failure_code IN (${codes})`,
+      )
+      .run(
+        input.now.toISOString(),
+        candidateId,
+        attemptId,
+        input.vacancyId,
+        since,
+        ...HH_WINDOW_LEFT_OPEN_FAILURES,
+      );
     return Number(result.changes) === 1;
   }
 }

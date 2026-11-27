@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
+import { matchedVacancyPage } from '../fixtures/readabilityWorkspace';
 import { expectGates } from './gates';
 
 const SHOTS = process.env.B640_SHOTS;
@@ -13,11 +14,17 @@ async function openCabinet(
     readonly hidden?: readonly unknown[];
     readonly total?: number;
     readonly own?: readonly unknown[];
+    readonly campaignRoles?: readonly string[];
+    readonly titlesRu?: Readonly<Record<string, string>>;
+    readonly skillGap?: number;
   } = {},
 ): Promise<void> {
   await mockSignedInCabinet(page, {
     cabinetB640: true,
     vacancyTotal: options.total ?? 45,
+    ...(options.campaignRoles ? { vacancyCampaignRoles: options.campaignRoles } : {}),
+    ...(options.titlesRu ? { vacancyCampaignTitlesRu: options.titlesRu } : {}),
+    ...(options.skillGap !== undefined ? { roleSkillGap: options.skillGap } : {}),
     vacancyFacets: {
       total: options.total ?? 45,
       regions: [],
@@ -182,6 +189,39 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expectGates(page);
   });
 
+  test('B760: строки подборки не ждут чтения рабочего пространства', async ({ page }) => {
+    await openCabinet(page, '/app/vacancies');
+    // Рабочее пространство нужно только прежней оболочке: новый кабинет его не ждёт.
+    let workspaceAnswered = false;
+    await page.route('**/api/v1/candidate/workspace', async (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      await new Promise((resolve) => setTimeout(resolve, 4_000));
+      workspaceAnswered = true;
+      return route.fallback();
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator(ROWS).first()).toBeVisible({ timeout: 3_000 });
+    expect(workspaceAnswered).toBe(false);
+  });
+  test('B760: код кабинета грузится рядом с /auth/me на устройстве, где кабинет уже открывался', async ({
+    page,
+  }) => {
+    await openCabinet(page, '/app/vacancies');
+    let authAnswered = false;
+    let chunkBeforeAuth = false;
+    await page.route('**/api/v1/auth/me', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      authAnswered = true;
+      return route.fallback();
+    });
+    page.on('request', (request) => {
+      if (/\/assets\/CabinetB640-[^/]+\.js$/u.test(request.url()) && !authAnswered)
+        chunkBeforeAuth = true;
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator(ROWS).first()).toBeVisible();
+    expect(chunkBeforeAuth).toBe(true);
+  });
   test('фильтр локаций меняет число вакансий, «Сбросить всё» возвращает', async ({
     page,
   }, testInfo) => {
@@ -199,6 +239,154 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(page.locator('.vt-pop')).toHaveCount(0);
     await page.locator('.vt-chips').getByRole('button', { name: 'Сбросить всё' }).click();
     await expect(count).toHaveText(String(before));
+  });
+
+  test('B728: число у периода «Даты» = число списка после выбора', async ({ page }, testInfo) => {
+    test.skip(isMobile(testInfo.project.name), 'на 390 фильтры — нижний лист');
+    await openCabinet(page, '/app/vacancies');
+    await page.getByRole('button', { name: 'Дата', exact: true }).click();
+    const counts = page.locator('.vt-pop .vt-opt .vt-opt-n');
+    // Числа появляются, когда подборка дочитана, — у всех периодов сразу и больше не меняются.
+    await expect(counts).toHaveCount(4);
+    const numbers = (await counts.allInnerTexts()).map((text) => Number.parseInt(text, 10));
+    const index = numbers.findIndex((value) => value > 0);
+    expect(index).toBeGreaterThanOrEqual(0);
+    const expected = numbers[index]!;
+    await page
+      .locator('.vt-pop .vt-opt')
+      .nth(index + 1)
+      .getByRole('radio')
+      .check();
+    const show = page.locator('.vt-pop-foot .btn.is-primary');
+    await expect(show).toHaveText(new RegExp(`^Показать ${expected} `));
+    await show.click();
+    await expect(page.locator('.vl-count .num')).toHaveText(String(expected));
+  });
+
+  test('B645: роли «Карьеры» — фильтр по умолчанию; чип убирается, «Сбросить всё» очищает', async ({
+    page,
+  }, testInfo) => {
+    test.skip(isMobile(testInfo.project.name), 'на 390 фильтры — нижний лист');
+    await openCabinet(page, '/app/vacancies', {
+      campaignRoles: ['Руководитель разработки', 'Директор по разработке'],
+    });
+    await expect(page.getByRole('button', { name: /^Роли: выбрано 2/ })).toBeVisible();
+    const chips = page.locator('.vt-chips .vt-chip');
+    await expect(chips).toHaveCount(2);
+    await page.getByRole('button', { name: 'Убрать: Директор по разработке' }).click();
+    await expect(chips).toHaveCount(1);
+    await expect(page.getByRole('button', { name: /^Роли: выбрано 1/ })).toBeVisible();
+    await page.locator('.vt-chips').getByRole('button', { name: 'Сбросить всё' }).click();
+    await expect(chips).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Все роли/ })).toBeVisible();
+  });
+
+  test('B726: чип роли из «Вакансий по роли» — русское название роли поиска', async ({ page }) => {
+    await openCabinet(page, '/app/vacancies?role=CTO&date=30', {
+      campaignRoles: ['CTO', 'Руководитель продукта'],
+      titlesRu: { CTO: 'Технический директор (CTO)' },
+    });
+    const chips = page.locator('.vt-chips .vt-chip');
+    await expect(chips.first()).toHaveText('Технический директор (CTO)');
+    await expect(
+      page.getByRole('button', { name: 'Убрать: Технический директор (CTO)' }),
+    ).toBeVisible();
+  });
+
+  test('B768: «Вакансии по роли» читают подборку сразу с ролью, снятая роль — вся подборка', async ({
+    page,
+  }) => {
+    const rows: string[] = [];
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.endsWith('/candidate/b640/matched-vacancies'))
+        rows.push(url.searchParams.getAll('role').join('|'));
+    });
+    await openCabinet(page, '/app/vacancies?role=CTO&date=30', {
+      campaignRoles: ['CTO', 'Руководитель продукта'],
+      titlesRu: { CTO: 'Технический директор (CTO)' },
+    });
+    await expect(page.locator('.vt-chips .vt-chip').first()).toHaveText(
+      'Технический директор (CTO)',
+    );
+    await expect.poll(() => rows.length).toBeGreaterThan(0);
+    expect(rows.every((roles) => roles !== '')).toBe(true);
+    await page.getByRole('button', { name: 'Убрать: Технический директор (CTO)' }).click();
+    await expect.poll(() => rows.includes('')).toBe(true);
+  });
+
+  test('холодный вход читает подборку одним запросом, роли подставляет сервер', async ({
+    page,
+  }) => {
+    const reads: URL[] = [];
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.endsWith('matched-vacancies')) reads.push(url);
+    });
+    await openCabinet(page, '/app/vacancies', { campaignRoles: ['CTO'], total: 450 });
+    await expect(page.locator('.vt-chips .vt-chip').first()).toBeVisible();
+    await expect(page.locator(ROWS)).toHaveCount(20);
+    await page.waitForLoadState('networkidle');
+    expect(reads.map((url) => url.search)).toHaveLength(1);
+    expect(reads[0]?.searchParams.get('roles')).toBe('campaign');
+  });
+
+  test('B645: строка «Проверить N навыка» ведёт в проверку навыков', async ({ page }) => {
+    await openCabinet(page, '/app/vacancies', {
+      campaignRoles: ['Руководитель разработки'],
+      skillGap: 3,
+    });
+    const link = page.locator('.vt-skill a.row-act');
+    await expect(link).toHaveText('Проверить 3 навыка');
+    await expect(link).toHaveAttribute('href', /\/app\/career\/skills/u);
+  });
+
+  test('B645: «Помочь выбрать» — ссылка на режим подборки', async ({ page }) => {
+    await openCabinet(page, '/app/vacancies');
+    await expect(page.locator('a.btn.va-review')).toHaveAttribute(
+      'href',
+      '/app/vacancies?mode=review',
+    );
+  });
+
+  test('B726: роль из адреса («Вакансии по роли» из «Карьеры») — в фильтре и в запросе', async ({
+    page,
+  }, testInfo) => {
+    test.skip(isMobile(testInfo.project.name), 'на 390 фильтры — нижний лист');
+    const asked: string[] = [];
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.endsWith('/candidate/b640/matched-vacancies')) {
+        asked.push(...url.searchParams.getAll('role'));
+      }
+    });
+    await openCabinet(page, '/app/vacancies?role=Руководитель+продукта');
+    await expect(page.getByRole('button', { name: /^Роли: выбрано 1/ })).toBeVisible();
+    await expect.poll(() => asked).toContain('Руководитель продукта');
+    await page.getByRole('button', { name: /^Роли: выбрано 1/ }).click();
+    await expect(
+      page.locator('.vt-pop .vt-opt', { hasText: 'Руководитель продукта' }).getByRole('checkbox'),
+    ).toBeChecked();
+  });
+
+  test('B726: «Вакансии по роли» — роль и «Дата: 30 дней» из адреса, строк столько же, сколько в счёте', async ({
+    page,
+  }, testInfo) => {
+    test.skip(isMobile(testInfo.project.name), 'на 390 фильтры — нижний лист');
+    await openCabinet(page, '/app/vacancies?role=Руководитель+продукта&date=30');
+    await expect(page.getByRole('button', { name: /^Роли: выбрано 1/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Дата · 30 дней/ })).toBeVisible();
+    await expect(page.locator('.vt-chips')).toContainText('Дата: 30 дней');
+    const count = page.locator('.vl-count .num');
+    await expect(count).toBeVisible();
+    await expect(page.locator(ROWS)).toHaveCount(Number(await count.innerText()));
+  });
+
+  test('B726: «Дата» не из фильтра в адресе не ставится', async ({ page }, testInfo) => {
+    test.skip(isMobile(testInfo.project.name), 'на 390 фильтры — нижний лист');
+    await openCabinet(page, '/app/vacancies?role=Руководитель+продукта&date=45');
+    await expect(page.getByRole('button', { name: /^Роли: выбрано 1/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Дата$/ })).toBeVisible();
   });
 
   test('вкладка «Роли» показывает роли с числом вакансий', async ({ page }, testInfo) => {
@@ -221,6 +409,87 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(sheet).toHaveAttribute('aria-modal', 'true');
     await page.keyboard.press('Escape');
     await expect(sheet).toHaveCount(0);
+  });
+
+  test('B801 v08: в листе один список без своей прокрутки и вход в условия поиска', async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isMobile(testInfo.project.name), 'только телефон');
+    await openCabinet(page, '/app/vacancies');
+    await page.getByRole('button', { name: /^Фильтры · / }).click();
+    const sheet = page.getByRole('dialog', { name: 'Фильтры' });
+    await expect(
+      sheet.getByRole('link', { name: 'Зарплата от — в условиях поиска' }),
+    ).toHaveAttribute('href', /conditions/);
+    const scrolling = await sheet.locator('.vt-sheet-body *').evaluateAll(
+      (nodes) =>
+        nodes.filter((node) => {
+          const { overflowY, display } = getComputedStyle(node);
+          return display !== 'contents' && /auto|scroll/.test(overflowY) && node.clientHeight > 0;
+        }).length,
+    );
+    expect(scrolling).toBe(0);
+  });
+
+  test('B801 v06p: пустой отбор — «0 вакансий», «Снять» по-русски и без выхода за край', async ({
+    page,
+  }, testInfo) => {
+    test.skip(isMobile(testInfo.project.name), 'отбор ставится поповером');
+    await openCabinet(page, '/app/vacancies');
+    const bar = page.locator('.vt-fbar');
+    await bar.getByRole('button', { name: /^Дата/ }).click();
+    await page.getByRole('radio', { name: /^сегодня/ }).check();
+    await page.locator('.vt-pop-foot .btn.is-primary').click();
+    await bar.getByRole('button', { name: /^Деньги/ }).click();
+    await page.getByLabel('Зарплата от', { exact: true }).fill('9000');
+    await page.locator('.vt-pop-foot .btn.is-primary').click();
+    const empty = page.locator('.vl-empty');
+    await expect(empty).toBeVisible();
+    await expect(page.locator('#list-title')).toContainText('0 вакансий');
+    await expect(empty.getByRole('button', { name: /Снять: Дата: сегодня/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Помочь выбрать' })).toBeVisible();
+    const over = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(over).toBeLessThanOrEqual(0);
+  });
+
+  test('B801 Н-А: под «Формат» дочитывается порция строк, кнопки справа и без счётчика', async ({
+    page,
+  }, testInfo) => {
+    test.skip(isMobile(testInfo.project.name), 'отбор ставится поповером');
+    await openCabinet(page, '/app/vacancies', { total: 60 });
+    await page.route('**/candidate/b640/matched-vacancies?**', (route) => {
+      const offset = Number(new URL(route.request().url()).searchParams.get('offset') ?? 0);
+      const portion = matchedVacancyPage(offset, 60, 20);
+      const data = portion.data.map((item, index) => ({
+        ...item,
+        cluster: { ...item.cluster, workFormat: index % 2 === 0 ? 'hybrid' : 'remote' },
+      }));
+      return route.fulfill({ json: { ...portion, data } });
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator(ROWS)).toHaveCount(20);
+    const acts = page.locator('.vl-countbar .vl-acts');
+    const right = async () => {
+      const box = (await acts.boundingBox())!;
+      return Math.round(box.x + box.width);
+    };
+    const edge = await right();
+    await page
+      .locator('.vt-fbar')
+      .getByRole('button', { name: /^Формат/ })
+      .click();
+    await page.getByRole('checkbox', { name: /^гибрид/i }).check();
+    await page.locator('.vt-pop-foot .btn.is-primary').click();
+    // Гибридная каждая вторая: в первой порции их 10, список дочитывает до 20.
+    await expect(page.locator(ROWS)).toHaveCount(20);
+    await expect(page.locator('.vl-count')).toHaveCount(0);
+    expect(await right()).toBe(edge);
+    await page.getByRole('button', { name: /^Показать ещё/ }).click();
+    await expect(page.locator(ROWS)).toHaveCount(30);
+    await expect(page.locator('#list-title')).toContainText('30 вакансий');
+    expect(await right()).toBe(edge);
   });
 
   test('скрыть с причиной: строка уходит, «Отменить» возвращает', async ({ page }, testInfo) => {
@@ -275,6 +544,11 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await toggles.nth(0).click();
     await expect(page.locator('.vt-detail-row .vs')).toHaveCount(1);
     await expect(page.getByRole('link', { name: 'Откликнуться' })).toBeVisible();
+    // Макет v06b (M9-2): «Откликнуться» в самой раскрытой строке, без закреплённой полосы.
+    await expect(
+      page.locator('.vt-detail-row .vs-acts').getByRole('link', { name: 'Откликнуться' }),
+    ).toBeVisible();
+    await expect(page.locator('.act-dock')).toHaveCount(0);
     await toggles.nth(1).click();
     await expect(page.locator('.vt-detail-row .vs')).toHaveCount(1);
   });
@@ -337,6 +611,13 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(page.locator(PRIMARY)).toBeEnabled();
     expect(calls[0]?.query).toBe('');
     expect(calls[0]?.clusterIds).toBeUndefined();
+    if (isMobile(test.info().project.name)) {
+      // v09 на 390: блоки режима стоят встык, на 1440 между ними 16 px.
+      const gap = await page
+        .locator('section.is-triage')
+        .evaluate((section) => getComputedStyle(section).rowGap);
+      expect(gap).toBe('0px');
+    }
     await expectGates(page);
 
     await page.locator('.vz-q1-a').getByRole('button', { name: 'Да' }).click();
@@ -377,7 +658,7 @@ test.describe('B654: раздел «Вакансии», подборка и со
   }) => {
     await openCabinet(page, '/app/vacancies', { total: 450 });
     // Следующие порции подборки приходят с задержкой: разбор их не ждёт.
-    await page.route('**/api/v1/candidate/matched-vacancies?**', async (route) => {
+    await page.route('**/api/v1/candidate/b640/matched-vacancies?**', async (route) => {
       const offset = Number(new URL(route.request().url()).searchParams.get('offset') ?? '0');
       if (offset > 0) await new Promise((resolve) => setTimeout(resolve, 1_500));
       return route.fallback();
@@ -553,6 +834,67 @@ test.describe('B676: своя вакансия', () => {
     await page.locator('#va-add-in').fill('https://hh.ru/vacancy/12345678');
     await page.locator('#va-add .va-add-foot .btn').click();
     await expect(page).toHaveURL(/\/app\/vacancies\/cluster-hh-1$/u);
+  });
+
+  test('удалить свою вакансию: 1440 — корзина, 390 — «…» → «Удалить»', async ({
+    page,
+  }, testInfo) => {
+    const mobile = isMobile(testInfo.project.name);
+    await openCabinet(page, '/app/vacancies', { own: [OWN] });
+    const deleted: string[] = [];
+    await page.route('**/api/v1/candidate/b640/own-vacancies/*', (route) => {
+      if (route.request().method() !== 'DELETE') return route.fallback();
+      deleted.push(route.request().url().split('/').pop() ?? '');
+      return route.fulfill({ status: 204 });
+    });
+    const row = page.locator(ROWS).first();
+    await expect(row.locator('.va-mine')).toBeVisible();
+    const trash = row.getByRole('button', { name: `Удалить: ${OWN.title}` });
+    const more = row.getByRole('button', { name: 'Ещё действия' });
+    await expect(mobile ? more : trash).toBeVisible();
+    await expect(mobile ? trash : more).toBeHidden();
+    const target = mobile ? more : trash;
+    const hit = await target.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return Boolean(top && node.contains(top));
+    });
+    expect(hit).toBe(true);
+    if (mobile) {
+      await more.click();
+      await page
+        .getByRole('dialog', { name: `Действия: ${OWN.title}` })
+        .getByRole('button', { name: 'Удалить' })
+        .click();
+    } else {
+      await trash.click();
+    }
+    await expect.poll(() => deleted).toEqual([OWN.id]);
+  });
+
+  test('v04c: «Открыть полностью» — отдельный экран своей вакансии', async ({ page }, testInfo) => {
+    await openCabinet(page, '/app/vacancies', { own: [OWN] });
+    await page.route('**/api/v1/candidate/b640/own-vacancies/*', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            ...OWN,
+            url: 'https://ritm.example/jobs/1',
+            text: 'О нас',
+            fit: { state: 'no_requirements', requirements: [] },
+          },
+        },
+      }),
+    );
+    await page.locator(ROWS).first().locator('.vt-toggle').click();
+    await page.getByRole('link', { name: 'Открыть полностью' }).click();
+    await expect(page).toHaveURL(new RegExp(`/app/vacancies/${OWN.id}$`, 'u'));
+    await expect(page.locator('#vc-title')).toHaveText(OWN.title);
+    await expect(page.locator('.v4-co-sub')).toHaveText('Москва · офис');
+    await expectGates(page);
+    await page.screenshot({ path: `.s13-shots/v04c-${testInfo.project.name}.png` });
+    await page.getByRole('button', { name: 'Текст вакансии' }).click();
+    await expect(page.getByRole('dialog', { name: 'Текст вакансии' })).toContainText('О нас');
   });
 
   test('снимки панели и строки «ваша» для сверки с макетом', async ({ page }, testInfo) => {

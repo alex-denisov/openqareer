@@ -5,10 +5,11 @@ import type {
   StatusChangeOption,
 } from '../../../../shared/candidateStatus';
 import { TARGET_PROFESSION_MAX_LENGTH } from '../../../../shared/candidateStatus';
+import { pluralRu } from '../../../../shared/pluralRu';
 import { CoachApiError } from '../../coach/apiClient';
 import { ActionDock, Button, Icon, InfoTip, Link } from '../kit';
 import { B640_HOME_PATH, buildNodePath, type B640Node } from '../routes';
-import { useShell } from '../shell/ShellContext';
+import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
 import {
@@ -104,6 +105,8 @@ interface ChangesProps {
 
 function PreviewChanges({ preview, options, onToggle }: ChangesProps) {
   if (preview.unchanged) return null;
+  // Макет s15 («Работаю») называет список иначе, чем s02.
+  const optionsTitle = preview.to === 'working' ? 'Что можно поменять' : 'Можно сразу';
   return (
     <div className="preview">
       {preview.appears.length > 0 ? (
@@ -121,10 +124,10 @@ function PreviewChanges({ preview, options, onToggle }: ChangesProps) {
       ) : null}
       {preview.options.length > 0 ? (
         <fieldset className="optin">
-          <legend className="vh">Что можно поменять</legend>
+          <legend className="vh">{optionsTitle}</legend>
           <h3 aria-hidden="true">
             <Icon name="sliders" />
-            Что можно поменять
+            {optionsTitle}
           </h3>
           {preview.options.map((option) => (
             <label key={option.key} htmlFor={`st-opt-${option.key}`} aria-label={option.label}>
@@ -163,6 +166,13 @@ function ProfessionField({ choice, onPick }: Pick<PickProps, 'choice' | 'onPick'
   );
 }
 
+/** s15: у «Работаю» на кнопке — сколько отмеченного сделаем вместе со сменой статуса. */
+function saveLabel(preview: CandidateStatusPreview, options: StatusOptions): string {
+  const count = Object.values(resolvedOptions(preview, options)).filter(Boolean).length;
+  if (preview.to !== 'working' || count === 0) return 'Сменить статус';
+  return `Сменить статус · ${pluralRu(count, ['действие', 'действия', 'действий'])}`;
+}
+
 interface PreviewLeadProps extends Pick<PickProps, 'choice' | 'onPick'> {
   readonly preview: ReturnType<typeof usePreview>;
   readonly options: StatusOptions;
@@ -194,8 +204,16 @@ function PreviewLead(props: PreviewLeadProps) {
           kind="commit"
           primary={
             <Button variant="primary" icon="swap" busy={saving} onClick={() => onSave(shown)}>
-              Сменить статус
+              {saveLabel(shown, options)}
             </Button>
+          }
+          secondary={
+            shown.to === 'working' ? (
+              <Link className="btn is-quiet" to={buildNodePath('d01a')}>
+                <Icon name="diary" />
+                До выхода: план в дневнике
+              </Link>
+            ) : undefined
           }
         />
       ) : null}
@@ -262,7 +280,9 @@ function useStatusChange(state: CandidateStatusState, search: string) {
 function StatusChoice({
   state,
   search,
+  onWorking,
 }: {
+  readonly onWorking: (working: boolean) => void;
   readonly state: CandidateStatusState;
   readonly search: string;
 }) {
@@ -272,21 +292,23 @@ function StatusChoice({
   );
   const preview = usePreview(choice);
   const unchanged = sameChoice(choice, state);
+  const working = choice.status === 'working';
+  useEffect(() => onWorking(working), [working, onWorking]);
 
+  // Макет s02: список справа во всю высоту, «Что изменится» и история слева (классы, а не
+  // порядок детей: строка ошибки появляется только при сбое и не сдвигает колонки).
   return (
     <>
-      {failed ? (
-        <div className="col-wide">
+      <div className="col st-pick-col">
+        <StatusPick state={state} choice={choice} onPick={pick} />
+      </div>
+      <div className="col st-lead-col">
+        {failed ? (
           <p className="li-err" role="alert">
             <Icon name="warn" />
             Статус не сохранился
           </p>
-        </div>
-      ) : null}
-      <div className="col">
-        <StatusPick state={state} choice={choice} onPick={pick} />
-      </div>
-      <div className="col">
+        ) : null}
         <PreviewLead
           choice={choice}
           preview={preview}
@@ -298,9 +320,11 @@ function StatusChoice({
           onToggle={(option, checked) => setOptions({ ...options, [option.key]: checked })}
         />
       </div>
-      <div className="col">
-        <StatusHistoryLink />
-      </div>
+      {working ? null : (
+        <div className="col st-hist-col">
+          <StatusHistoryLink />
+        </div>
+      )}
     </>
   );
 }
@@ -309,8 +333,16 @@ function StatusChoice({
 export function StatusChoiceScreen({ node }: { readonly node: B640Node }) {
   const { search } = useShell();
   const status = useLoad(getStatus);
+  // Макет s15: у «Работаю» одна колонка, список над «Что изменится», истории нет.
+  const [working, setWorking] = useState(false);
+  // Макет s02: `data-main-right` и `data-mtight` — страница во всю ширину рабочей области.
+  useScreenChrome({ rootData: working ? { mtight: '1' } : { 'main-right': '1', mtight: '1' } });
   return (
-    <div className="page two is-pick" data-b640-node={node.code} data-b640-section={node.section}>
+    <div
+      className={working ? 'page two' : 'page two is-pick'}
+      data-b640-node={node.code}
+      data-b640-section={node.section}
+    >
       {status.state === 'loading' ? (
         <div className="col">
           <BlockSkeleton label="Загружаем статус" rows={5} />
@@ -321,7 +353,9 @@ export function StatusChoiceScreen({ node }: { readonly node: B640Node }) {
           <BlockError text="Не удалось загрузить статус." onRetry={status.retry} />
         </div>
       ) : null}
-      {status.state === 'ready' ? <StatusChoice state={status.data} search={search} /> : null}
+      {status.state === 'ready' ? (
+        <StatusChoice state={status.data} search={search} onWorking={setWorking} />
+      ) : null}
     </div>
   );
 }

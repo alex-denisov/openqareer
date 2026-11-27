@@ -4,7 +4,13 @@ import { MIN_PIPELINE_SAMPLE_SIZE } from '../../applications/pipelineAnalytics';
 import { Button, Icon, InfoTip, Link, StatusLine } from '../kit';
 import { buildNodePath } from '../routes';
 import { useAsync } from './data/useAsync';
-import { funnelSummary, type FunnelSummary, type ListedResponse } from './model/responseList';
+import {
+  funnelSummary,
+  markAuto,
+  type FunnelSummary,
+  type ListedResponse,
+} from './model/responseList';
+import { useAutoApplicationIds } from './data/responseSummaryApi';
 import { buildResponseRow, pluralRu } from './model/responseRow';
 
 async function loadResponses(signal: AbortSignal): Promise<readonly ApplicationView[]> {
@@ -15,11 +21,16 @@ async function loadResponses(signal: AbortSignal): Promise<readonly ApplicationV
 export function useListedResponses() {
   const load = useCallback((signal: AbortSignal) => loadResponses(signal), []);
   const { state, reload } = useAsync(load, 'Отклики не загрузились.');
+  const autoIds = useAutoApplicationIds();
   const items = useMemo<readonly ListedResponse[] | null>(() => {
     if (!state.data) return null;
     const now = new Date();
-    return state.data.map((application) => ({ application, row: buildResponseRow(application, now) }));
-  }, [state.data]);
+    const rows = state.data.map((application) => ({
+      application,
+      row: buildResponseRow(application, now),
+    }));
+    return markAuto(rows, autoIds);
+  }, [state.data, autoIds]);
   return { state, reload, items };
 }
 
@@ -65,7 +76,10 @@ function RemindBlock({ remind }: { readonly remind: readonly ListedResponse[] })
   return (
     <>
       <div className="actions">
-        <Link className="btn is-primary" to={buildNodePath('o01c', { responseId: remind[0].row.id })}>
+        <Link
+          className="btn is-primary"
+          to={buildNodePath('o01c', { responseId: remind[0].row.id })}
+        >
           <Icon name="send" />
           {`Напомнить ${remind.length} ${pluralRu(remind.length, ['компании', 'компаниям', 'компаниям'])}`}
         </Link>
@@ -121,8 +135,14 @@ function SourcesTable({ summary }: { readonly summary: FunnelSummary }) {
   );
 }
 
+function autoNote(summary: FunnelSummary): string {
+  const sent = `${summary.auto} ${pluralRu(summary.auto, ['автоотклик', 'автоотклика', 'автооткликов'])}`;
+  const answers = `${summary.autoResponded} ${pluralRu(summary.autoResponded, ['ответ', 'ответа', 'ответов'])}`;
+  return `Автоотклики считаются отдельно: в эти числа не входят ${sent} и ${answers} на них.`;
+}
+
 function FunnelNumbers({ summary }: { readonly summary: FunnelSummary }) {
-  if (summary.sent === 0) {
+  if (summary.sent === 0 && summary.auto === 0) {
     return (
       <div className="actions">
         <Link className="btn is-primary" to={buildNodePath('s07')}>
@@ -134,9 +154,13 @@ function FunnelNumbers({ summary }: { readonly summary: FunnelSummary }) {
   }
   return (
     <p className="fv-mini">
-      <b className="num">{summary.sent}</b> отправлено · <b className="num">{summary.responded}</b>{' '}
-      ответили · <b className="num">{summary.interview}</b> интервью ·{' '}
-      <b className="num">{summary.offer}</b> {pluralRu(summary.offer, ['оффер', 'оффера', 'офферов'])}
+      <b className="num">{summary.sent}</b> отправлено
+      {summary.auto > 0 ? (
+        <InfoTip label="Что не входит в числа" text={autoNote(summary)} />
+      ) : null}{' '}
+      · <b className="num">{summary.responded}</b> ответили ·{' '}
+      <b className="num">{summary.interview}</b> интервью · <b className="num">{summary.offer}</b>{' '}
+      {pluralRu(summary.offer, ['оффер', 'оффера', 'офферов'])}
     </p>
   );
 }

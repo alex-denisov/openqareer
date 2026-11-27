@@ -10,6 +10,7 @@ import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
 import { SqliteCandidateReputationRepository } from '../data/sqliteCandidateReputationRepository';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
+import { toPublicFootprint } from './footprintPublicView';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -117,7 +118,8 @@ describe('GET /candidate/footprint/risks', () => {
     }
     const old = await get(app, '/api/v1/candidate/footprint', 'token-plain');
     expect(old.statusCode).toBe(200);
-    expect(old.json().data.audit.findings).toEqual(audit.findings);
+    // B740: прежний маршрут отдаёт те же находки, но шагами, без инструментов и квитанций.
+    expect(old.json().data.audit.findings).toEqual(toPublicFootprint(audit.findings));
   });
 
   it('пока проверки не было — честное «не проверяли», после пустой проверки — «Ничего рискового»', async () => {
@@ -218,5 +220,84 @@ describe('GET /candidate/footprint/risks', () => {
     await get(app, RISKS, 'token-flagged');
     await get(app, RISKS, 'token-flagged');
     expect(JSON.stringify(repo.getLatestFootprintAudit(people.flagged.candidate!.id))).toBe(before);
+  });
+});
+
+describe('PATCH /candidate/footprint/mismatches/:id (B645 p02 «Это не проблема»)', () => {
+  const MISMATCH = '/api/v1/candidate/footprint/mismatches';
+
+  function reputation(candidateId: string, discrepancyId: string): CandidateReputationAudit {
+    return {
+      id: `rep-${discrepancyId}`,
+      candidateId,
+      status: 'completed',
+      overallStatus: 'attention',
+      score: 70,
+      consistencyDiscrepancies: [
+        {
+          id: discrepancyId,
+          field: 'Должность',
+          candidateValue: 'Руководитель группы разработки',
+          externalValue: 'тимлид',
+          externalSource: 'https://conf.site.test/speakers',
+          severity: 'warning',
+          suggestion: 'Попросите организаторов исправить должность.',
+        },
+      ],
+      reputationRisks: [],
+      consentAction: 'digital_footprint',
+      startedAt: '2026-11-11T08:00:00.000Z',
+      completedAt: '2026-11-11T09:00:00.000Z',
+    };
+  }
+
+  function patch(app: App, id: string, review: string, token = 'token-flagged') {
+    return app.inject({
+      method: 'PATCH',
+      url: `${MISMATCH}/${encodeURIComponent(id)}`,
+      headers: { authorization: `Bearer ${token}`, origin: 'http://localhost:3000' },
+      payload: { review },
+    });
+  }
+
+  const mismatches = async (app: App) =>
+    (await get(app, RISKS, 'token-flagged'))
+      .json()
+      .data.items.filter((item: { category: string }) => item.category === 'resume_mismatch');
+
+  it('отметка сохраняется и убирает расхождение; отмена возвращает; переживает новую проверку резюме', async () => {
+    const { app, repo, people, saveAudit } = await setup();
+    saveAudit('flagged', []);
+    repo.saveAudit(reputation(people.flagged.candidate!.id, 'd1'));
+    const [item] = await mismatches(app);
+    expect(item.id).toBe('mismatch:d1');
+
+    const hidden = await patch(app, item.id, 'hidden');
+    expect(hidden.statusCode).toBe(200);
+    expect(await mismatches(app)).toEqual([]);
+    // Новая проверка резюме даёт то же расхождение под другим id — отметка остаётся.
+    repo.saveAudit({
+      ...reputation(people.flagged.candidate!.id, 'd2'),
+      startedAt: '2026-11-12T08:00:00.000Z',
+      completedAt: '2026-11-12T09:00:00.000Z',
+    });
+    expect(await mismatches(app)).toEqual([]);
+
+    const undone = await patch(app, 'mismatch:d2', 'unreviewed');
+    expect(undone.statusCode).toBe(200);
+    expect((await mismatches(app)).map((entry: { id: string }) => entry.id)).toEqual([
+      'mismatch:d2',
+    ]);
+  });
+
+  it('чужое или неизвестное расхождение — 404; без проверки следа — 409; неверная отметка — 400', async () => {
+    const { app, repo, people, saveAudit } = await setup();
+    repo.saveAudit(reputation(people.flagged.candidate!.id, 'd1'));
+    expect((await patch(app, 'mismatch:d1', 'hidden')).statusCode).toBe(409);
+    saveAudit('flagged', []);
+    saveAudit('other', []);
+    expect((await patch(app, 'mismatch:d1', 'hidden', 'token-other')).statusCode).toBe(404);
+    expect((await patch(app, 'mismatch:zz', 'hidden')).statusCode).toBe(404);
+    expect((await patch(app, 'mismatch:d1', 'not_self')).statusCode).toBe(400);
   });
 });

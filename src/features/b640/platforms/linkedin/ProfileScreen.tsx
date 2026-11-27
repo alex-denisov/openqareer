@@ -1,30 +1,18 @@
-import { getConnections, type CandidateConnection } from '../../../coach/coachApi';
-import { getResumeStudio } from '../../../resume/resumeApi';
+import { useEffect, useRef } from 'react';
+import type { LinkedinProfileView } from '../../../../../shared/b640LinkedinProfile';
 import { Icon, Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { useScreenChrome } from '../../shell/ShellContext';
 import type { SectionProps } from '../../sections';
 import { useLoad } from '../../today/useLoad';
 import { PlatformRetry } from '../PlatformRetry';
-import { CopyButton } from './CopyButton';
 import { LinkedinNav } from './LinkedinNav';
-import { buildProfileSections, type ProfileRecord, type ProfileSection } from './linkedinModel';
+import { getLinkedinProfile } from './linkedinProfileApi';
+import { ProfileSections } from './ProfileSections';
+import './linkedin.css';
 
-type ProfileData =
-  { readonly kind: 'off' } | { readonly kind: 'on'; readonly sections: readonly ProfileSection[] };
-
-function isOn(connections: readonly CandidateConnection[]): boolean {
-  const linkedin = connections.find((item) => item.platform === 'linkedin');
-  return linkedin !== undefined && linkedin.status !== 'disconnected';
-}
-
-async function loadProfile(): Promise<ProfileData> {
-  if (!isOn(await getConnections())) return { kind: 'off' };
-  const studio = await getResumeStudio();
-  return { kind: 'on', sections: buildProfileSections(studio.projection.master) };
-}
-
-function NotConnected() {
+/** a03n: импорта LinkedIn нет — разделов не показываем, ручной вставки нет (решение владельца 19.11). */
+function NoImport() {
   return (
     <ul className="src-list li-off" aria-label="Площадка">
       <li className="src is-next">
@@ -45,63 +33,41 @@ function NotConnected() {
   );
 }
 
-function Record({
-  section,
-  record,
-}: {
-  readonly section: ProfileSection;
-  readonly record: ProfileRecord;
-}) {
-  return (
-    <div className="li-rec">
-      {record.label ? <p className="li-rec-l">{record.label}</p> : null}
-      <div className="li-offer">
-        <p className="li-new">{record.text}</p>
-        <div className="li-offer-a">
-          <CopyButton text={record.text} label={record.label ?? section.title} />
-        </div>
-      </div>
-    </div>
-  );
+type ProfileLoad = ReturnType<typeof useLoad<LinkedinProfileView>>;
+
+/** Пересказ «О себе» и «Опыта» пишется в фоне: перечитываем экран, пока сервер не скажет, что готово. */
+const REWRITE_POLL_MS = 4_000;
+const REWRITE_POLLS_MAX = 15;
+
+function useRewriteRefresh(load: ProfileLoad): void {
+  const polls = useRef(0);
+  const rewriting = load.state === 'ready' && load.data.kind === 'ready' && load.data.rewriting;
+  const { retry } = load;
+  // Каждый новый ответ сервера — повод решить заново, ждать ли ещё.
+  const data = load.state === 'ready' ? load.data : null;
+  useEffect(() => {
+    if (!rewriting || polls.current >= REWRITE_POLLS_MAX) return undefined;
+    const timer = setTimeout(() => {
+      polls.current += 1;
+      retry();
+    }, REWRITE_POLL_MS);
+    return () => clearTimeout(timer);
+  }, [rewriting, retry, data]);
 }
 
-function Section({ section }: { readonly section: ProfileSection }) {
-  const titleId = `ls-${section.id}`;
-  return (
-    <section className="li-sec" aria-labelledby={titleId}>
-      <h3 className="li-sec-t" id={titleId}>
-        {section.title}
-      </h3>
-      {section.records.map((record, index) => (
-        <Record key={index} section={section} record={record} />
-      ))}
-    </section>
-  );
-}
-
-function Sections({ sections }: { readonly sections: readonly ProfileSection[] }) {
-  if (!sections.length) {
-    return (
-      <div className="vl-empty" role="status">
-        <p className="vl-empty-t">Для профиля LinkedIn пока нет текстов</p>
-      </div>
-    );
-  }
-  return (
-    <>
-      {sections.map((section) => (
-        <Section key={section.id} section={section} />
-      ))}
-    </>
-  );
-}
-
-function Body({ load }: { readonly load: ReturnType<typeof useLoad<ProfileData>> }) {
+function Body({ load }: { readonly load: ProfileLoad }) {
   if (load.state === 'loading') return <StatusLine state="wait" text="Загружаем LinkedIn…" />;
   if (load.state === 'error')
     return <PlatformRetry text="Не удалось загрузить LinkedIn" onRetry={load.retry} />;
-  if (load.data.kind === 'off') return <NotConnected />;
-  return <Sections sections={load.data.sections} />;
+  if (load.data.kind === 'no_import') return <NoImport />;
+  const { rewriting, sections } = load.data;
+  return (
+    <>
+      {rewriting ? <StatusLine state="wait" text="Готовим тексты для «О себе» и «Опыта»…" /> : null}
+      {/* Готовый пересказ приходит новым чтением: разделы собираются заново с ним. */}
+      <ProfileSections key={rewriting ? 'rewriting' : 'ready'} initial={sections} />
+    </>
+  );
 }
 
 function Next() {
@@ -120,10 +86,11 @@ function Next() {
   );
 }
 
-/** Узел a03 и его состояние a03n: тексты профиля с «Скопировать» или «LinkedIn не подключён». */
+/** Узел a03 и его состояние a03n: семь разделов из импорта LinkedIn или «Подключить». */
 export function ProfileScreen({ node }: SectionProps) {
-  const load = useLoad(loadProfile);
-  const connected = load.state === 'ready' && load.data.kind === 'on';
+  const load = useLoad(getLinkedinProfile);
+  useRewriteRefresh(load);
+  const connected = load.state === 'ready' && load.data.kind === 'ready';
   // Признак макета a03: плотные строки на 390; у a03n его нет.
   useScreenChrome({ rootData: connected ? { mtight: '1' } : {} });
   return (

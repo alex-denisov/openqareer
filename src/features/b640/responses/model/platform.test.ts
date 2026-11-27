@@ -21,6 +21,13 @@ describe('название площадки для кандидата', () => {
     expect(platformOf('my-linkedin-clone').label).toBe('My-linkedin-clone');
   });
 
+  it('коды freehire: площадка — одним именем, карьерный сайт — сайт компании (Д10)', () => {
+    expect(platformOf('src-fh-getmatch')).toEqual(platformOf('getmatch'));
+    expect(platformOf('fh-getmatch').label).toBe('Getmatch');
+    expect(platformOf('src-fh-habr-career').label).toBe('Хабр Карьера');
+    expect(platformOf('src-fh-rwb')).toEqual({ label: 'сайт компании', site: true });
+  });
+
   it('предлоги согласованы', () => {
     const site = platformOf('ats-ashby-snowflake');
     expect(viaPlatform(site)).toBe('через сайт компании');
@@ -28,5 +35,14 @@ describe('название площадки для кандидата', () => {
     expect(sendFrom(site)).toBe('на сайте компании');
     expect(onPlatform(platformOf('hh'))).toBe('на hh.ru');
     expect(sendFrom(platformOf('hh'))).toBe('с hh.ru');
+  });
+
+  it('коды сбора «src-…» называются по-человечески (B645)', () => {
+    expect(platformOf('src-hh-search').label).toBe('hh.ru');
+    expect(platformOf('src-indeed').label).toBe('Indeed');
+    expect(platformOf('src-himalayas-api').label).toBe('Himalayas');
+    expect(platformOf('src-linkedin-jobs').label).toBe('LinkedIn');
+    expect(platformOf('src-remotive').label).toBe('Remotive');
+    expect(platformOf('src-ats-greenhouse')).toEqual({ label: 'сайт компании', site: true });
   });
 });

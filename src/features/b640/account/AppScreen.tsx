@@ -1,15 +1,25 @@
 import { useId, useState } from 'react';
-import { COMMON_TIMEZONES, DEFAULT_ACCOUNT_TIMEZONE, formatTimezoneDisplay } from '../../../../shared/timezoneUtils';
-import { desktopUpdater } from '../../appUpdate/useDesktopUpdater';
+import {
+  COMMON_TIMEZONES,
+  DEFAULT_ACCOUNT_TIMEZONE,
+  formatTimezoneOffset,
+} from '../../../../shared/timezoneUtils';
 import { getAccount, updateAccountProfile } from '../../coach/coachApi';
 import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
-import { ResultLine } from '../kit/ResultLine';
 import { SegControl } from '../kit/SegControl';
 import type { B640Node } from '../routes';
 import { useShell } from '../shell/ShellContext';
 import type { B640Theme } from '../theme';
-import { appBuildLine } from './appBuild';
+import type { AppMoneyCurrency } from '../../../../shared/b640AppPreferences';
+import { DeviceSettingsSection, WebAppSection } from './DeviceSettingsSection';
+import { getAppPreferences, saveAppPreferences } from './appPreferencesApi';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
+
+/** Пояс в списке n06 так, как в макете: «Москва, UTC+3». */
+function zoneLabel(timezone: string): string {
+  const city = COMMON_TIMEZONES.find((item) => item.timezone === timezone)?.city ?? timezone;
+  return `${city}, ${formatTimezoneOffset(timezone)}`;
+}
 
 const THEMES: ReadonlyArray<{ value: B640Theme; label: string }> = [
   { value: 'system', label: 'Как в системе' },
@@ -22,8 +32,20 @@ async function loadTimezone(): Promise<string> {
   return account.profile.timezone ?? DEFAULT_ACCOUNT_TIMEZONE;
 }
 
+const CURRENCIES: ReadonlyArray<{ value: AppMoneyCurrency; label: string }> = [
+  { value: 'RUB', label: '₽' },
+  { value: 'USD', label: '$' },
+  { value: 'EUR', label: '€' },
+  { value: 'AED', label: 'AED' },
+];
+
+/** Тема меняется сразу на этом устройстве и запоминается за кандидатом для других. */
 function ThemeRow() {
-  const { theme, setTheme } = useShell();
+  const { theme, setTheme: applyTheme } = useShell();
+  const setTheme = (next: B640Theme) => {
+    applyTheme(next);
+    void saveAppPreferences({ theme: next }).catch(() => undefined);
+  };
   return (
     <li className="set-row is-stack">
       <div className="set-l">
@@ -31,6 +53,20 @@ function ThemeRow() {
       </div>
       <div className="set-r">
         <SegControl label="Тема" name="b640-theme" variant="sec-seg" value={theme} options={THEMES} onChange={setTheme} />
+      </div>
+    </li>
+  );
+}
+
+/** Язык интерфейса один — русский: текстом, а не списком, где нечего выбрать (B774). */
+function LanguageRow() {
+  return (
+    <li className="set-row">
+      <div className="set-l">
+        <span className="set-t">Язык</span>
+      </div>
+      <div className="set-r">
+        <span className="set-v">Русский</span>
       </div>
     </li>
   );
@@ -74,7 +110,7 @@ function TimezoneRow() {
         >
           {zones.map((zone) => (
             <option key={zone.timezone} value={zone.timezone}>
-              {formatTimezoneDisplay(zone.timezone)}
+              {zoneLabel(zone.timezone)}
             </option>
           ))}
         </select>
@@ -83,43 +119,38 @@ function TimezoneRow() {
   );
 }
 
-type CheckResult = 'latest' | 'available' | null;
-
-/** «Обновления» — только в приложении: версия и проверка с результатом на месте. */
-function Updates() {
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<CheckResult>(null);
-  async function check() {
-    setBusy(true);
-    await desktopUpdater.check();
-    setResult(desktopUpdater.getStatus().state === 'available' ? 'available' : 'latest');
-    setBusy(false);
+/** B593: валюта, в которой «Вакансии» показывают суммы; сбой возвращает прежнюю. */
+function CurrencyRow() {
+  const load = useLoad(getAppPreferences);
+  const [failed, setFailed] = useState(false);
+  const current = load.state === 'ready' ? (load.data.moneyCurrency ?? 'RUB') : 'RUB';
+  async function choose(moneyCurrency: AppMoneyCurrency) {
+    if (load.state !== 'ready') return;
+    const previous = load.data;
+    setFailed(false);
+    load.replace({ ...previous, moneyCurrency });
+    try {
+      await saveAppPreferences({ moneyCurrency });
+    } catch {
+      load.replace(previous);
+      setFailed(true);
+    }
   }
   return (
-    <div className="only-desk sec-grp">
-      <section className="set-group" aria-label="Обновления">
-        <h3 className="set-h">Обновления</h3>
-        <ul className="set-list">
-          <li className="set-row">
-            <div className="set-l">
-              <span className="set-t">{appBuildLine(__APP_VERSION__, __APP_COMMIT__, __APP_BUILD_DATE__)}</span>
-              {result ? (
-                <ResultLine text={result === 'available' ? 'Есть новая версия' : 'У вас последняя версия'} />
-              ) : null}
-            </div>
-            <div className="set-r">
-              <button className="btn is-sm" type="button" disabled={busy} aria-busy={busy || undefined} onClick={() => void check()}>
-                Проверить обновления
-              </button>
-            </div>
-          </li>
-        </ul>
-      </section>
-    </div>
+    <li className="set-row">
+      <div className="set-l">
+        <span className="set-t">Валюта зарплат</span>
+        {failed ? <ErrorLine text="Не сохранилось" /> : null}
+        {load.state === 'error' ? <ErrorLine text="Не загрузилось" onRetry={load.retry} /> : null}
+      </div>
+      <div className="set-r">
+        <SegControl label="Валюта зарплат" name="b640-money" variant="sec-seg" value={current} options={CURRENCIES} onChange={(value) => void choose(value)} />
+      </div>
+    </li>
   );
 }
 
-/** n06 «Приложение»: тема, часовой пояс; в приложении — обновления. */
+/** n06 «Приложение»: тема, язык, часовой пояс, валюта; в приложении — настройки этого компьютера, на сайте — версия и скачивание (B722). */
 export function AppScreen({ node }: { readonly node: B640Node }) {
   return (
     <SettingsPage node={node} heading="Приложение">
@@ -127,10 +158,12 @@ export function AppScreen({ node }: { readonly node: B640Node }) {
         <h3 className="set-h">Интерфейс</h3>
         <ul className="set-list">
           <ThemeRow />
+          <LanguageRow />
           <TimezoneRow />
+          <CurrencyRow />
         </ul>
       </section>
-      {isTauriEnvironment() ? <Updates /> : null}
+      {isTauriEnvironment() ? <DeviceSettingsSection /> : <WebAppSection />}
     </SettingsPage>
   );
 }

@@ -4,12 +4,26 @@ import type { FootprintRiskItem } from '../../../../shared/footprintRisk';
 import { Button, Icon, Link, ResultLine, StatusLine, useToast } from '../kit';
 import { buildNodePath } from '../routes';
 import {
-  addCandidateFootprintFindingToProfile,
+  addFindingToProfile,
+  removeFindingFromProfile,
   reviewCandidateFootprintFinding,
+  reviewFootprintMismatch,
 } from './footprintApi';
-import { ACTION_ICON, levelTag, opensRemovalPath } from './footprintModel';
+import { ACTION_ICON, confirmsOwner, levelTag, opensRemovalPath } from './footprintModel';
 import { reportFailure } from './reportFailure';
 import { announceFootprintChanged } from './useFootprint';
+
+/** Что отмечаем: находку следа или расхождение с резюме (B645 p02). */
+export interface ReviewTarget {
+  readonly kind: 'finding' | 'mismatch';
+  readonly id: string;
+}
+
+/** Расхождение отмечается само, а не находка, к которой оно привязано. */
+export function reviewTarget(item: FootprintRiskItem): ReviewTarget | null {
+  if (item.mismatch) return { kind: 'mismatch', id: item.id };
+  return item.findingId ? { kind: 'finding', id: item.findingId } : null;
+}
 
 /** Отметка находки и отмена в тосте; после неё сводка перечитывается. */
 export function useReview(onChanged: () => void) {
@@ -17,9 +31,13 @@ export function useReview(onChanged: () => void) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function send(findingId: string, review: FootprintReview): Promise<boolean> {
+  async function send(target: ReviewTarget, review: FootprintReview): Promise<boolean> {
     try {
-      await reviewCandidateFootprintFinding(findingId, review);
+      if (target.kind === 'mismatch') {
+        await reviewFootprintMismatch(target.id, review === 'unreviewed' ? 'unreviewed' : 'hidden');
+      } else {
+        await reviewCandidateFootprintFinding(target.id, review);
+      }
       return true;
     } catch (reason) {
       reportFailure('отметка находки не сохранилась', reason);
@@ -28,11 +46,15 @@ export function useReview(onChanged: () => void) {
     }
   }
 
-  async function mark(findingId: string, review: 'hidden' | 'not_self', text: string) {
+  async function mark(
+    target: ReviewTarget,
+    review: 'hidden' | 'not_self' | 'confirmed_self',
+    text: string,
+  ) {
     if (busy) return;
     setBusy(true);
     setError(null);
-    const ok = await send(findingId, review);
+    const ok = await send(target, review);
     setBusy(false);
     if (!ok) return;
     onChanged();
@@ -41,23 +63,44 @@ export function useReview(onChanged: () => void) {
       undo: {
         label: 'Отменить',
         // Экран мог смениться: перечитывает тот, что открыт сейчас.
-        onUndo: () => void send(findingId, 'unreviewed').then((done) => done && announceFootprintChanged()),
+        onUndo: () => void send(target, 'unreviewed').then((done) => done && announceFootprintChanged()),
       },
     });
   }
 
-  return { error, busy, mark };
+  /** «Это моё»: находка подтверждена, «Отменить» вернёт её в неразобранные. */
+  function confirm(target: ReviewTarget, text: string) {
+    return mark(target, 'confirmed_self', text);
+  }
+
+  return { error, busy, mark, confirm };
 }
 
+/** «В профиль» с отменой в тосте; тот же факт уже в профиле — «Уже в профиле» (B382). */
 function AddToProfile({ findingId }: { readonly findingId: string }) {
-  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
+  const toast = useToast();
+  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'already' | 'error'>('idle');
   if (state === 'done') return <ResultLine text="Добавлено в профиль" />;
+  if (state === 'already') return <ResultLine text="Уже в профиле" />;
+
+  async function undo() {
+    try {
+      await removeFindingFromProfile(findingId);
+      setState('idle');
+      announceFootprintChanged();
+    } catch (reason) {
+      reportFailure('находка не убрана из профиля', reason);
+    }
+  }
 
   async function add() {
     setState('busy');
     try {
-      await addCandidateFootprintFindingToProfile(findingId);
-      setState('done');
+      const { alreadyInProfile } = await addFindingToProfile(findingId);
+      setState(alreadyInProfile ? 'already' : 'done');
+      if (!alreadyInProfile) {
+        toast.show({ text: 'Добавлено в профиль', undo: { label: 'Отменить', onUndo: () => void undo() } });
+      }
     } catch (reason) {
       reportFailure('находка не добавилась в профиль', reason);
       setState('error');
@@ -74,10 +117,50 @@ function AddToProfile({ findingId }: { readonly findingId: string }) {
   );
 }
 
+/** «Это не моё» у находки: страница чужая — уходит из сводки, в тосте «Отменить». */
+function NotMine({ item, onChanged }: { readonly item: FootprintRiskItem; readonly onChanged: () => void }) {
+  const review = useReview(onChanged);
+  const { findingId } = item;
+  if (!findingId) return null;
+  return (
+    <>
+      <button className="row-act" type="button" disabled={review.busy}
+        onClick={() => void review.mark({ kind: 'finding', id: findingId }, 'not_self', 'Отмечено: это не ваша страница')}>
+        Это не моё
+      </button>
+      {review.error ? <StatusLine state="err" text={review.error} /> : null}
+    </>
+  );
+}
+
+/** B727/B382: страница по нику — «Проверить» ведёт на f03b, сама страница открывается там. */
+function OwnerActions({ item, onChanged }: { readonly item: FootprintRiskItem; readonly onChanged: () => void }) {
+  const { action } = item;
+  if (!action) return null;
+  return (
+    <div className="fp-acts">
+      <Link className="btn is-sm" to={buildNodePath('f03b', { findingId: item.id })}>
+        <Icon name={ACTION_ICON[action.kind]} />
+        {action.label}
+      </Link>
+      <NotMine item={item} onChanged={onChanged} />
+    </div>
+  );
+}
+
 function RowActions({ item, onChanged }: { readonly item: FootprintRiskItem; readonly onChanged: () => void }) {
   const review = useReview(onChanged);
   const { action, findingId } = item;
   if (!action) return null;
+  if (confirmsOwner(item)) return <OwnerActions item={item} onChanged={onChanged} />;
+  if (action.kind === 'not_mine') {
+    return (
+      <div className="fp-acts">
+        <NotMine item={item} onChanged={onChanged} />
+      </div>
+    );
+  }
+  const target = reviewTarget(item);
   return (
     <div className="fp-acts">
       {action.kind === 'add_to_profile' && findingId ? <AddToProfile findingId={findingId} /> : null}
@@ -87,9 +170,9 @@ function RowActions({ item, onChanged }: { readonly item: FootprintRiskItem; rea
           {action.label}
         </Link>
       ) : null}
-      {findingId && action.kind !== 'add_to_profile' ? (
+      {target && opensRemovalPath(item) ? (
         <button className="row-act" type="button"
-          onClick={() => void review.mark(findingId, 'hidden', 'Отмечено: не проблема')}>
+          onClick={() => void review.mark(target, 'hidden', 'Отмечено: не проблема')}>
           Это не проблема
         </button>
       ) : null}
@@ -102,10 +185,21 @@ interface FindingRowProps {
   readonly item: FootprintRiskItem;
   /** P2 показывает уровень у каждой находки; в сводке F3 он стоит у категории. */
   readonly showLevel?: boolean;
+  /** F4 «Полезное»: у находки только «В профиль» (макет f04). */
+  readonly profileOnly?: boolean;
   readonly onChanged: () => void;
 }
 
-export function FindingRow({ item, showLevel = false, onChanged }: FindingRowProps) {
+function ProfileOnlyActions({ item }: { readonly item: FootprintRiskItem }) {
+  if (!item.findingId) return null;
+  return (
+    <div className="fp-acts">
+      <AddToProfile findingId={item.findingId} />
+    </div>
+  );
+}
+
+export function FindingRow({ item, showLevel = false, profileOnly = false, onChanged }: FindingRowProps) {
   return (
     <li className="row fp-find">
       <div>
@@ -118,7 +212,7 @@ export function FindingRow({ item, showLevel = false, onChanged }: FindingRowPro
             </span>
           </div>
         ) : null}
-        <RowActions item={item} onChanged={onChanged} />
+        {profileOnly ? <ProfileOnlyActions item={item} /> : <RowActions item={item} onChanged={onChanged} />}
       </div>
     </li>
   );

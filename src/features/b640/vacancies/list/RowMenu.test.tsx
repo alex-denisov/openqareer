@@ -96,3 +96,25 @@ describe('меню строки', () => {
     expect(root.querySelector('.va-m-err')).toBeNull();
   });
 });
+
+describe('B726: меню строки без компании из Telegram', () => {
+  it('ссылка названа постом Telegram, а не сайтом работодателя', () => {
+    const base = makeItem({ id: 'cluster-tg-it_vakansii_udalenka-2838', company: '' });
+    const item = {
+      ...base,
+      cluster: { ...base.cluster, primaryUrl: 'https://t.me/it_vakansii_udalenka/2838' },
+    };
+    const actions: RowMenuActions = {
+      want: vi.fn(async () => undefined),
+      hide: vi.fn(async () => undefined),
+      applied: vi.fn(async () => undefined),
+    };
+    mounted = mount(<RowMenu item={item} initialView="list" actions={actions} onClose={vi.fn()} />);
+    const link = [...mounted.container.querySelectorAll('a')].find((a) => a.href.startsWith('https://t.me/'));
+    expect(link?.textContent).toBe('Открыть пост в Telegram');
+    expect(mounted.container.textContent).not.toContain('Открыть на сайте работодателя');
+    // B726 (B645 23.11): без компании отметить некого — пункта «Хочу в компанию» нет.
+    expect(mounted.container.textContent).not.toContain('Хочу в компанию');
+    expect(mounted.container.textContent).toContain('Уже откликнулись');
+  });
+});

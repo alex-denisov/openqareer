@@ -1,6 +1,14 @@
 import { parseRemoteScope, remoteScopeLabel } from '../../../shared/remoteScope';
 
-const REMOTE_MARK = /\(?\b(?:fully\s+)?remote\b\)?|\(?удал[её]нн?[\p{L}]*\)?|\bremote job\b/giu;
+// «remote job» раньше «remote»: иначе от «Remote job» оставалось «job» (B764).
+const REMOTE_MARK = /\bremote job\b|\(?\b(?:fully\s+)?remote\b\)?|\(?удал[её]нн?[\p{L}]*\)?/giu;
+
+const HAS_REMOTE_MARK = /\b(?:fully\s+)?remote\b|удал[её]нн?\p{L}*/iu;
+
+/** B764: в месте есть слово об удалёнке («Remote», «Remote job», «удалённо»). */
+export function hasRemoteMark(location: string | undefined): boolean {
+  return HAS_REMOTE_MARK.test(location ?? '');
+}
 
 interface RemoteCluster {
   readonly canonicalLocation?: string;

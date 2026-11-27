@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SqliteCapabilityConsentStore } from '../auth/capabilityConsentStore';
 import { queueDueRaises } from '../candidate/hhRaiseQueue';
 import { SqliteHhRaiseRepository } from '../candidate/sqliteHhRaiseRepository';
 import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepository';
@@ -85,9 +86,53 @@ describe('b640 hh raise routes', () => {
     const done = await ctx.send('POST', `${BASE}/${taskId}/result`, { outcome: 'ok' }, 'flagged.test');
     const data = done.json().data;
     expect(data.lastResult.status).toBe('ok');
+    expect(data.raisedToday).toBe(1);
     expect(Date.parse(data.nextRaiseAt) - Date.parse(data.lastRaisedAt)).toBeGreaterThanOrEqual(4 * 3_600_000);
     expect((await ctx.send('POST', `${BASE}/${taskId}/result`, { outcome: 'ok' }, 'flagged.test')).statusCode).toBe(409);
     expect((await ctx.send('POST', `${BASE}/${taskId}/result`, { outcome: 'ok' }, 'other.test')).statusCode).toBe(409);
+  });
+
+  it('reports an open task until its result and treats too_early as no error', async () => {
+    const ctx = await setup();
+    const taskId = await claimTask(ctx);
+    expect((await ctx.get(BASE, 'flagged.test')).json().data.pending).toBe(true);
+    const url = `${BASE}/${taskId}/result`;
+    for (const availableAt of ['24:00', '9:05', '20:55 ', 2055]) {
+      expect((await ctx.send('POST', url, { outcome: 'too_early', availableAt }, 'flagged.test')).statusCode).toBe(400);
+    }
+    const data = (await ctx.send('POST', url, { outcome: 'too_early', availableAt: '20:55' }, 'flagged.test')).json().data;
+    expect(data).toMatchObject({ pending: false, lastResult: { status: 'ok', reason: 'too_early' } });
+    expect(data.nextRaiseAt).toContain(':57:00.000Z');
+  });
+
+  it('turning off drops a queued task, and claim never hands out one of a disabled resume', async () => {
+    const ctx = await setup();
+    const candidateId = ctx.candidateIds['flagged.test'];
+    const claim = async () => (await ctx.send('POST', `${BASE}/claim`, {}, 'flagged.test')).json().data.task;
+    await ctx.get(BASE, 'flagged.test');
+    ctx.raise.enqueue(candidateId, 'abc123', new Date().toISOString());
+    const off = (await ctx.send('PUT', BASE, { enabled: false }, 'flagged.test')).json().data;
+    expect(off).toMatchObject({ enabled: false, pending: false });
+    await ctx.send('PUT', BASE, { enabled: true }, 'flagged.test');
+    expect(await claim()).toBeNull();
+
+    ctx.raise.enqueue(candidateId, 'abc123', new Date().toISOString());
+    ctx.raise.patchSchedule(candidateId, 'abc123', { enabled: false }, new Date().toISOString());
+    expect(await claim()).toBeNull();
+    ctx.raise.patchSchedule(candidateId, 'abc123', { enabled: true }, new Date().toISOString());
+    expect(await claim()).not.toBeNull();
+  });
+
+  it.each([null, 'actions_on_behalf-v1.0'])('B787: does not need the apply mandate (consent: %s)', async (versionId) => {
+    const { get, send, raise, candidateIds, databasePath } = await setup();
+    if (versionId) {
+      const consents = new SqliteCapabilityConsentStore({ databasePath });
+      consents.recordConsent({ userId: candidateIds['flagged.test'], capability: 'actions_on_behalf', versionId });
+      consents.close();
+    }
+    await get(BASE, 'flagged.test');
+    expect(queueDueRaises(raise, new Date(Date.now() + 3_600_000), () => true)).toBe(1);
+    expect((await send('POST', `${BASE}/claim`, {}, 'flagged.test')).json().data.task.resumeId).toBe('abc123');
   });
 
   it('captcha pauses 24 hours and the scheduler skips it', async () => {
@@ -118,6 +163,7 @@ describe('b640 hh raise routes', () => {
     await ctx.send('POST', `${BASE}/${taskId}/result`, { outcome: 'foreign_page' }, 'flagged.test');
     const retried = await ctx.send('POST', `${BASE}/retry`, {}, 'flagged.test');
     expect(retried.statusCode).toBe(200);
+    expect(retried.json().data.pending).toBe(true);
     expect((await ctx.send('POST', `${BASE}/claim`, {}, 'flagged.test')).json().data.task).not.toBeNull();
   });
 
@@ -131,6 +177,87 @@ describe('b640 hh raise routes', () => {
     const response = await ctx.send('POST', `${BASE}/retry`, {}, 'flagged.test');
     expect(response.statusCode).toBe(409);
     expect(response.json().error.details.raiseAvailableAt).toBe('2026-11-19T12:00:00.000Z');
+  });
+
+  describe('выбор резюме для автоподнятия (a11)', () => {
+    const FLAGGED = 'flagged.test';
+    async function twoResumes() {
+      const ctx = await setup();
+      const hh = new SqliteHhSessionRepository({ databasePath: ctx.databasePath, encryptionKey: Buffer.alloc(32, 8) });
+      const save = (ids: string[]) =>
+        hh.saveSnapshot(ctx.candidateIds[FLAGGED], {
+          resumes: ids.map((id) => ({ id, title: `Резюме ${id}`, updatedLabel: 'обновлено 3 ноября' })), selected: null, readAt: '2026-11-19T00:00:00.000Z',
+        });
+      closers.push(async () => hh.close());
+      save(['abc123', 'def456']);
+      const state = async () => (await ctx.get(BASE, FLAGGED)).json().data;
+      const choose = (resumeId: string, enabled = true) => ctx.send('PUT', BASE, { enabled, resumeId }, FLAGGED);
+      return { ...ctx, save, state, choose };
+    }
+
+    it('lists the resumes and keeps the chosen one', async () => {
+      const { state, choose } = await twoResumes();
+      expect((await state()).resumes).toEqual([
+        { id: 'abc123', title: 'Резюме abc123', updatedLabel: 'обновлено 3 ноября' },
+        { id: 'def456', title: 'Резюме def456', updatedLabel: 'обновлено 3 ноября' },
+      ]);
+      expect((await choose('def456')).json().data).toMatchObject({ resumeId: 'def456', enabled: true });
+      expect(await state()).toMatchObject({ resumeId: 'def456', enabled: true });
+    });
+
+    it('raises only the chosen resume, dropping a queued raise of the former', async () => {
+      const { state, choose, raise, send } = await twoResumes();
+      await state();
+      const later = new Date(Date.now() + 3_600_000);
+      expect(queueDueRaises(raise, later, () => true)).toBe(1);
+      await choose('def456');
+      expect(queueDueRaises(raise, later, () => true)).toBe(1);
+      const claim = async () => (await send('POST', `${BASE}/claim`, {}, FLAGGED)).json().data.task;
+      expect((await claim()).resumeId).toBe('def456');
+      expect(await claim()).toBeNull();
+    });
+
+    it('keeps the 4 hours of a resume raised before', async () => {
+      const { state, choose, raise, candidateIds } = await twoResumes();
+      await state();
+      const raisedAt = new Date().toISOString();
+      raise.patchSchedule(candidateIds[FLAGGED], 'def456', { lastRaisedAt: raisedAt, nextRaiseAt: null }, raisedAt);
+      const { nextRaiseAt } = (await choose('def456')).json().data;
+      expect(Date.parse(nextRaiseAt) - Date.parse(raisedAt)).toBeGreaterThanOrEqual(4 * 3_600_000);
+    });
+
+    it('carries the hh pause over, so switching does not bypass a captcha', async () => {
+      const { state, choose, raise, candidateIds } = await twoResumes();
+      await state();
+      const until = new Date(Date.now() + 20 * 3_600_000).toISOString();
+      raise.patchSchedule(candidateIds[FLAGGED], 'abc123', { pauseReason: 'captcha', pausedUntil: until }, until);
+      expect((await choose('def456')).json().data).toMatchObject({ pauseReason: 'captcha', pausedUntil: until });
+      expect(queueDueRaises(raise, new Date(Date.now() + 3_600_000), () => true)).toBe(0);
+    });
+
+    it('a switched-off raise stays off after choosing', async () => {
+      const { state, choose, raise } = await twoResumes();
+      await choose('abc123', false);
+      await choose('def456', false);
+      expect(await state()).toMatchObject({ resumeId: 'def456', enabled: false });
+      expect(queueDueRaises(raise, new Date(Date.now() + 3_600_000), () => true)).toBe(0);
+    });
+
+    it('a chosen resume gone from hh.ru gives way to the first one', async () => {
+      const { save, state, choose, raise } = await twoResumes();
+      await choose('def456');
+      save(['abc123']);
+      expect(await state()).toMatchObject({ resumeId: 'abc123', enabled: true });
+      expect(queueDueRaises(raise, new Date(Date.now() + 3_600_000), () => true)).toBe(1);
+    });
+
+    it('does not retry a resume that is not chosen', async () => {
+      const { choose, send, raise, candidateIds } = await twoResumes();
+      const now = new Date().toISOString();
+      raise.patchSchedule(candidateIds[FLAGGED], 'abc123', { lastResult: 'error', lastReason: 'error', lastResultAt: now }, now);
+      await choose('def456');
+      expect((await send('POST', `${BASE}/retry`, { resumeId: 'abc123' }, FLAGGED)).statusCode).toBe(409);
+    });
   });
 
   it('leaves the old action tables untouched', async () => {

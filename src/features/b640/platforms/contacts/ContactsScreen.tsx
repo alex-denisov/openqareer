@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { Icon, PagedList, StatusLine } from '../../kit';
 import { useShell } from '../../shell/ShellContext';
 import { ContactRow } from './ContactRow';
 import { ContactsControls } from './ContactsControls';
+import { pluralRu } from '../../vacancies/format';
 import { formatCount } from './contactsModel';
 import { useContacts, type ContactsState } from './useContacts';
+import './contacts.css';
 
 function RetryLine({ onRetry }: { readonly onRetry: () => void }) {
   return (
@@ -56,6 +59,7 @@ function NothingFound({ onReset }: { readonly onReset: () => void }) {
 
 function Rows({ state }: { readonly state: ContactsState }) {
   const { criteria } = state;
+  const [openId, setOpenId] = useState<string | null>(null);
   if (state.load === 'loading') return <StatusLine state="wait" text="Загружаем контакты…" />;
   if (state.load === 'error') return <RetryLine onRetry={state.retry} />;
   if (!state.items.length) return <NothingFound onReset={state.resetAll} />;
@@ -66,7 +70,17 @@ function Rows({ state }: { readonly state: ContactsState }) {
       total={state.total}
       onLoadMore={state.loadMore}
       listClassName="rows exp-rows ct-rows"
-      renderItem={(contact) => <ContactRow contact={contact} />}
+      renderItem={(contact) => (
+        <ContactRow
+          contact={contact}
+          open={openId === contact.id}
+          onToggle={() => setOpenId((now) => (now === contact.id ? null : contact.id))}
+          onSent={(at) => {
+            state.patchStatus(contact.id, contact.status.state, 'written', at);
+            setOpenId(null);
+          }}
+        />
+      )}
     />
   );
 }
@@ -77,7 +91,8 @@ function List({ state }: { readonly state: ContactsState }) {
       <section className="col ct-list" aria-labelledby="ct-title">
         <div className="list-head">
           <h2 id="ct-title">
-            <span className="num">{formatCount(state.total)}</span> человек, которые нанимают
+            <span className="num">{formatCount(state.total)}</span>{' '}
+            {pluralRu(state.total, 'человек, который нанимает', 'человека, которые нанимают', 'человек, которые нанимают')}
           </h2>
         </div>
         <ContactsControls state={state} />

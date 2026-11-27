@@ -42,6 +42,22 @@ function application(
   };
 }
 
+/** Те же отклики, но черновик — на сайте компании: отклик hh.ru своего резюме не готовит. */
+export function siteDraft(): Stub[] {
+  return responseFixtures().map((item) =>
+    item.id === 'a-draft'
+      ? {
+          ...item,
+          vacancy: {
+            ...(item.vacancy as object),
+            url: 'https://greencode.example/jobs/1',
+            source: 'company_site',
+          },
+        }
+      : item,
+  );
+}
+
 export function responseFixtures(): Stub[] {
   return [
     application('a-draft', 'Head of Engineering', 'Гринкод', {
@@ -49,6 +65,8 @@ export function responseFixtures(): Stub[] {
       appliedAt: null,
       whoseTurn: 'candidate',
       updatedAt: iso(1),
+      // Черновик: письмо ещё не одобрено, к отклику не привязано (B723).
+      materials: { coverLetter: false, resume: false },
     }),
     application('a-failed', 'Руководитель платформы', 'Карта Технологии', {
       deliveryReceipt: { kind: 'failure_note', value: 'Не доставлено: нужен вход в hh.ru' },
@@ -152,6 +170,7 @@ function reviewPayload(
   ready: boolean,
   reason: Record<string, unknown> | null,
   helped: boolean | null,
+  resumeFact: boolean,
 ) {
   const rejection = {
     applicationId: 'a-rejected',
@@ -175,13 +194,26 @@ function reviewPayload(
         total: 6,
       },
       recommendations: [],
+      checks: {
+        since: '2026-10-02T10:00:00.000Z',
+        unfinished: { count: 3, total: 6 },
+        salaryBelow: { count: 2, total: 6, floor: 500000, currency: 'RUB' },
+        late: { count: 4, total: 6 },
+      },
     };
   }
   return {
     ...base,
     state: 'ready',
     sentCount: 22,
-    firstStep: { kind: 'show_in_resume', ...TEAM_GUESS, quote: undefined, count: 2, total: 3 },
+    firstStep: {
+      kind: 'show_in_resume',
+      ...TEAM_GUESS,
+      quote: undefined,
+      count: 2,
+      total: 3,
+      ...(resumeFact ? { resumeFactId: RESUME_FACT_ID } : {}),
+    },
     recommendations: [
       {
         kind: 'match_vacancies',
@@ -194,6 +226,147 @@ function reviewPayload(
   };
 }
 
+/** Факт из беседы и готовый пункт резюме из него (k06). */
+const RESUME_FACT_ID = 'fact-team';
+export const RESUME_VARIANT = 'Вёл бэкенд: в группе 18 человек.';
+export const RESUME_BULLET = 'Руководил группой бэкенда из 18 человек.';
+
+/** Разговор раздела, запись из него и место работы, куда встанет пункт. */
+/** B786: прямая просьба консультанту и его ответ; правка K6 встаёт под ответом. */
+export const RESUME_ASK = 'Поправь в резюме формулировку опыта в Сфере Платежи';
+
+/** B786: строка резюме, которую переписывает k06, когда новых фактов для места нет. */
+export const RESUME_BEFORE = 'Вела бэкенд платёжного шлюза для интернет-магазинов.';
+
+type Asked = false | 'fact' | 'reword';
+
+function askedReply(asked: Asked, messageId: string) {
+  if (!asked) return [];
+  const edit = asked === 'fact' ? { resumeFactId: RESUME_FACT_ID } : { resumeRewordPlace: 'e1' };
+  return [{ messageId, actions: [], memoryIds: [], ...edit }];
+}
+
+async function mockResumeConversation(page: Page, asked: Asked): Promise<void> {
+  const said = {
+    id: 'u1',
+    role: 'user',
+    content: 'Команда была 18 человек.',
+    createdAt: '2026-11-11T10:00:00.000Z',
+  };
+  const ask = { id: 'u2', role: 'user', content: RESUME_ASK, createdAt: iso(0) };
+  const answer = {
+    id: 'a2',
+    role: 'assistant',
+    content: 'Правка готова ниже: в резюме она встанет после «Применить».',
+    createdAt: iso(0),
+  };
+  const memory = [
+    {
+      id: RESUME_FACT_ID,
+      kind: 'fact',
+      domain: 'outcome',
+      statement: 'Сфера Платежи: команда 18 человек',
+      confidence: 'candidate-confirmed',
+      sourceMessageIds: ['u1'],
+      sensitive: false,
+      status: 'confirmed',
+    },
+  ];
+  const candidate = {
+    id: 'candidate-1',
+    dataClass: 'synthetic',
+    locale: 'ru-RU',
+    createdAt: iso(40),
+  };
+  await page.route('**/api/v1/candidate/me/messages**', (route) =>
+    route.fulfill({ json: { data: [said], meta: { nextOffset: null } } }),
+  );
+  await page.route('**/api/v1/candidate/me?memoryOffset=*', (route) =>
+    route.fulfill({
+      json: {
+        data: { candidate, messages: [], memory, turns: [] },
+        meta: { memory: { nextOffset: null }, turns: { nextOffset: null } },
+      },
+    }),
+  );
+  const current = {
+    id: 'current',
+    stage: 'responses',
+    startedAt: said.createdAt,
+    closedAt: null,
+    messages: asked ? [said, ask, answer] : [said],
+    replies: askedReply(asked, answer.id),
+    analysisPending: false,
+  };
+  await page.route('**/api/v1/candidate/consultant/current**', (route) =>
+    route.fulfill({ json: { data: current } }),
+  );
+  const entry = {
+    id: 'e1',
+    chronologyMemoryId: 'm-e1',
+    title: 'Руководитель группы',
+    employer: 'Сфера Платежи',
+    startDate: '2018',
+    current: false,
+    bulletMemoryIds: [],
+  };
+  await page.route('**/api/v1/candidate/resume', (route) =>
+    route.fulfill({ json: { data: { draft: { candidate: {}, experience: [entry] } } } }),
+  );
+}
+
+/** Предложение консультанта: запись и отмена попадают в `calls`. */
+function rewordReply(calls: string[], fails: { left: number }) {
+  calls.push('reword');
+  if (fails.left > 0) {
+    fails.left -= 1;
+    const error = { code: 'reword_failed', message: 'Не получилось', retryable: true };
+    return { status: 502, json: { error } };
+  }
+  const bullets = [
+    { text: RESUME_BULLET, sourceFactIds: ['line', RESUME_FACT_ID], replacesMemoryId: 'line' },
+  ];
+  const proposal = {
+    id: 'p1',
+    places: [{ experienceId: 'e1', bullets }],
+    leftOutFactIds: [],
+    sourceFactIds: ['line', RESUME_FACT_ID],
+  };
+  return { status: 200, json: { data: { proposal, before: RESUME_BEFORE } } };
+}
+
+async function mockFactRewrite(page: Page, calls: string[], rewordFails = 0): Promise<void> {
+  const fails = { left: rewordFails };
+  await page.route('**/api/v1/candidate/experience-fact-rewrite**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/reword')) return route.fulfill(rewordReply(calls, fails));
+    if (path.endsWith('/apply')) {
+      const { only, variantId } = route.request().postDataJSON() as {
+        only: string[];
+        variantId?: string;
+      };
+      calls.push(['apply', only.join(','), variantId].filter(Boolean).join(' '));
+      const rewrite = { id: 'p1', appliedAt: iso(0), bullets: [], declinedFactIds: [] };
+      return route.fulfill({ json: { data: { rewrite } } });
+    }
+    if (path.endsWith('/variants')) {
+      const made = route.request().method() === 'POST';
+      if (made) calls.push('variant');
+      const variant = { id: 'v1', position: 1, text: RESUME_VARIANT, payload: null };
+      const list = { variants: made ? [variant] : [], remaining: made ? 2 : 3 };
+      return route.fulfill({ status: made ? 201 : 200, json: { data: list } });
+    }
+    if (path.endsWith('/revert')) {
+      calls.push('revert');
+      return route.fulfill({ json: { data: { reverted: true } } });
+    }
+    const bullets = [{ text: RESUME_BULLET, sourceFactIds: [RESUME_FACT_ID] }];
+    const places = [{ experienceId: 'e1', bullets }];
+    const proposal = { id: 'p1', places, leftOutFactIds: [], sourceFactIds: [RESUME_FACT_ID] };
+    return route.fulfill({ json: { data: { proposal } } });
+  });
+}
+
 const reviewState: { reason: Record<string, unknown> | null; helped: boolean | null } = {
   reason: null,
   helped: null,
@@ -204,13 +377,20 @@ async function mockReview(
   route: Route,
   path: string,
   method: string,
-  ready: boolean,
+  options: ResponsesMockOptions,
   calls: string[],
 ) {
   const base = '/api/v1/candidate/applications/rejection-review';
   if (path === base && method === 'GET') {
     await route.fulfill({
-      json: { data: reviewPayload(ready, reviewState.reason, reviewState.helped) },
+      json: {
+        data: reviewPayload(
+          options.reviewReady === true,
+          reviewState.reason,
+          reviewState.helped,
+          options.resumeFact === true,
+        ),
+      },
     });
     return true;
   }
@@ -240,8 +420,16 @@ export interface ResponsesMockOptions {
   readonly failList?: number;
   /** Разбор отказов готов (откликов хватает); иначе — «мало данных». */
   readonly reviewReady?: boolean;
+  /** Факт рекомендации есть в беседе, но не в резюме: «Поправить резюме». */
+  readonly resumeFact?: boolean;
+  /** B786: в разговоре кандидат попросил поправить резюме, под ответом готовая правка. */
+  readonly askedResumeEdit?: boolean | 'reword';
+  /** B786: сколько первых запросов новой формулировки строки падают. */
+  readonly rewordFails?: number;
   /** Тариф: на Free автооткликов нет. По умолчанию Pro. */
   readonly plan?: 'free' | 'pro';
+  /** Сводка B680: какие отклики — автоотклики. Без опции сводка не отвечает. */
+  readonly autoIds?: readonly string[];
 }
 
 export interface ResponsesMock {
@@ -287,7 +475,7 @@ export async function mockResponses(
         });
         return true;
       }
-      if (await mockReview(route, path, method, options.reviewReady === true, calls)) return true;
+      if (await mockReview(route, path, method, options, calls)) return true;
       const match = path.match(/^\/api\/v1\/candidate\/applications\/([^/]+)(\/events)?$/u);
       const record = match
         ? applications.find((item) => item.id === decodeURIComponent(match[1]!))
@@ -310,6 +498,11 @@ export async function mockResponses(
     },
   });
 
+  await mockFactRewrite(page, calls, options.rewordFails ?? 0);
+  if (options.resumeFact || options.askedResumeEdit) {
+    const asked = options.askedResumeEdit;
+    await mockResumeConversation(page, asked === 'reword' ? 'reword' : asked ? 'fact' : false);
+  }
   await page.route('**/api/v1/candidate/automation**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     const method = route.request().method();
@@ -415,6 +608,13 @@ export async function mockResponses(
       json: { data: { key: `new-${companies.length}`, name: body.companyName } },
     });
   });
+
+  if (options.autoIds) {
+    const autoApplicationIds = options.autoIds;
+    await page.route('**/api/v1/candidate/b640/responses/summary', (route) =>
+      route.fulfill({ json: { data: { autoApplicationIds, approvedLetterIds: [] } } }),
+    );
+  }
 
   return { calls };
 }

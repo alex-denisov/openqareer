@@ -65,8 +65,22 @@ export interface HarnessOptions {
   readonly engine?: Record<string, unknown>;
   /** Подставной писатель писем: реальных вызовов моделей в тестах нет. */
   readonly coverLetterWriter?: CoverLetterWriter;
+  /** B753: подставной писатель сообщений знакомому и рекрутёру. */
+  readonly contactMessageWriter?: CoverLetterWriter;
+  /** B642: подставной Whisper; реальных вызовов в тестах нет. */
+  readonly recordingTranscriber?: import('../providers/whisperTranscriber').RecordingTranscriber;
+  /** B642: флаг записи разговоров; по умолчанию включён, чтобы маршруты были. */
+  readonly interviewRecording?: boolean;
+  /** B750: ключи моделей для маршрутов, что сами строят провайдера; fetch подменяет тест. */
+  readonly providerCredentials?: ServerConfig['providerCredentials'];
+  /** B751: подставной разбор интервью. */
+  readonly interviewDebriefWriter?: import('../providers/interviewDebriefWriter').InterviewDebriefWriter;
+  /** B780: подставной судья критериев ответа. */
+  readonly interviewAnswerJudge?: import('../providers/interviewAnswerJudge').InterviewAnswerJudge;
   /** Подставной автор черновиков LinkedIn: тесты не зовут модель. */
   readonly linkedinDraftWriter?: { writeDraft(input: unknown): Promise<{ text: string }> };
+  /** Подставной переписчик фактов (B645: тексты профиля LinkedIn): тесты не зовут модель. */
+  readonly experienceFactRewriter?: unknown;
 }
 
 const PASSWORD = 'candidate-password-for-tests';
@@ -99,8 +113,8 @@ export async function createB640Harness(options: HarnessOptions) {
     dataEncryptionKey: Buffer.alloc(32, 8), databasePath,
     model: 'gpt-5.6-sol', staticRoot: directory, release: 'test', logLevel: options.logLines ? 'info' : 'fatal',
     secureCookies: false, allowedOrigins: ['http://localhost:3000'], seedAccounts: [],
-    cabinetB640Usernames: ['flagged.test', 'other.test'],
-    ...(options.billing ? { billingEnforcement: true } : {}),
+    cabinetB640Usernames: ['flagged.test', 'other.test'], interviewRecordingEnabled: options.interviewRecording ?? true,
+    ...(options.billing ? { billingEnforcement: true } : {}), ...(options.providerCredentials && { providerCredentials: options.providerCredentials }),
   } as ServerConfig;
   let poolReads = 0;
   let poolHangs = false;
@@ -111,7 +125,7 @@ export async function createB640Harness(options: HarnessOptions) {
   };
   const app = await buildApp({
     config, coachProvider: successProvider, candidateStore: candidates, authService: auth,
-    multiSourceVacancyEngine: engine as never, serveStatic: false, linkedinDraftWriter: options.linkedinDraftWriter as never, ...(options.coverLetterWriter && { coverLetterWriter: options.coverLetterWriter }),
+    multiSourceVacancyEngine: engine as never, serveStatic: false, ...(options.recordingTranscriber ? { recordingTranscriber: options.recordingTranscriber } : {}), ...(options.interviewDebriefWriter ? { interviewDebriefWriter: options.interviewDebriefWriter } : {}), ...(options.interviewAnswerJudge ? { interviewAnswerJudge: options.interviewAnswerJudge } : {}), linkedinDraftWriter: options.linkedinDraftWriter as never, ...(options.experienceFactRewriter ? { experienceFactRewriter: options.experienceFactRewriter as never } : {}), ...(options.coverLetterWriter && { coverLetterWriter: options.coverLetterWriter }), ...(options.contactMessageWriter && { contactMessageWriter: options.contactMessageWriter }),
     ...(options.logLines ? { logDestination: { write: (line: string) => { options.logLines?.push(line); } } } : {}),
   });
   const get = (url: string, user?: HarnessUser) =>

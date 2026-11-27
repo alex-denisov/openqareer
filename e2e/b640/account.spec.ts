@@ -39,6 +39,8 @@ interface AccountMocks {
 
 interface Calls {
   preferenceWrites: number;
+  invitationWrites: number;
+  deliveryWrites: object[];
   linkRequests: number;
   disconnected: string[];
   passwordChanges: number;
@@ -47,6 +49,8 @@ interface Calls {
 async function openAccount(page: Page, path: string, mocks: AccountMocks = {}): Promise<Calls> {
   const calls: Calls = {
     preferenceWrites: 0,
+    invitationWrites: 0,
+    deliveryWrites: [],
     linkRequests: 0,
     disconnected: [],
     passwordChanges: 0,
@@ -78,6 +82,15 @@ async function openAccount(page: Page, path: string, mocks: AccountMocks = {}): 
       await route.fulfill({ json: { data: { emailAvailable: true, telegram, mandatory: {} } } });
       return true;
     }
+    if (pathname.endsWith('/telegram/state')) {
+      // B690: бот «подтверждает» при следующем чтении состояния, имя приходит с ним.
+      if (state.linkIssued) state.telegram = true;
+      const data = state.telegram
+        ? { state: 'connected', expiresAt: null, username: '@msokolova_dev' }
+        : { state: 'none', expiresAt: null, username: null };
+      await route.fulfill({ json: { data } });
+      return true;
+    }
     if (pathname.endsWith('/telegram/link')) {
       calls.linkRequests += 1;
       state.linkIssued = true;
@@ -99,6 +112,21 @@ async function openAccount(page: Page, path: string, mocks: AccountMocks = {}): 
     cabinetB640: true,
     accountNotificationHandler: notifications,
     billing: { initialPlan: 'pro' },
+  });
+  await page.route('**/api/v1/candidate/b640/notifications/preferences/invitations', (route) => {
+    const method = route.request().method();
+    if (method === 'PUT') calls.invitationWrites += 1;
+    const body = method === 'PUT' ? (route.request().postDataJSON() as object) : {};
+    const saved = { key: 'ev-invitation', app: true, email: true, telegram: true, ...body };
+    return route.fulfill({ json: { data: saved } });
+  });
+  let delivery = { frequency: 'immediate', hideCompany: false };
+  await page.route('**/api/v1/candidate/b640/notifications/preferences/delivery', (route) => {
+    if (route.request().method() === 'PUT') {
+      delivery = route.request().postDataJSON() as typeof delivery;
+      calls.deliveryWrites.push(delivery);
+    }
+    return route.fulfill({ json: { data: delivery } });
   });
   await page.route('**/api/v1/candidate/connections**', (route) => {
     const platform = new URL(route.request().url()).pathname.split('/connections/')[1];
@@ -128,6 +156,12 @@ test.describe('B661: «Аккаунт» нового кабинета, част�
   test('n00: разделы аккаунта ведут в свои экраны', async ({ page }) => {
     await openAccount(page, '/app/account');
     const screen = page.locator('[data-b640-node="n00"]');
+    // Макет n00 (B645): «Назад: Сегодня» — в пути на 1440, в шапке на 390.
+    await expect(screen).toHaveCSS('padding-top', '8px');
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
+    const back = page.locator(phone ? '.topbar .mob-back' : '.crumbs .crumb-back');
+    await expect(back).toHaveAccessibleName('Назад: Сегодня');
+    await expect(page.locator('.topbar h1')).toHaveCSS('font-size', phone ? '17px' : '20px');
     const links = screen.locator('.set-list a.set-t.set-a');
     await expect(links).toHaveText([
       'Вход и безопасность',
@@ -168,6 +202,19 @@ test.describe('B661: «Аккаунт» нового кабинета, част�
     await expect(page).toHaveURL(/\/app\/account\/notifications$/u);
   });
 
+  test('n03: вход в hh.ru истёк — предупреждение в строке hh', async ({ page }) => {
+    await openAccount(page, '/app/account/connections');
+    await page.route('**/api/v1/candidate/b640/hh/session', (route) =>
+      route.fulfill({ json: { data: { expired: true, since: '2026-11-19T10:00:00.000Z' } } }),
+    );
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    const screen = page.locator('[data-b640-node="n03"]');
+    const hh = screen.locator('.cn-row').nth(1);
+    await expect(hh.locator('.set-v.is-warn')).toHaveText('вход истёк');
+    await expect(hh.getByRole('button', { name: 'Отключить hh.ru' })).toBeVisible();
+    await expectGates(page);
+  });
+
   test('n02: переключатель сохраняется, Telegram привязывается на месте', async ({ page }) => {
     const calls = await openAccount(page, '/app/account/notifications');
     const screen = page.locator('[data-b640-node="n02"]');
@@ -176,8 +223,15 @@ test.describe('B661: «Аккаунт» нового кабинета, част�
       'Почта',
       'Telegram',
     ]);
-    await expect(screen.locator('.set-mx:not(.is-head)')).toHaveCount(6);
+    await expect(screen.locator('.set-mx:not(.is-head)')).toHaveCount(7);
+    await expect(screen.locator('.set-mx:not(.is-head) .set-t').first()).toHaveText('Приглашения');
     await expectGates(page);
+    const invitations = screen.getByRole('switch', { name: 'Приглашения: Почта' });
+    await expect(invitations).toBeChecked();
+    await invitations.uncheck();
+    await expect.poll(() => calls.invitationWrites).toBe(1);
+    await expect(invitations).not.toBeChecked();
+    expect(calls.preferenceWrites).toBe(0);
     const digest = screen.getByRole('switch', { name: 'Итоги недели: Приложение' });
     await expect(digest).not.toBeChecked();
     await digest.check();
@@ -192,7 +246,7 @@ test.describe('B661: «Аккаунт» нового кабинета, част�
       'https://t.me/openqareer_bot?start=mock-code',
     );
     await expectGates(page);
-    const linked = screen.locator('p.set-res', { hasText: 'Telegram подключён' });
+    const linked = screen.locator('p.set-res', { hasText: 'Telegram · @msokolova_dev' });
     await expect(linked).toBeVisible({ timeout: 10_000 });
     await expect(screen.getByRole('switch', { name: 'Ответы: Telegram' })).toBeVisible();
     await linked.getByRole('button', { name: 'Отвязать' }).click();
@@ -200,7 +254,20 @@ test.describe('B661: «Аккаунт» нового кабинета, част�
       screen.getByRole('switch', { name: /Ответы: Telegram — подключить/u }),
     ).toBeVisible();
     expect(calls.linkRequests).toBe(1);
-    await expect(screen).not.toContainText(/пока недоступно|Как часто/iu);
+    await expect(screen).not.toContainText(/пока недоступно/iu);
+
+    const how = screen.getByRole('radiogroup', { name: 'Как часто' });
+    await expect(how.getByRole('radio', { name: 'Сразу' })).toBeChecked();
+    await how.getByRole('radio', { name: 'Раз в день' }).check();
+    await expect.poll(() => calls.deliveryWrites.length).toBe(1);
+    await expect(how.getByRole('radio', { name: 'Раз в день' })).toBeChecked();
+    const hide = screen.getByRole('switch', { name: /Не показывать название компании/u });
+    await hide.check();
+    await expect
+      .poll(() => calls.deliveryWrites.at(-1))
+      .toEqual({ frequency: 'daily', hideCompany: true });
+    await expect(hide).toBeChecked();
+    await expectGates(page);
   });
 
   test('n04: смена пароля на месте, устройства, выход', async ({ page }) => {

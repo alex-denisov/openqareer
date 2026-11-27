@@ -33,6 +33,8 @@ export interface CampaignMetaView {
     readonly value: readonly string[];
     readonly origin: 'explicit' | 'model' | 'profile' | 'default';
   };
+  /** B737: русское название роли поиска по её исходному названию (только где оно есть). */
+  readonly titlesRu?: Readonly<Record<string, string>>;
   readonly regions: {
     readonly value: readonly string[];
     readonly origin: 'explicit' | 'model' | 'profile' | 'default';
@@ -92,11 +94,16 @@ export async function getMatchedVacancyPage(
   offset = 0,
   signal?: AbortSignal,
   filters?: VacanciesScreenState,
+  part?: 'rows',
 ): Promise<MatchedVacancyPage> {
-  const response = await apiFetch(
-    `/api/v1/candidate/matched-vacancies?${matchedVacancyQuery(offset, filters)}`,
-    { signal },
+  const query = matchedPageQuery(offset, filters, part);
+  return readMatchedPage(
+    await apiFetch(`/api/v1/candidate/matched-vacancies?${query}`, { signal }),
   );
+}
+
+/** Страница подборки из ответа: прежний маршрут и список s07 отдают одну форму. */
+export async function readMatchedPage(response: Response): Promise<MatchedVacancyPage> {
   if (!response.ok) {
     await throwApiError(response);
   }
@@ -109,7 +116,10 @@ export async function getMatchedVacancyPage(
       pageOffsets?: unknown;
       campaign?: CampaignMetaView;
       candidateLevel?: string | null;
-      initialFilters?: VacanciesScreenState; sort?: VacancySort;
+      initialFilters?: VacanciesScreenState;
+      /** Роли поиска, которые сервер подставил сам. */
+      roles?: unknown;
+      sort?: VacancySort;
     };
   };
   if (!Array.isArray(envelope.data)) {
@@ -136,9 +146,59 @@ export async function getMatchedVacancyPage(
     ...(envelope.meta?.candidateLevel !== undefined
       ? { candidateLevel: envelope.meta.candidateLevel }
       : {}),
-    ...(envelope.meta?.initialFilters ? { initialFilters: envelope.meta.initialFilters } : {}),
+    ...initialFiltersOf(envelope.meta),
     ...(isVacancySort(envelope.meta?.sort) ? { sort: envelope.meta.sort } : {}),
   };
+}
+
+function initialFiltersOf(
+  meta: { initialFilters?: VacanciesScreenState; roles?: unknown } | undefined,
+): Pick<MatchedVacancyPage, 'initialFilters'> {
+  if (meta?.initialFilters) return { initialFilters: meta.initialFilters };
+  const roles = meta?.roles;
+  return Array.isArray(roles) && roles.every((role) => typeof role === 'string')
+    ? { initialFilters: { roles, regions: [], remoteOnly: false } }
+    : {};
+}
+
+/**
+ * B725: фасеты фильтров подборки — отдельным запросом; с B760 — после страницы 0 (`part=rows`).
+ * Прод 20.11: в них было 68 из 87 КБ первой страницы, и первая страница шла последней.
+ */
+export async function getMatchedVacancyFacets(
+  signal?: AbortSignal,
+  filters?: VacanciesScreenState,
+): Promise<MatchedVacancyFacets | undefined> {
+  const query = matchedPageQuery(0, filters, 'facets');
+  const response = await apiFetch(`/api/v1/candidate/matched-vacancies?${query}`, { signal });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  const envelope = (await response.json()) as { meta?: { facets?: MatchedVacancyFacets } };
+  return envelope.meta?.facets;
+}
+
+/** Страница 0 и фасеты несут пояс кандидата: от него считаются числа «Даты» (B729). */
+function matchedPageQuery(
+  offset: number,
+  filters: VacanciesScreenState | undefined,
+  part: 'rows' | 'facets' | undefined,
+): string {
+  const zone = offset === 0 ? candidateTimeZone() : undefined;
+  return (
+    matchedVacancyQuery(offset, filters) +
+    (zone ? `&tz=${encodeURIComponent(zone)}` : '') +
+    (part ? `&part=${part}` : '')
+  );
+}
+
+/** B729: числа «Даты» первой страницы считаются от начала дня кандидата. */
+function candidateTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function matchedVacancyQuery(offset: number, filters?: VacanciesScreenState): string {

@@ -1,8 +1,14 @@
 import type { B640ApplicationQuota, B640HiddenInfo, B640SortKey } from '../../../../shared/b640Vacancies';
+import type { ApplyTarget } from '../../../../shared/applyTarget';
 import type { MatchedVacancyItem } from '../../coach/cabinetTypes';
 import { apiFetch, malformedResponseError, readDataObject, throwApiError } from '../../coach/apiClient';
-import { matchedVacancyQuery } from '../../coach/matchedVacancyApi';
-import type { SortKey, SortState } from './list/sortModel';
+import {
+  matchedVacancyQuery,
+  readMatchedPage,
+  type MatchedVacancyPage,
+} from '../../coach/matchedVacancyApi';
+import type { VacanciesScreenState } from '../../vacancies/VacanciesScreenFilters';
+import { DEFAULT_LIST_SORT, type SortKey, type SortState } from './list/sortModel';
 
 const BASE = '/api/v1/candidate/b640';
 export const B640_PAGE_SIZE = 20;
@@ -58,11 +64,36 @@ export function poolFilterQuery(roles: readonly string[]): string {
 }
 
 /** Запрос порции подборки: прежние фильтры (роли), `sort`, `direction`, `offset`, `limit`. */
-export function matchedPageQuery(sort: SortState, roles: readonly string[], offset: number): string {
+/** Пояс кандидата для границы дня фильтра «Дата» — та же, что у числа роли «Карьеры». */
+function candidateTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}
+
+/** `days` — фильтр «Дата» (B726): сервер режет и считает подборку сам; `null` — без даты. */
+/** «Зарплата от» для сервера (B765): сумма в месяц в валюте фильтра. */
+export interface ServerMoney {
+  readonly from: number;
+  readonly currency: 'RUB' | 'USD' | 'EUR' | 'AED';
+}
+
+export function matchedPageQuery(
+  sort: SortState,
+  roles: readonly string[],
+  offset: number,
+  days: number | null = null,
+  money: ServerMoney | null = null,
+): string {
   const query = new URLSearchParams(matchedVacancyQuery(offset, { roles, regions: [], remoteOnly: false }));
   query.set('sort', SERVER_KEY[sort.key]);
   query.set('direction', sort.dir);
   query.set('limit', String(B640_PAGE_SIZE));
+  // Граница дня нужна и порядку «Даты».
+  if (days !== null || sort.key === 'date') query.set('tz', candidateTimeZone());
+  if (days !== null) query.set('days', String(days));
+  if (money !== null) {
+    query.set('money', String(money.from));
+    query.set('moneyCurrency', money.currency);
+  }
   return query.toString();
 }
 
@@ -71,9 +102,27 @@ export async function getSortedMatchedPage(
   roles: readonly string[],
   offset: number,
   signal?: AbortSignal,
+  days: number | null = null,
+  money: ServerMoney | null = null,
 ): Promise<PageResult<MatchedVacancyItem>> {
-  const response = await apiFetch(`${BASE}/matched-vacancies?${matchedPageQuery(sort, roles, offset)}`, { signal });
+  const response = await apiFetch(`${BASE}/matched-vacancies?${matchedPageQuery(sort, roles, offset, days, money)}`, {
+    signal,
+  });
   return readPage<MatchedVacancyItem>(response);
+}
+
+/**
+ * Первое чтение списка s07 (25.11: на холодном старте их было шесть): строки, число, фасеты и
+ * кампания одним запросом. Без `filters` роли поиска подставляет сервер.
+ */
+export async function getFirstListPage(
+  signal: AbortSignal,
+  filters?: VacanciesScreenState,
+): Promise<MatchedVacancyPage> {
+  const query = new URLSearchParams(matchedPageQuery(DEFAULT_LIST_SORT, filters?.roles ?? [], 0));
+  query.set('tz', candidateTimeZone());
+  if (!filters) query.set('roles', 'campaign');
+  return readMatchedPage(await apiFetch(`${BASE}/matched-vacancies?${query}`, { signal }));
 }
 
 export async function getApplicationQuota(signal?: AbortSignal): Promise<B640ApplicationQuota> {
@@ -87,4 +136,30 @@ export async function getVacancyCard(vacancyId: string, signal?: AbortSignal): P
   );
   if (typeof data.cluster?.id !== 'string' || !data.explanation) throw malformedResponseError();
   return data;
+}
+
+/** B797: сверить открытую карточку с площадкой. */
+export async function postVacancyLiveness(vacancyId: string): Promise<{ readonly closed: boolean }> {
+  const data = await readDataObject<{ closed: boolean }>(
+    await apiFetch(`${BASE}/vacancies/${encodeURIComponent(vacancyId)}/liveness`, {
+      method: 'POST',
+      body: '{}',
+    }),
+  );
+  if (typeof data.closed !== 'boolean') throw malformedResponseError();
+  return data;
+}
+
+/** B787: раскрыть адрес трекера, когда кандидат открыл отклик. */
+export async function postApplyTarget(
+  vacancyId: string,
+  signal?: AbortSignal,
+): Promise<ApplyTarget | null> {
+  const data = await readDataObject<{ applyTarget?: ApplyTarget | null }>(
+    await apiFetch(`${BASE}/vacancies/${encodeURIComponent(vacancyId)}/apply-target`, {
+      method: 'POST',
+      signal,
+    }),
+  );
+  return data.applyTarget ?? null;
 }

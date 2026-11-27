@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { parseHhResumeHtml, parseHhResumesList } from './hhResumeParser';
 
 describe('hhResumeParser', () => {
+  it('«О себе»: явно пустой раздел отличается от непрочитанного', () => {
+    const about = (html: string) => parseHhResumeHtml(html, 'https://hh.ru/resume/t').about;
+    expect(about('<div data-qa="resume-block-about"> </div>')).toBe('');
+    expect(about('<div data-qa="resume-block-about"><div></div><p>Текст</p></div>')).toBeUndefined();
+    expect(about('<div data-qa="resume-block-salary">Уровень дохода не указан</div>')).toBeUndefined();
+  });
+
   it('parses full structured resume html correctly', () => {
     const html = `
       <div data-qa="resume-personal-name">Мария Иванова</div>
@@ -65,7 +72,6 @@ describe('hhResumeParser', () => {
         id: 'live-token-542',
         title: 'Head of Product',
         url: 'https://hh.ru/resume/live-token-542',
-        updatedLabel: 'Готово к импорту',
       },
     ]);
   });
@@ -83,7 +89,6 @@ describe('hhResumeParser', () => {
         id: 'live-token-903',
         title: 'Менеджер по продукту',
         url: 'https://hh.ru/resume/live-token-903',
-        updatedLabel: 'Готово к импорту',
       },
     ]);
   });
@@ -127,7 +132,6 @@ describe('hhResumeParser', () => {
         id: 'live-token-731',
         title: 'Product Director',
         url: 'https://hh.ru/resume/live-token-731',
-        updatedLabel: 'Готово к импорту',
       },
     ]);
   });
@@ -145,6 +149,53 @@ describe('hhResumeParser', () => {
  *
  * The markup below is the live shape with the account's own values replaced.
  */
+describe('страница hh.ru/resume/<id>, разметка 25.11.2026', () => {
+  const step = (title: string, period: string, text: string, n: number) => `
+    <li data-qa="magritte-stepper-step"><div class="track"></div>
+      <div data-qa="magritte-stepper-step-content"><div>
+        <div><span>${title}</span></div><div><span>${period}</span></div>
+        <div class="clamp"><p>${text}</p></div>
+        <button data-qa="expand"><span>Развернуть</span></button>
+        <button data-qa="edit-experience-button-${n}"><svg><path d="M0"></path></svg></button>
+      </div></div>
+    </li>`;
+  const company = (name: string, steps: string) => `
+    <div data-qa="profile-experience-company-card"><div data-qa="cell"><div data-qa="cell-left-side">
+      <div data-qa="cell-text"><span data-qa="cell-text-content">${name}</span><span data-qa="cell-text-content">4 года</span></div>
+    </div></div><ol data-qa="magritte-stepper">${steps}</ol></div>`;
+  const page = (experience: string) => `
+    <main><div data-qa="resume-position-card"><h1 data-qa="resume-block-title-position">IT Директор / CIO / CTO</h1>
+      <div data-qa="resume-position-field-employmentForms"><div data-qa="cell-text-content">Постоянная работа</div></div></div>
+    <div data-qa="resume-list-card-experience"><div data-qa="title-container"><h4>Опыт работы</h4></div>${experience}</div>
+    <div data-qa="resume-about-card"><div data-qa="title-container"><h4>О себе</h4></div>
+      <div><p>Руковожу ИТ&nbsp;15 лет.</p><p>Строю команды.</p></div><button data-qa="resume-edit-button-about">Изменить</button></div>
+    <div data-qa="skills-card"><div data-qa="skill-tag-1"><div><span>ITIL</span></div></div></div></main>`;
+  const full = page(
+    company('Россети Цифра',
+      step('Директор по поддержке', 'Апрель 2023 — Октябрь 2025 (2 года и 7 месяцев)', 'Отвечал за поддержку.<br>Выручка 920 млн', 0) +
+      step('Руководитель группы', 'Май 2021 — Апрель 2023 (2 года)', 'Вёл группу', 1)) +
+      company('Kaspersky', step('Support Lead', 'April 2010 — present (2 years)', 'Premium support', 2)),
+  );
+
+  it('читает места по компаниям, «О себе» и навыки; условия поиска в «О себе» не попадают', () => {
+    const parsed = parseHhResumeHtml(full, 'https://hh.ru/resume/a');
+    expect(parsed.experience.map((p) => [p.employer, p.title, p.startDate, p.endDate, p.current, p.responsibilities])).toEqual([
+      ['Россети Цифра', 'Директор по поддержке', 'Апрель 2023', 'Октябрь 2025', false, ['Отвечал за поддержку.\nВыручка 920 млн']],
+      ['Россети Цифра', 'Руководитель группы', 'Май 2021', 'Апрель 2023', false, ['Вёл группу']],
+      ['Kaspersky', 'Support Lead', 'April 2010', undefined, true, ['Premium support']],
+    ]);
+    expect(parsed.about).toBe('Руковожу ИТ 15 лет.\nСтрою команды.');
+    expect(parsed.skills).toEqual(['ITIL']);
+    expect(parsed.targetRole).toBe('IT Директор / CIO / CTO');
+    expect(parsed.rawText).toContain('Выручка 920 млн');
+  });
+
+  it('незнакомая разметка опыта — места нет, а не выдумано', () => {
+    const parsed = parseHhResumeHtml(page('<div><div>Директор</div></div>'), 'https://hh.ru/resume/a');
+    expect(parsed.experience).toEqual([]);
+  });
+});
+
 describe('the hh.ru profile surface as it is served today', () => {
   const PROFILE_PAGE = `
     <div data-qa="resume-position-card" class="magritte-card___bhGKz">
@@ -217,7 +268,8 @@ describe('the hh.ru profile surface as it is served today', () => {
     expect(parsed.contact.email).toBe('candidate@example.test');
     expect(parsed.contact.phone).toBe('+7 900 000-00-00');
     expect(parsed.additional?.workSchedule).toContain('Постоянная работа');
-    expect(parsed.about).toContain('200 000 ₽');
+    expect(parsed.about).toBeUndefined();
+    expect(parsed.rawText).toContain('200 000 ₽');
   });
 
   it('reads the education level card', () => {
@@ -243,18 +295,39 @@ describe('the hh.ru profile surface as it is served today', () => {
   });
 });
 
+describe('B678: когда резюме обновлено — словами hh.ru, а не выдумкой', () => {
+  const now = new Date('2026-11-24T10:00:00+03:00');
+  const card = (stamp: string) =>
+    `<a href="/resume/ab12cd34"><h3>COO</h3><div data-qa="title-description">Обновлено <span>${stamp}</span></div></a>`;
+  const label = (html: string) => parseHhResumesList(html, now)[0]?.updatedLabel;
+
+  it('этот год — день и месяц, прошлый — год, сегодня — как у hh.ru', () => {
+    expect(label(card('3&nbsp;ноября&nbsp;2026&nbsp;в&nbsp;16:09'))).toBe('обновлено 3 ноября');
+    expect(label(card('3 ноября в 16:09'))).toBe('обновлено 3 ноября');
+    expect(label(card('12 мая 2023 в 09:30'))).toBe('обновлено в 2023');
+    expect(label(card('сегодня в 10:15'))).toBe('обновлено сегодня');
+  });
+
+  it('дата рядом со ссылкой берётся у своей карточки; без даты подписи нет', () => {
+    const html =
+      '<div><a href="/resume/ab12cd34">COO</a></div>' +
+      '<div><a href="/resume/ef56">CTO</a><p>Обновлено 3 ноября 2026 в 16:09</p></div>';
+    expect(parseHhResumesList(html, now).map((item) => item.updatedLabel)).toEqual([undefined, 'обновлено 3 ноября']);
+  });
+});
+
 describe('the resume card label the candidate picks from', () => {
   it('drops the update stamp hh.ru glues into the same link and decodes its entities', () => {
     const html =
       '<a data-qa="resume-card-link-260801" href="/resume/260801e7ff10">' +
       'Менеджер по продукту Обновлено 9&nbsp;августа&nbsp;2026&nbsp;в&nbsp;16:09</a>';
 
-    expect(parseHhResumesList(html)).toEqual([
+    expect(parseHhResumesList(html, new Date('2026-11-24T10:00:00+03:00'))).toEqual([
       {
         id: '260801e7ff10',
         title: 'Менеджер по продукту',
         url: 'https://hh.ru/resume/260801e7ff10',
-        updatedLabel: 'Готово к импорту',
+        updatedLabel: 'обновлено 9 августа',
       },
     ]);
   });

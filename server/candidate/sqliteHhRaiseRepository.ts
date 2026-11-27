@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import type { HhRaisePauseReason } from '../../shared/b640HhRaise';
+import type { HhRaiseOutcome, HhRaisePauseReason } from '../../shared/b640HhRaise';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 
 /** B699: расписание поднятия по резюме и очередь заданий клиенту. Только новые таблицы. */
@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS hh_raise_tasks (
   finished_at TEXT
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_hh_raise_tasks_open ON hh_raise_tasks(candidate_id, status);
+CREATE TABLE IF NOT EXISTS hh_raise_choices (
+  candidate_id TEXT PRIMARY KEY,
+  resume_id TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+) STRICT;
 `;
 
 export interface HhRaiseScheduleRow {
@@ -74,6 +79,30 @@ export class SqliteHhRaiseRepository {
     this.database.exec('PRAGMA journal_mode = WAL;');
     applySqliteBusyTimeout(this.database);
     this.database.exec(HH_RAISE_SCHEMA);
+    this.ensureOutcomeColumn();
+  }
+
+  private ensureOutcomeColumn(): void {
+    const known = () =>
+      (this.database.prepare('PRAGMA table_info(hh_raise_tasks)').all() as unknown as { name: string }[]).some(
+        ({ name }) => name === 'outcome',
+      );
+    if (known()) return;
+    try {
+      this.database.exec('ALTER TABLE hh_raise_tasks ADD COLUMN outcome TEXT');
+    } catch (error) {
+      // Соседний процесс мог добавить столбец первым.
+      if (!known()) throw error;
+    }
+  }
+
+  /** Окончания удачных поднятий с `since`. Прежние задания исхода не хранили: взятое и закрытое — поднятие. */
+  raisedAt(candidateId: string, since: string): string[] {
+    const rows = this.database
+      .prepare(`SELECT finished_at FROM hh_raise_tasks WHERE candidate_id = ? AND status = 'done'
+                AND claimed_at IS NOT NULL AND finished_at >= ? AND (outcome = 'ok' OR outcome IS NULL)`)
+      .all(candidateId, since) as unknown as { finished_at: string }[];
+    return rows.map((row) => row.finished_at);
   }
 
   close(): void {
@@ -106,6 +135,37 @@ export class SqliteHhRaiseRepository {
     return next;
   }
 
+  /** Резюме, которое кандидат выбрал для поднятия; `null` — ещё не выбирал. */
+  getChoice(candidateId: string): string | null {
+    const row = this.database
+      .prepare('SELECT resume_id FROM hh_raise_choices WHERE candidate_id = ?')
+      .get(candidateId) as { resume_id: string } | undefined;
+    return row?.resume_id ?? null;
+  }
+
+  /** Выбирает резюме: его расписание меняется, остальные выключаются. Задания выключенных из очереди снимаются. */
+  chooseResume(candidateId: string, resumeId: string, patch: HhRaiseSchedulePatch, now: string): HhRaiseScheduleRow {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      this.database
+        .prepare('INSERT OR REPLACE INTO hh_raise_choices (candidate_id, resume_id, updated_at) VALUES (?, ?, ?)')
+        .run(candidateId, resumeId, now);
+      this.database
+        .prepare('UPDATE hh_raise_schedules SET enabled = 0, updated_at = ? WHERE candidate_id = ? AND resume_id != ? AND enabled = 1')
+        .run(now, candidateId, resumeId);
+      this.database
+        .prepare(`UPDATE hh_raise_tasks SET status = 'done', finished_at = ?
+                  WHERE candidate_id = ? AND status = 'queued' AND (resume_id != ? OR ? = 0)`)
+        .run(now, candidateId, resumeId, patch.enabled === false ? 0 : 1);
+      const row = this.patchSchedule(candidateId, resumeId, patch, now);
+      this.database.exec('COMMIT');
+      return row;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
   /** Включённые расписания, которым пора в очередь; паузы и открытые задания отсеиваются. */
   listDue(now: string, limit: number): HhRaiseScheduleRow[] {
     const rows = this.database
@@ -119,6 +179,37 @@ export class SqliteHhRaiseRepository {
       )
       .all(now, now, limit) as unknown as ScheduleDb[];
     return rows.map(toRow);
+  }
+
+  /**
+   * B690: отметки входа hh.ru по расписаниям кандидата: последнее удачное поднятие (вход жив)
+   * и упоры в страницу входа после `aliveAfter` — первый и последний.
+   */
+  loginMarks(candidateId: string, aliveAfter: string | null): { raisedAt: string | null; loggedOutFrom: string | null } {
+    const raised = this.database
+      .prepare('SELECT MAX(last_raised_at) AS at FROM hh_raise_schedules WHERE candidate_id = ?')
+      .get(candidateId) as { at: string | null } | undefined;
+    const raisedAt = raised?.at ?? null;
+    const alive = [aliveAfter, raisedAt].filter((at): at is string => at !== null).sort().at(-1) ?? '';
+    const out = this.database
+      .prepare(
+        `SELECT MIN(last_result_at) AS at FROM hh_raise_schedules
+         WHERE candidate_id = ? AND pause_reason = 'logged_out' AND last_result_at > ?`,
+      )
+      .get(candidateId, alive) as { at: string | null } | undefined;
+    return { raisedAt, loggedOutFrom: out?.at ?? null };
+  }
+
+  /** B704: вход жив — пауза «нужен вход» снята со всех резюме кандидата, поднятие снова по расписанию. */
+  markAlive(candidateId: string, nextRaiseAt: string): number {
+    return Number(
+      this.database
+        .prepare(
+          `UPDATE hh_raise_schedules SET pause_reason = NULL, next_raise_at = COALESCE(next_raise_at, ?)
+           WHERE candidate_id = ? AND pause_reason = 'logged_out'`,
+        )
+        .run(nextRaiseAt, candidateId).changes,
+    );
   }
 
   hasOpenTask(candidateId: string, resumeId: string): boolean {
@@ -135,10 +226,13 @@ export class SqliteHhRaiseRepository {
     return id;
   }
 
-  /** Отдаёт клиенту самое раннее задание кандидата и помечает его выполняемым. */
+  /** Отдаёт клиенту самое раннее задание кандидата (кроме выключенных резюме) и помечает его выполняемым. */
   claim(candidateId: string, now: string): HhRaiseTask | null {
     const row = this.database
-      .prepare(`SELECT id, resume_id FROM hh_raise_tasks WHERE candidate_id = ? AND status = 'queued' ORDER BY queued_at LIMIT 1`)
+      .prepare(`SELECT id, resume_id FROM hh_raise_tasks t WHERE candidate_id = ? AND status = 'queued'
+                  AND NOT EXISTS (SELECT 1 FROM hh_raise_schedules s
+                    WHERE s.candidate_id = t.candidate_id AND s.resume_id = t.resume_id AND s.enabled = 0)
+                ORDER BY queued_at LIMIT 1`)
       .get(candidateId) as { id: string; resume_id: string } | undefined;
     if (!row) return null;
     const changed = this.database
@@ -148,12 +242,12 @@ export class SqliteHhRaiseRepository {
   }
 
   /** Закрывает выполняемое задание кандидата один раз; чужое или закрытое — null. */
-  finish(candidateId: string, taskId: string, now: string): HhRaiseTask | null {
+  finish(candidateId: string, taskId: string, now: string, outcome: HhRaiseOutcome): HhRaiseTask | null {
     const row = this.database
       .prepare(`SELECT resume_id FROM hh_raise_tasks WHERE id = ? AND candidate_id = ? AND status = 'running'`)
       .get(taskId, candidateId) as { resume_id: string } | undefined;
     if (!row) return null;
-    this.database.prepare(`UPDATE hh_raise_tasks SET status = 'done', finished_at = ? WHERE id = ?`).run(now, taskId);
+    this.database.prepare(`UPDATE hh_raise_tasks SET status = 'done', finished_at = ?, outcome = ? WHERE id = ?`).run(now, outcome, taskId);
     return { id: taskId, candidateId, resumeId: row.resume_id, status: 'done' };
   }
 
@@ -164,7 +258,7 @@ export class SqliteHhRaiseRepository {
   releaseStale(claimedBefore: string, now: string): number {
     return Number(
       this.database
-        .prepare(`UPDATE hh_raise_tasks SET status = 'done', finished_at = ? WHERE status = 'running' AND claimed_at <= ?`)
+        .prepare(`UPDATE hh_raise_tasks SET status = 'done', finished_at = ?, outcome = 'stale' WHERE status = 'running' AND claimed_at <= ?`)
         .run(now, claimedBefore).changes,
     );
   }

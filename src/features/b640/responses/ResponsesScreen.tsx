@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useId, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { listApplicationsPool, type ApplicationView } from '../../applications/applicationsApi';
 import { Button, Icon, Link, StatusLine } from '../kit';
+import { useOnReveal } from '../kit/screenActive';
 import { buildNodePath } from '../routes';
+import { rememberVacancy } from '../shell/vacancyNames';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
-import { AutomationBar } from './AutomationBar';
+import { AutomationBar, useAutomationLoad } from './AutomationBar';
+import { useResponseMarks } from './data/responseSummaryApi';
+import { useManualQueue } from './data/manualQueue';
 import { useAsync, type AsyncState } from './data/useAsync';
 import {
   DEFAULT_SORT,
   STAGE_CHIPS,
   chipCounts,
   filterRows,
+  markAuto,
   sortRows,
   type ListedResponse,
   type SortKey,
@@ -19,6 +24,7 @@ import {
 import { buildResponseRow, pluralRu } from './model/responseRow';
 import { ResponseDetail } from './ResponseDetail';
 import { ResponsesTable } from './ResponsesTable';
+import { ownPanelPath } from '../vacancies/list/ownPanelLink';
 
 const PAGE_SIZE = 20;
 
@@ -28,7 +34,7 @@ const SORT_MENU: readonly { readonly label: string; readonly sort: SortState }[]
   { label: 'По компании', sort: { key: 'company', direction: 'asc' } },
 ];
 
-async function loadResponses(signal: AbortSignal): Promise<readonly ApplicationView[]> {
+export async function loadResponses(signal: AbortSignal): Promise<readonly ApplicationView[]> {
   return (await listApplicationsPool({}, signal)).items;
 }
 
@@ -92,6 +98,15 @@ function SortMenu({ sort, onPick }: SortMenuProps) {
   );
 }
 
+function OwnResponseLink() {
+  return (
+    <Link className="row-act" to={ownPanelPath()}>
+      <Icon name="plus" />
+      Откликнулся сам — добавить
+    </Link>
+  );
+}
+
 function EmptyResponses({ nodeCode }: { readonly nodeCode: string }) {
   return (
     <div className="page" data-b640-node={nodeCode} data-b640-section="responses">
@@ -106,6 +121,7 @@ function EmptyResponses({ nodeCode }: { readonly nodeCode: string }) {
               Подобрать вакансии
             </Link>
           </div>
+          <OwnResponseLink />
         </div>
       </section>
     </div>
@@ -120,20 +136,33 @@ interface ListState {
 }
 
 function useResponsesList(): ListState {
-  const load = useCallback((signal: AbortSignal) => loadResponses(signal), []);
-  const { state, reload, setData } = useAsync(load, 'Отклики не загрузились.');
+  const { state, reload, setData } = useAsync(loadResponses, 'Отклики не загрузились.');
+  const marks = useResponseMarks();
+  const manual = useManualQueue();
   const all = useMemo<readonly ListedResponse[]>(() => {
     const now = new Date();
-    return (state.data ?? []).map((application) => ({
+    const rows = (state.data ?? []).map((application) => ({
       application,
-      row: buildResponseRow(application, now),
+      row: buildResponseRow(application, now, {
+        letterApproved: marks.approvedLetters.has(application.id),
+        manual: manual.get(application.id),
+      }),
     }));
-  }, [state.data]);
+    return markAuto(rows, marks.auto);
+  }, [state.data, marks, manual]);
   const onChanged = useCallback(
     (next: ApplicationView) =>
       setData((items) => items.map((item) => (item.id === next.id ? next : item))),
     [setData],
   );
+  useOnReveal(reload);
+  // Отклик, открытый из строки, называет вакансию с первого кадра.
+  useEffect(() => {
+    for (const { application, row } of all) {
+      const vacancyId = application.clusterId;
+      if (vacancyId) rememberVacancy(application.id, { vacancyId, title: row.role, company: row.company });
+    }
+  }, [all]);
   return { state, reload, all, onChanged };
 }
 
@@ -191,7 +220,7 @@ function ListHead({ titleId, total, counts, chips, onChips, sort, onSort }: Head
               aria-pressed={pressed}
               onClick={() => onChips(pressed ? chips.filter((id) => id !== chip.id) : [...chips, chip.id])}
             >
-              {`${chip.label} · ${counts[chip.id]}`}
+              {chip.id === 'auto' ? chip.label : `${chip.label} · ${counts[chip.id]}`}
             </button>
           );
         })}
@@ -274,9 +303,10 @@ function ListRows({ view, sort, onSort, opened, onToggle, onChanged }: RowsProps
 interface BodyProps extends ResponsesScreenProps {
   readonly list: ListState;
   readonly opened: ListedResponse | null;
+  readonly automation: ReturnType<typeof useAutomationLoad>;
 }
 
-function ListBody({ nodeCode, openId, list, opened }: BodyProps) {
+function ListBody({ nodeCode, openId, list, opened, automation }: BodyProps) {
   const { navigate } = useShell();
   const titleId = useId();
   const [chips, setChips] = useState<readonly StageChip[]>([]);
@@ -294,7 +324,7 @@ function ListBody({ nodeCode, openId, list, opened }: BodyProps) {
         </header>
       ) : null}
       <section className="col-wide ot-wrap" aria-labelledby={titleId}>
-        <AutomationBar />
+        <AutomationBar {...automation} />
         <ListHead
           titleId={titleId}
           total={list.all.length}
@@ -353,6 +383,9 @@ function ListFoot({ view, missing, onMore }: FootProps) {
           </Button>
         </div>
       ) : null}
+      <div className="vl-foot">
+        <OwnResponseLink />
+      </div>
     </>
   );
 }
@@ -367,13 +400,15 @@ export interface ResponsesScreenProps {
 export function ResponsesScreen({ nodeCode, openId }: ResponsesScreenProps) {
   const { navigate } = useShell();
   const list = useResponsesList();
+  const automation = useAutomationLoad();
   const opened = openId ? (list.all.find((item) => item.row.id === openId) ?? null) : null;
   useScreenChrome(
     nodeCode === 'o01c' ? { crumb: opened?.row.company, rootData: { mtight: '1' } } : {},
   );
   useEscapeToList(Boolean(openId), navigate);
 
-  if (!list.state.data) {
+  const waitsForBar = automation.state.status === 'loading' && !automation.state.data;
+  if (!list.state.data || (waitsForBar && list.all.length > 0)) {
     return (
       <div className="page two" data-b640-node={nodeCode} data-b640-section="responses">
         {list.state.status === 'error' ? (
@@ -387,5 +422,5 @@ export function ResponsesScreen({ nodeCode, openId }: ResponsesScreenProps) {
     );
   }
   if (list.all.length === 0) return <EmptyResponses nodeCode={nodeCode} />;
-  return <ListBody nodeCode={nodeCode} openId={openId} list={list} opened={opened} />;
+  return <ListBody nodeCode={nodeCode} openId={openId} list={list} opened={opened} automation={automation} />;
 }

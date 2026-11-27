@@ -12,8 +12,10 @@ const REQUIRED_CONSENTS = ['drafts', 'send_after_approval', 'notifications'] as 
 export const DAY_LIMIT_MAX = 50;
 
 export interface AutomationView {
-  /** Строку показываем, когда включить автоотклики можно без новых согласий. */
+  /** Строка видна всегда, когда настройки загрузились (B645: макет o01). */
   readonly visible: boolean;
+  /** Согласия на черновики, отправку после одобрения и уведомления уже даны. */
+  readonly consented: boolean;
   readonly on: boolean;
   readonly sentToday: number;
   readonly dayLimit: number;
@@ -44,7 +46,8 @@ export function buildAutomationView(
   const paused = pausedUntil !== null && new Date(pausedUntil).getTime() > now.getTime();
   const quota = quotas?.quotas.find((item) => item.key === 'auto_applications');
   return {
-    visible: snapshot.settings.enabled || consented,
+    visible: true,
+    consented,
     on: snapshot.settings.enabled && !paused && !snapshot.schedulerRuntime.emergencyPaused,
     sentToday: snapshot.deliveryStats?.sentToday ?? 0,
     dayLimit: dayLimitOf(snapshot),
@@ -75,4 +78,9 @@ export function pauseDays(until: string, now: Date = new Date()): number | null 
   if (Number.isNaN(end.getTime())) return null;
   const days = Math.ceil((end.getTime() - now.getTime()) / 86_400_000);
   return days >= 1 && days <= 365 ? days : null;
+}
+
+/** Какие согласия выдать при сохранении листа; null — выдавать нечего или кандидат не отметил. */
+export function consentsToGrant(view: AutomationView, accepted: boolean): readonly string[] | null {
+  return !view.consented && accepted ? [...REQUIRED_CONSENTS] : null;
 }

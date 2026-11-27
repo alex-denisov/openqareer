@@ -1,7 +1,9 @@
 import type {
   HhApplyAttempt,
   HhApplyOutcome,
+  HhConsentReport,
   HhResumeContent,
+  HhResumeCopy,
   HhResumeEdit,
   HhResumeReview,
   HhResumeSnapshot,
@@ -13,8 +15,13 @@ const BASE = '/api/v1/candidate/hh';
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 /** Резюме hh.ru, прочитанные в прошлый раз; `null` — ещё не читали. */
-export async function getHhResumes(signal?: AbortSignal): Promise<HhResumeSnapshot | null> {
-  const response = await apiFetch(`${BASE}/resumes`, { signal });
+export async function getHhResumes(
+  signal?: AbortSignal,
+  /** Резюме, выбранное или подходящее этой вакансии. */
+  vacancyId?: string,
+): Promise<HhResumeSnapshot | null> {
+  const query = vacancyId ? `?${new URLSearchParams({ vacancyId }).toString()}` : '';
+  const response = await apiFetch(`${BASE}/resumes${query}`, { signal });
   const body = (await response.json()) as { data?: HhResumeSnapshot | null };
   if (!response.ok) throw new Error('hh_resumes_unavailable');
   return body.data ?? null;
@@ -24,11 +31,38 @@ export async function saveHhResumes(
   resumes: readonly HhResumeSummary[],
   selected: HhResumeContent | null,
   contents?: readonly HhResumeContent[],
+  /** Отклик на вакансию: общий выбор резюме не меняется. */
+  vacancyId?: string,
 ): Promise<HhResumeSnapshot> {
   const response = await apiFetch(`${BASE}/resumes`, {
     method: 'PUT',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ resumes, selected, ...(contents ? { contents } : {}) }),
+    body: JSON.stringify({
+      resumes,
+      selected,
+      ...(contents ? { contents } : {}),
+      ...(vacancyId ? { vacancyId } : {}),
+    }),
+  });
+  return readDataObject<HhResumeSnapshot>(response);
+}
+
+/** Каким резюме откликаться на эту вакансию. */
+export async function chooseHhResumeFor(vacancyId: string, resumeId: string): Promise<HhResumeSnapshot> {
+  const response = await apiFetch(`${BASE}/resumes/choice`, {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ vacancyId, resumeId }),
+  });
+  return readDataObject<HhResumeSnapshot>(response);
+}
+
+/** B787: что известно о копии под вакансию; `null` — копии больше нет. */
+export async function saveHhCopyFor(vacancyId: string, copy: HhResumeCopy | null): Promise<HhResumeSnapshot> {
+  const response = await apiFetch(`${BASE}/resumes/copy`, {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ vacancyId, copy }),
   });
   return readDataObject<HhResumeSnapshot>(response);
 }
@@ -37,19 +71,24 @@ export interface HhResumeVacancyReview extends HhResumeReview {
   readonly vacancyId: string;
 }
 
-/** B678: какое из прочитанных резюме hh.ru подходит вакансии и чего в каждом не хватает. */
-export async function getHhResumeReview(vacancyId: string): Promise<HhResumeVacancyReview> {
-  const query = new URLSearchParams({ vacancyId }).toString();
+/** B678: какое из прочитанных резюме hh.ru подходит вакансии и чего в каждом не хватает; по просьбе — с числом правок. */
+export async function getHhResumeReview(vacancyId: string, withEdits = false): Promise<HhResumeVacancyReview> {
+  const query = new URLSearchParams({ vacancyId, ...(withEdits ? { edits: '1' } : {}) }).toString();
   const response = await apiFetch(`${BASE}/resumes/review?${query}`);
   return readDataObject<HhResumeVacancyReview>(response);
 }
 
 /** Начать отклик: сервер проверяет подтверждение, резюме и суточный лимит. */
-export async function startHhApply(vacancyId: string, resumeId: string): Promise<HhApplyAttempt> {
+export async function startHhApply(
+  vacancyId: string,
+  resumeId: string,
+  vacancyTitle?: string,
+  cardId?: string,
+): Promise<HhApplyAttempt> {
   const response = await apiFetch(`${BASE}/applications`, {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ vacancyId, resumeId, confirmed: true }),
+    body: JSON.stringify({ vacancyId, resumeId, confirmed: true, ...(vacancyTitle ? { vacancyTitle } : {}), ...(cardId ? { cardId } : {}) }),
   });
   return readDataObject<HhApplyAttempt>(response);
 }
@@ -58,11 +97,13 @@ export async function finishHhApply(
   attemptId: string,
   outcome: HhApplyOutcome,
   failureCode?: string,
+  vacancyId?: string,
+  consent?: HhConsentReport,
 ): Promise<void> {
   const response = await apiFetch(`${BASE}/applications/${encodeURIComponent(attemptId)}/result`, {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ outcome, ...(failureCode ? { failureCode } : {}) }),
+    body: JSON.stringify({ outcome, ...(failureCode ? { failureCode } : {}), ...(vacancyId ? { vacancyId } : {}), ...consent }),
   });
   await readDataObject<object>(response);
 }
@@ -71,6 +112,24 @@ export interface HhResumeEdits {
   readonly resumeId: string;
   readonly vacancyId: string;
   readonly edits: readonly HhResumeEdit[];
+  /** B787: перевод правок ещё идёт: запрос повторяется, «правок нет» не показывается. */
+  readonly pending?: boolean;
+}
+
+export const HH_EDITS_POLL_MS = 3_000;
+export const HH_EDITS_POLL_MAX = 10;
+
+/** Правки, когда перевод закончился; не закончился за отведённые попытки — ошибка. */
+export async function getSettledHhResumeEdits(
+  vacancyId: string,
+  wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+): Promise<HhResumeEdits> {
+  for (let attempt = 0; attempt < HH_EDITS_POLL_MAX; attempt += 1) {
+    const result = await getHhResumeEdits(vacancyId);
+    if (!result.pending) return result;
+    await wait(HH_EDITS_POLL_MS);
+  }
+  throw new Error('hh_edits_pending');
 }
 
 /** B678: правки выбранного резюме hh.ru «было → станет» по профилю платформы. */

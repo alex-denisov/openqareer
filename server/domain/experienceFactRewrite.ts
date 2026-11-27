@@ -7,6 +7,7 @@
  * applies the accepted rewrite to the draft. Every bullet cites the facts it
  * came from, and the facts themselves stay untouched in memory.
  */
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
   MAX_BULLETS_PER_PLACE,
@@ -64,6 +65,8 @@ export interface FactRewriteRequest {
 export interface ProposedBullet {
   readonly text: string;
   readonly sourceFactIds: readonly string[];
+  /** B786: the line already in the place this bullet takes the place of. */
+  readonly replacesMemoryId?: string;
 }
 
 export interface ProposedPlace {
@@ -142,6 +145,14 @@ function periodOf(entry: ResumeDraft['experience'][number]): string {
   return [entry.startDate, entry.current ? 'по настоящее время' : entry.endDate]
     .filter(Boolean)
     .join(' — ');
+}
+
+/** Digest of the rewrite input: a kept proposal holds while facts and places stay the same. */
+export function factRewriteDigest(request: FactRewriteRequest): string {
+  const places = request.places.map(({ language: _language, ...place }) => place);
+  return createHash('sha256')
+    .update(JSON.stringify({ ...request, places }))
+    .digest('hex');
 }
 
 export function buildFactRewriteRequest(
@@ -304,7 +315,7 @@ export function arithmeticFails(text: string): boolean {
 }
 
 /** A bullet may only state numbers its own sources state (digits or words). */
-function numbersAreSourced(text: string, sources: readonly string[]): boolean {
+export function numbersAreSourced(text: string, sources: readonly string[]): boolean {
   const joined = sources.join(' ');
   const known = new Set([...numbersIn(joined), ...numberWordsIn(joined)]);
   return numbersIn(text).every((number) => known.has(number));
@@ -315,6 +326,9 @@ const FIRST_PERSON =
   /(?:^|[^\p{L}])(?:я|мы|мой|моя|моё|мое|мои|моего|моей|моих|мне|меня|наш|наша|наше|наши|нашей|наших|нам|нас)(?=$|[^\p{L}])/iu;
 /** Case-sensitive: «US» and «IT» are not pronouns. */
 const FIRST_PERSON_EN = /(?:^|[^\p{L}])(?:I|[Ww]e|[Mm]y|[Oo]ur|[Mm]e)(?=$|[^\p{L}])/u;
+
+export const speaksInFirstPerson = (text: string) =>
+  FIRST_PERSON.test(text) || FIRST_PERSON_EN.test(text);
 
 function cleanBulletText(text: string): string {
   const flat = text
@@ -342,7 +356,7 @@ export function checkedBullet(
   // The model's text is the only thing that reaches the profile: a bullet
   // that copies a fragment word for word is the raw speech the owner refused.
   if (sources.some((source) => cleanBulletText(source) === text)) return null;
-  if (FIRST_PERSON.test(text) || FIRST_PERSON_EN.test(text) || arithmeticFails(text)) return null;
+  if (speaksInFirstPerson(text) || arithmeticFails(text)) return null;
   if (!numbersAreSourced(text, sources)) return null;
   const written = textLanguage(text);
   if (written && written !== language) return null;
@@ -396,6 +410,30 @@ export interface AppliedFactRewrite {
   readonly statements: readonly (ResumeFactRewriteBullet & { readonly text: string })[];
 }
 
+type PlacedBullet = ResumeFactRewriteBullet & { readonly text: string };
+
+/** New bullets of one place: a replacement takes its line's position, the rest go last. */
+function placeWithBullets(
+  entry: ResumeDraft['experience'][number],
+  proposed: readonly PlacedBullet[],
+): ResumeDraft['experience'][number] {
+  const own = proposed.filter((bullet) => bullet.experienceId === entry.id);
+  if (own.length === 0) return entry;
+  const swap = new Map(
+    own.flatMap((bullet) =>
+      bullet.replacedMemoryId && entry.bulletMemoryIds.includes(bullet.replacedMemoryId)
+        ? [[bullet.replacedMemoryId, bullet.memoryId] as const]
+        : [],
+    ),
+  );
+  const swapped = new Set(swap.values());
+  const ids = [
+    ...entry.bulletMemoryIds.map((id) => swap.get(id) ?? id),
+    ...own.filter((bullet) => !swapped.has(bullet.memoryId)).map((bullet) => bullet.memoryId),
+  ];
+  return { ...entry, bulletMemoryIds: ids.slice(0, MAX_BULLETS_PER_PLACE) };
+}
+
 /**
  * Appends each bullet, as a new fact id from `newMemoryId`, to its place and
  * declines the facts no bullet used, so no fragment is offered again.
@@ -412,14 +450,10 @@ export function applyFactRewrite(
       experienceId: place.experienceId,
       sourceFactIds: bullet.sourceFactIds,
       text: bullet.text,
+      ...(bullet.replacesMemoryId ? { replacedMemoryId: bullet.replacesMemoryId } : {}),
     })),
   );
-  const experience = draft.experience.map((entry) => {
-    const added = proposed.filter((bullet) => bullet.experienceId === entry.id);
-    if (added.length === 0) return entry;
-    const ids = [...entry.bulletMemoryIds, ...added.map((bullet) => bullet.memoryId)];
-    return { ...entry, bulletMemoryIds: ids.slice(0, MAX_BULLETS_PER_PLACE) };
-  });
+  const experience = draft.experience.map((entry) => placeWithBullets(entry, proposed));
   // A bullet a full place could not take becomes no fact at all.
   const placed = new Set(experience.flatMap((entry) => entry.bulletMemoryIds));
   const statements = proposed.filter((bullet) => placed.has(bullet.memoryId));
@@ -428,11 +462,7 @@ export function applyFactRewrite(
   const record: ResumeFactRewriteRecord = {
     id: proposal.id,
     appliedAt,
-    bullets: statements.map(({ memoryId, experienceId, sourceFactIds }) => ({
-      memoryId,
-      experienceId,
-      sourceFactIds,
-    })),
+    bullets: statements.map(({ text: _text, ...bullet }) => bullet),
     declinedFactIds: declined,
   };
   return {
@@ -442,7 +472,9 @@ export function applyFactRewrite(
       declinedFactIds: [...alreadyDeclined, ...declined],
       // Only the latest rewrites keep their record; older ones are long accepted.
       factRewrites: [...(draft.factRewrites ?? []), record].slice(-MAX_FACT_REWRITES),
-      factRewriteProposal: undefined,
+      ...(draft.factRewordProposal?.proposal.id === proposal.id
+        ? { factRewordProposal: undefined }
+        : { factRewriteProposal: undefined }),
     },
     record,
     statements,
@@ -454,11 +486,17 @@ export function withStoredFactRewrites(
   incoming: ResumeDraft,
   stored: ResumeDraft | undefined,
 ): ResumeDraft {
-  const { factRewrites: _sent, factRewriteProposal: _pending, ...rest } = incoming;
+  const {
+    factRewrites: _sent,
+    factRewriteProposal: _pending,
+    factRewordProposal: _reword,
+    ...rest
+  } = incoming;
   return {
     ...rest,
     ...(stored?.factRewrites?.length ? { factRewrites: stored.factRewrites } : {}),
     ...(stored?.factRewriteProposal ? { factRewriteProposal: stored.factRewriteProposal } : {}),
+    ...(stored?.factRewordProposal ? { factRewordProposal: stored.factRewordProposal } : {}),
   };
 }
 
@@ -507,6 +545,28 @@ export function withBulletEdits(
   };
 }
 
+/** Keeps only the named bullets; the facts of the others stay on offer (o07). */
+export function withOnlyBullets(
+  proposal: FactRewriteProposal,
+  keys: readonly string[],
+): FactRewriteProposal {
+  const wanted = new Set(keys);
+  const places = proposal.places
+    .map((place) => ({
+      ...place,
+      bullets: place.bullets.filter((_, i) => wanted.has(bulletKey(place.experienceId, i))),
+    }))
+    .filter((place) => place.bullets.length > 0);
+  const kept = places.flatMap((place) => place.bullets);
+  if (kept.length !== wanted.size) throw new InvalidBulletEditError('unknown_bullet');
+  return {
+    ...proposal,
+    places,
+    leftOutFactIds: [],
+    sourceFactIds: [...new Set(kept.flatMap((bullet) => bullet.sourceFactIds))],
+  };
+}
+
 /** Takes the rewrite's bullets out and offers the facts it declined again. */
 export function revertFactRewrite(
   draft: ResumeDraft,
@@ -515,13 +575,26 @@ export function revertFactRewrite(
   const record = (draft.factRewrites ?? []).find((rewrite) => rewrite.id === rewriteId);
   if (!record) return null;
   const removed = new Set(record.bullets.map((bullet) => bullet.memoryId));
+  // B786: a reworded line comes back where its replacement stood.
+  const back = new Map(
+    record.bullets.flatMap(({ memoryId, replacedMemoryId }) =>
+      replacedMemoryId ? [[memoryId, replacedMemoryId] as const] : [],
+    ),
+  );
   const restored = new Set(record.declinedFactIds);
   return {
     draft: {
       ...draft,
       experience: draft.experience.map((entry) =>
         entry.bulletMemoryIds.some((id) => removed.has(id))
-          ? { ...entry, bulletMemoryIds: entry.bulletMemoryIds.filter((id) => !removed.has(id)) }
+          ? {
+              ...entry,
+              bulletMemoryIds: entry.bulletMemoryIds.flatMap((id) => {
+                const old = back.get(id);
+                if (old) return [old];
+                return removed.has(id) ? [] : [id];
+              }),
+            }
           : entry,
       ),
       declinedFactIds: (draft.declinedFactIds ?? []).filter((id) => !restored.has(id)),

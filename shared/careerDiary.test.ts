@@ -27,7 +27,32 @@ describe('career diary goal risk', () => {
       expectedValue: 6.67,
       actualValue: 8,
     });
-    expect(risk.explanation).toContain('линейному плану');
+    expect(risk.explanation).toBe('До срока 3 недели, при нынешнем темпе до цели ещё 8 недель.');
+  });
+
+  it('B742: «Почему отстаёт» — прогноз по темпу замеров', () => {
+    const still = evaluateCareerGoalRisk(
+      { ...baseGoal, baselineValue: 0, targetValue: 2, unit: 'шт.', dueDate: '2027-02-28' },
+      { value: 0, measuredAt: '2027-01-03' },
+      '2027-01-03',
+    );
+    expect(still.status).toBe('at_risk');
+    expect(still.explanation).toBe('До срока 8 недель, значение не сдвинулось с начала цели.');
+
+    const late = evaluateCareerGoalRisk(
+      baseGoal,
+      { value: 8, measuredAt: '2026-12-31' },
+      '2027-01-10',
+    );
+    expect(late.explanation).toBe('Срок прошёл, до цели осталось 4 инцидентов в месяц.');
+
+    const onTrack = evaluateCareerGoalRisk(
+      baseGoal,
+      { value: 6, measuredAt: '2026-12-15' },
+      '2026-12-15',
+    );
+    expect(onTrack.status).toBe('on_track');
+    expect(onTrack.explanation).toContain('линейному плану');
   });
 
   it('keeps an increasing metric on plan when it meets the interpolated value', () => {

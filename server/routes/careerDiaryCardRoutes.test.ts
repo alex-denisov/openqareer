@@ -4,11 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { CareerDiaryGoalRisk, CareerDiaryGoalRiskStatus } from '../../shared/careerDiary';
 import { buildApp } from '../app';
 import { config as baseConfig, noSessions } from '../appTestHarness';
 import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
+import { SqliteDiaryDetailsRepository } from '../data/sqliteDiaryDetailsRepository';
+import { cardRisk } from '../domain/careerDiaryCardRisk';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -283,6 +286,23 @@ describe('B684: цель с показателями под флагом', () =>
     expect(indicator.latestMeasurement).toMatchObject({ value: 5, measuredAt: '2027-01-03' });
     // Риск считает прежнее правило дневника: здесь важно, что он пересчитан по замеру.
     expect(indicator.risk.rule).not.toBe('measurement_required');
+    // Прод 20.11: у цели с замеренным показателем шапка показывала «нет замера».
+    expect(again.risk.status).toBe(indicator.risk.status);
+    expect(again.risk.explanation).toBe(indicator.risk.explanation);
+  });
+
+  it('риск цели с показателями берётся из показателей: отставание сильнее остальных', () => {
+    const risk = (status: CareerDiaryGoalRiskStatus, explanation: string = status) =>
+      ({ status, rule: 'linear_progress_v1', explanation }) as CareerDiaryGoalRisk;
+    const own = risk('unknown', 'Замеров пока нет');
+    expect(cardRisk(own, [])).toBe(own);
+    expect(cardRisk(own, [risk('unknown'), risk('unknown')])).toEqual(risk('unknown'));
+    expect(cardRisk(own, [risk('on_track'), risk('unknown')]).status).toBe('on_track');
+    expect(cardRisk(own, [risk('achieved'), risk('on_track')]).status).toBe('on_track');
+    expect(cardRisk(own, [risk('achieved'), risk('achieved')]).status).toBe('achieved');
+    expect(cardRisk(own, [risk('on_track'), risk('at_risk', 'отстаёт')])).toEqual(
+      risk('at_risk', 'отстаёт'),
+    );
   });
 
   it('повтор с тем же ключом не плодит цели, с другими данными — отказ', async () => {
@@ -307,6 +327,44 @@ describe('B684: цель с показателями под флагом', () =>
     expect(changed.json().error.code).toBe('idempotency_key_reused');
   });
 
+  it('B742: годовая цель хранит вклад кварталов; без вклада — null; неверный вклад — отказ', async () => {
+    const { app } = await setup();
+    const quarterTargets = [
+      { quarter: 1, value: 85 },
+      { quarter: 2, value: 88 },
+      { quarter: 3, value: 92 },
+      { quarter: 4, value: 95 },
+    ];
+    const year = { ...CARD, horizon: 'year', dueDate: '2027-11-30', quarterTargets };
+    const created = await call(app, 'POST', `${DIARY}/goal-cards`, flagged, year);
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json().data.details.quarterTargets).toEqual(quarterTargets);
+
+    const plain = await call(app, 'POST', `${DIARY}/goal-cards`, flagged, CARD);
+    expect(plain.statusCode, plain.body).toBe(201);
+    expect(plain.json().data.details.quarterTargets).toBeNull();
+
+    const id = plain.json().data.id as string;
+    const patched = await call(app, 'PATCH', `${DIARY}/goal-cards/${id}`, flagged, {
+      quarterTargets: [{ quarter: 1, value: 10 }],
+    });
+    expect(patched.json().data.details.quarterTargets).toEqual([{ quarter: 1, value: 10 }]);
+
+    for (const bad of [
+      [{ quarter: 5, value: 1 }],
+      [
+        { quarter: 1, value: 1 },
+        { quarter: 1, value: 2 },
+      ],
+      [],
+    ]) {
+      const response = await call(app, 'PATCH', `${DIARY}/goal-cards/${id}`, flagged, {
+        quarterTargets: bad,
+      });
+      expect(response.statusCode).toBe(400);
+    }
+  });
+
   it('старые цели читаются без потерь: без показателей и с деталями по умолчанию', async () => {
     const { app } = await setup();
     const goal = await legacyGoal(app, flagged, 'Встречи один на один');
@@ -319,7 +377,33 @@ describe('B684: цель с показателями под флагом', () =>
       unit: 'человек',
       targetValue: 9,
       indicators: [],
-      details: { setBy: 'self', agreedOn: null, weight: null, archive: null },
+      details: { setBy: 'self', agreedOn: null, weight: null, archive: null, quarterTargets: null },
+    });
+  });
+
+  it('детали, сохранённые до кварталов и переноса, читают их как null', async () => {
+    const { app, sessions, databasePath } = await setup();
+    const goal = await legacyGoal(app, flagged, 'Встречи один на один');
+    const stored = new SqliteDiaryDetailsRepository({
+      databasePath,
+      encryptionKey: baseConfig.dataEncryptionKey,
+    });
+    // Запись прежнего вида: полей quarterTargets и transfer в ней нет.
+    stored.saveGoalDetail(sessions.get(flagged)!.candidate!.id, goal.id, {
+      setBy: 'manager',
+      agreedOn: null,
+      weight: 30,
+      archive: null,
+    } as never);
+    stored.close();
+    const [item] = (await call(app, 'GET', `${DIARY}/goal-cards`, flagged)).json().data.items;
+    expect(item.details).toEqual({
+      setBy: 'manager',
+      agreedOn: null,
+      weight: 30,
+      archive: null,
+      quarterTargets: null,
+      transfer: null,
     });
   });
 
@@ -348,6 +432,28 @@ describe('B684: цель с показателями под флагом', () =>
     expect((await call(app, 'GET', `${DIARY}/goals`, flagged)).json().data.items).toHaveLength(1);
     const restored = await call(app, 'DELETE', `${DIARY}/goal-cards/${goal.id}/archive`, flagged);
     expect(restored.json().data.details.archive).toBeNull();
+  });
+
+  it('B686: архив и удаление цели не оставляют показателей-сирот', async () => {
+    const { app, databasePath } = await setup();
+    const card = (await call(app, 'POST', `${DIARY}/goal-cards`, flagged, CARD)).json().data;
+    const archived = await call(app, 'PUT', `${DIARY}/goal-cards/${card.id}/archive`, flagged, {
+      reason: 'Отменена',
+    });
+    expect(archived.statusCode, archived.body).toBe(200);
+    let list = (await call(app, 'GET', `${DIARY}/goal-cards`, flagged)).json().data;
+    expect(list.items).toEqual([]);
+    expect(list.archived.map((item: { id: string }) => item.id)).toEqual([card.id]);
+    expect(list.archived[0].indicators).toHaveLength(CARD.indicators.length);
+
+    const removed = await call(app, 'DELETE', `${DIARY}/goals/${card.id}`, flagged);
+    expect(removed.statusCode, removed.body).toBe(200);
+    list = (await call(app, 'GET', `${DIARY}/goal-cards`, flagged)).json().data;
+    expect(list).toEqual({ items: [], archived: [] });
+    const database = new DatabaseSync(databasePath, { readOnly: true });
+    const left = database.prepare('SELECT COUNT(*) AS total FROM career_diary_goals').get();
+    database.close();
+    expect(left).toEqual({ total: 0 });
   });
 
   it('детали удалённой цели не остаются в базе', async () => {

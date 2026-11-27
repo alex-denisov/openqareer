@@ -1,3 +1,5 @@
+import type { FactCorrectionProposal } from './factCorrection';
+
 /**
  * B688: что ответ консультанта несёт кроме текста. Действия — только из закрытого
  * списка разделов кабинета; ссылка — только на запись профиля самого кандидата
@@ -17,6 +19,12 @@ export interface ConsultantReplyExtras {
   readonly actions: readonly ConsultantReplyAction[];
   /** Записи профиля, на которые опирается ответ. */
   readonly memoryIds: readonly string[];
+  /** B796: правки, которые кандидат назвал в своём вопросе; есть только под последней репликой. */
+  readonly corrections?: readonly FactCorrectionProposal[];
+  /** B786: кандидат попросил поправить резюме — факт беседы для готовой правки K6; только под последней репликой. */
+  readonly resumeFactId?: string;
+  /** B786: новых фактов для места нет — правка K6 переписывает первую строку этого места (experienceId). */
+  readonly resumeRewordPlace?: string;
 }
 
 export function isConsultantReplyAction(value: unknown): value is ConsultantReplyAction {

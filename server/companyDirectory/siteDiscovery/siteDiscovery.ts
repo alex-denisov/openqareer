@@ -83,7 +83,8 @@ export async function page(
 }
 
 const SITE_NOT_SEARCHED = `(d.evidence IS NULL OR instr(d.evidence, 'B643-9') = 0)`;
-const PENDING_WHERE = `d.status = 'active' AND d.ats_provider IS NULL
+/** Unary `+` keeps the planner on the key window: the status and board indexes read the whole directory per page (B761). */
+const PENDING_WHERE = `+d.status = 'active' AND +d.ats_provider IS NULL
   AND NOT EXISTS (SELECT 1 FROM company_placement p WHERE p.company_key = d.company_key AND p.type = 'ats')`;
 
 type PendingRow = { company_key: string; company_name: string; website_url: string | null; linkedin_url: string | null; dropped_careers_url: string | null; freehire_slug?: string | null; site_searched: number };
@@ -102,7 +103,13 @@ const toPending = (row: PendingRow): PendingCompany => ({
  * looked at, by key. Companies already holding an ATS placement (sources, B645
  * freehire MCP) are skipped. Paging keeps each read short on the 165k directory.
  */
-export function readPendingPage(database: DatabaseSync, afterKey: string, limit: number, directSince?: number): readonly PendingCompany[] {
+export function readPendingPage(
+  database: DatabaseSync,
+  afterKey: string,
+  limit: number,
+  directSince?: number,
+  untilKey?: string,
+): readonly PendingCompany[] {
   const hasCards = directSince !== undefined &&
     database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='freehire_company_source_candidates'").get();
   const eligible = directSince === undefined ? SITE_NOT_SEARCHED
@@ -119,10 +126,22 @@ export function readPendingPage(database: DatabaseSync, afterKey: string, limit:
         ${hasCards ? `LEFT JOIN freehire_company_source_candidates f
           ON f.slug = json_extract(d.evidence, '$.freehire.value')
           AND json_array_length(f.evidence, '$.boards') > 0` : ''}
-        WHERE d.company_key > ? AND ${PENDING_WHERE} AND ${eligible} ${directFilter} ORDER BY d.company_key LIMIT ?`,
+        WHERE d.company_key > ? AND ${PENDING_WHERE} AND ${eligible} ${directFilter}
+          ${untilKey === undefined ? '' : 'AND d.company_key <= ?'} ORDER BY d.company_key LIMIT ?`,
     )
-    .all(afterKey, ...(directSince === undefined ? [] : [directSince]), limit) as unknown as PendingRow[];
+    .all(afterKey, ...(directSince === undefined ? [] : [directSince]), ...(untilKey === undefined ? [] : [untilKey]), limit) as unknown as PendingRow[];
   return rows.map(toPending);
+}
+
+/** Last key of the next `size` directory rows; undefined when none are left. */
+export function directoryWindowEnd(database: DatabaseSync, afterKey: string, size: number): string | undefined {
+  const row = database
+    .prepare(
+      `SELECT max(company_key) AS last FROM (
+         SELECT company_key FROM company_directory WHERE company_key > ? ORDER BY company_key LIMIT ?)`,
+    )
+    .get(afterKey, size) as { last: string | null };
+  return row.last ?? undefined;
 }
 
 /** Pool vacancies per company (B643-8 links): the queue order. */

@@ -19,6 +19,26 @@ describe('B641: вакансия Greenhouse', () => {
     });
   });
 
+  it('B641: вакансия из другого источника узнаётся по адресу доски, в том числе в домене EU', () => {
+    const at = (url: string) => greenhouseJobRef({ ...provenance('corporate-prolific', 'x'), url });
+    const ref = { board: 'prolific', jobId: '5041667101' };
+    for (const host of ['job-boards.eu', 'boards.eu', 'job-boards', 'boards']) {
+      expect(at(`https://${host}.greenhouse.io/prolific/jobs/5041667101?gh_src=a`)).toEqual(ref);
+    }
+    for (const bad of [
+      'http://job-boards.eu.greenhouse.io/prolific/jobs/1',
+      'https://job-boards.eu.greenhouse.io.evil.example/prolific/jobs/1',
+      'https://user:pass@job-boards.eu.greenhouse.io/prolific/jobs/1',
+      'https://job-boards.eu.greenhouse.io:8443/prolific/jobs/1',
+      'https://job-boards.eu.greenhouse.io/prolific/jobs/abc',
+      'https://job-boards.eu.greenhouse.io/a%2Fb/jobs/1',
+      'https://job-boards.eu.greenhouse.io/prolific',
+      'не адрес',
+    ]) {
+      expect(at(bad), bad).toBeNull();
+    }
+  });
+
   it('другая площадка, пустой или нечисловой номер не подходят', () => {
     expect(greenhouseJobRef(provenance('ats-ashby-snowflake', '1'))).toBeNull();
     expect(greenhouseJobRef(provenance('ats-greenhouse-acme'))).toBeNull();

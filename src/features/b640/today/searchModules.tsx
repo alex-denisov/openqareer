@@ -1,8 +1,15 @@
+import { pressSend } from '../apply/applyIntent';
 import { Button, Icon, Link } from '../kit';
 import { buildNodePath } from '../routes';
 import type { TodayDay } from './useTodayDay';
 import { ActionLink, BlockError, BlockSkeleton, LeadActions } from './parts';
-import { applicationsSummary, queueAction, type TodayAction } from './todayModel';
+import {
+  applicationsSummary,
+  leadText,
+  moreTitle,
+  queueAction,
+  type TodayAction,
+} from './todayModel';
 
 const TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const VACANCIES_ACTION = {
@@ -37,6 +44,8 @@ export function NextActionModule({
 }) {
   if (!today.snapshot) return <TodayDayFallback today={today} />;
   const [first] = actions(today);
+  const firstItem = today.snapshot.queue[0];
+  const detail = firstItem ? leadText(firstItem) : null;
   if (!first) {
     return (
       <section className="lead" aria-labelledby="today-next">
@@ -59,6 +68,7 @@ export function NextActionModule({
         {first.title}
       </h2>
       {first.sub ? <p className="lead-sub">{first.sub}</p> : null}
+      {detail ? <p className="lead-text">{detail}</p> : null}
       {lead ? (
         <LeadActions primary={first} />
       ) : (
@@ -77,7 +87,7 @@ function ActionRow({ action }: { readonly action: TodayAction }) {
         <div className="row-title">{action.title}</div>
         {action.sub ? <div className="row-sub">{action.sub}</div> : null}
       </div>
-      <Link className="btn ev-act" to={action.path} aria-label={action.label}>
+      <Link className="btn ev-act" to={action.path} aria-label={action.label} onClick={() => pressSend(action, action.path)}>
         <Icon name={action.icon} />
         <span className="ev-lbl">
           <span className="ev-full">{action.label}</span>
@@ -100,7 +110,7 @@ export function MoreActionsModule({ today }: { readonly today: TodayDay }) {
   return (
     <section className="mod" aria-labelledby="today-more">
       <h3 className="mod-title" id="today-more">
-        {`Ещё дел: ${total - 1}`}
+        {moreTitle(total - 1)}
       </h3>
       <ul className="rows exp-rows">
         {rest.map((action, index) => (

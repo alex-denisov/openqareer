@@ -45,6 +45,28 @@ describe('подборка с серверной сортировкой', () => 
     expect(query.has('dir')).toBe(false);
   });
 
+  it('B726: «Дата» — дни и пояс кандидата; пояс — и столбцу «Дата»', () => {
+    const dated = new URLSearchParams(matchedPageQuery({ key: 'date', dir: 'desc' }, ['COO'], 0, 30));
+    expect(dated.get('days')).toBe('30');
+    expect(dated.get('tz')).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const sorted = new URLSearchParams(matchedPageQuery({ key: 'date', dir: 'desc' }, ['COO'], 0));
+    expect(sorted.has('days')).toBe(false);
+    expect(sorted.get('tz')).toBe(dated.get('tz'));
+    const plain = new URLSearchParams(matchedPageQuery({ key: 'fit', dir: 'desc' }, ['COO'], 0));
+    expect(plain.has('days')).toBe(false);
+    expect(plain.has('tz')).toBe(false);
+  });
+
+  it('«Зарплата от» уходит серверу суммой в месяц и валютой (B765)', () => {
+    const money = { from: 350_000, currency: 'RUB' } as const;
+    const query = new URLSearchParams(matchedPageQuery({ key: 'fit', dir: 'desc' }, [], 0, null, money));
+    expect(query.get('money')).toBe('350000');
+    expect(query.get('moneyCurrency')).toBe('RUB');
+    expect(query.has('days')).toBe(false);
+    const plain = new URLSearchParams(matchedPageQuery({ key: 'fit', dir: 'desc' }, [], 0));
+    expect(plain.has('money')).toBe(false);
+  });
+
   it('читает строки, всего и следующее смещение', async () => {
     fetchMock.mockResolvedValue(json({ data: [row('a'), row('b')], meta: { total: 9, nextOffset: null } }));
     const page = await getSortedMatchedPage({ key: 'money', dir: 'desc' }, [], 0);

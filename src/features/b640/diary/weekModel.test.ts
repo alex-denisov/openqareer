@@ -76,6 +76,30 @@ describe('итог недели: модель', () => {
     expect(changedMeters(edited, form)).toEqual([{ goalId: 'a', value: 7.5 }]);
   });
 
+  it('B683: единица из названия не повторяется в подписи замера', () => {
+    const named = [
+      goal('r', { title: 'Срок релиза, дней', unit: 'дней' }),
+    ] as unknown as CareerDiaryGoalCard[];
+    expect(meterFields(named, '2025-12-29')[0]?.label).toBe('Срок релиза, дней');
+  });
+
+  it('B683: у цели с несколькими показателями пункт плана называет показатель', () => {
+    const many = [
+      goal('m', { indicators: [goal('m1'), goal('m2')] }),
+    ] as unknown as CareerDiaryGoalCard[];
+    const twoRows = {
+      ...draft,
+      plan: [
+        { text: 'Внести замер', goalId: 'm1', source: 'goal_unmeasured' as const },
+        { text: 'Внести замер', goalId: 'm2', source: 'goal_unmeasured' as const },
+      ],
+    };
+    expect(initialForm(twoRows, many).plan.map((row) => row.goalTitle)).toEqual([
+      'Цель m1',
+      'Цель m2',
+    ]);
+  });
+
   it('сохранённый итог побеждает предложение', () => {
     const saved = {
       ...draft,
@@ -92,6 +116,24 @@ describe('итог недели: модель', () => {
     const form = initialForm(saved, cards);
     expect(form).toMatchObject({ achievedIds: ['x'], notes: ['n'], blockers: 'b' });
     expect(summaryInput(form).plan).toEqual([{ text: 'P', goalId: null, done: true }]);
+  });
+
+  it('B683: сохранённый пустой план не прячет предложение сервера; остальное — из сохранённого', () => {
+    const emptyPlan = {
+      ...draft,
+      saved: {
+        weekStart: '2025-12-29',
+        achievedEntryIds: ['x'],
+        achievedNotes: ['n'],
+        blockers: 'b',
+        plan: [],
+        createdAt: '',
+        updatedAt: '',
+      },
+    };
+    const form = initialForm(emptyPlan, cards);
+    expect(form).toMatchObject({ achievedIds: ['x'], notes: ['n'], blockers: 'b' });
+    expect(form.plan.map((row) => row.text)).toEqual(['Обещание', 'По цели']);
   });
 
   it('ⓘ плана называет перенос обещания', () => {

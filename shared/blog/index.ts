@@ -9,6 +9,8 @@ import { WHAT_JOB_SUITS_ME } from './posts/whatJobSuitsMe';
 import { CREATE_A_RESUME_ONLINE } from './posts/createAResumeOnline';
 import { WHERE_TO_FIND_A_JOB } from './posts/whereToFindAJob';
 import { RESUME_TEMPLATE } from './posts/resumeTemplate';
+import { REASON_FOR_LEAVING } from './posts/reasonForLeaving';
+import { WORKING_ABROAD } from './posts/workingAbroad';
 
 /**
  * B617: статьи блога. Каждая попадает сюда только смёрженным PR после вычитки
@@ -20,7 +22,9 @@ export const BLOG_ROOT = BLOG_COLLECTION.root;
 export const BLOG_POSTS: readonly Guide[] = [
   INTERVIEW_QUESTIONS_AND_ANSWERS,
   QUESTIONS_TO_ASK_AN_EMPLOYER,
+  REASON_FOR_LEAVING,
   WHERE_TO_FIND_A_JOB,
+  WORKING_ABROAD,
   CREATE_A_RESUME_ONLINE,
   RESUME_TEMPLATE,
   WHAT_JOB_SUITS_ME,

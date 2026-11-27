@@ -1,3 +1,4 @@
+import { vacancyFitTier } from '../../../../shared/vacancyFitPercent';
 import { getMatchedVacancies } from '../../coach/matchedVacancyApi';
 import { getRoleHypotheses } from '../../coach/coachApi';
 import { getRoleSkillDemand } from '../../skills/roleSkillDemandApi';
@@ -34,7 +35,7 @@ function VacancyRows({ rows }: { readonly rows: readonly VacancyRow[] }) {
           </div>
           <div className="row-meta num">{row.salary}</div>
           {row.fit === null ? null : (
-            <span className="fit num">
+            <span className={`fit is-${vacancyFitTier(row.fit)} num`}>
               {row.fit}
               <small>%</small>
               <span className="vh"> совпадение</span>
@@ -115,7 +116,7 @@ export function RoleOptionsModule({ title }: { readonly title: string }) {
   return (
     <section className="lead" aria-labelledby="today-role">
       <h2 className="lead-title" id="today-role">
-        {closest ? `Ближе всего — роль «${closest.title}»` : title}
+        {closest ? `Ближе всего — роль «${closest.titleRu || closest.title}»` : title}
       </h2>
       <LeadActions primary={closest ? SEARCH_ROLE : ROLES}>
         {closest ? <ActionLink action={{ ...ROLES, label: 'Другие роли' }} /> : null}

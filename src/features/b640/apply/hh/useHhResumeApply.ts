@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import type { HhResumeEdit } from '../../../../../shared/hhCandidateSession';
 import { applyHhResumeEditInSession, type HhResumeEditInput } from './hhDesktop';
 import { pauseBetweenEdits } from './hhEditPace';
+import { desktopFailureCode } from './hhSendModel';
 import { forgetReadResumes } from './hhResumeReading';
 
 /**
@@ -13,11 +14,14 @@ export type HhApplyState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'applying' }
   | { readonly kind: 'applied' }
-  | { readonly kind: 'failed'; readonly message: string; readonly retry: boolean };
+  | { readonly kind: 'failed'; readonly message: string; readonly retry: boolean; readonly captcha?: boolean };
 
 const FAILURE_TEXT: Readonly<Record<string, string>> = {
   not_signed_in: 'Войдите в hh.ru в окне приложения и нажмите ещё раз.',
   captcha: 'hh.ru просит подтвердить, что вы не робот: откройте окно hh.ru, подтвердите и нажмите ещё раз.',
+  session_window_missing: 'Окно hh.ru закрылось. Нажмите ещё раз.',
+  hh_window_not_opened: 'Окно hh.ru не открылось. Нажмите ещё раз.',
+  hh_window_not_loaded: 'hh.ru не загрузился. Нажмите ещё раз.',
   hh_busy: 'Окно hh.ru занято другим действием. Нажмите ещё раз через минуту.',
   field_locked: 'hh.ru не даёт менять этот раздел сейчас. Скопируйте текст и вставьте на hh.ru.',
   field_invalid: 'hh.ru не принял текст. Скопируйте его и поправьте на hh.ru.',
@@ -74,14 +78,14 @@ export function useHhResumeApply(resumeId: string): HhResumeApply {
         const report = await applyHhResumeEditInSession(input);
         if (report.outcome !== 'applied') {
           const code = report.failureCode ?? '';
-          set(edit.id, { kind: 'failed', message: failureText(code), retry: !NO_RETRY.has(code) });
+          set(edit.id, { kind: 'failed', message: failureText(code), retry: !NO_RETRY.has(code), captcha: code === 'captcha' });
           return false;
         }
         forgetReadResumes();
         set(edit.id, { kind: 'applied' });
         return true;
-      } catch {
-        set(edit.id, { kind: 'failed', message: FAILURE_DEFAULT, retry: true });
+      } catch (reason: unknown) {
+        set(edit.id, { kind: 'failed', message: failureText(desktopFailureCode(reason)), retry: true });
         return false;
       }
     },

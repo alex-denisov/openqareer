@@ -4,6 +4,7 @@ import { Button, Link, StatusLine } from '../kit';
 import { buildNodePath } from '../routes';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { skillCheckPath } from './skillCheckModel';
+import { useRoleLabel } from './roleLabelContext';
 
 export interface SkillStartProps {
   readonly current: RoleSkillAssessmentCurrent;
@@ -16,19 +17,23 @@ export interface SkillStartProps {
 }
 
 /** Строка, когда проверку этой роли начать нельзя. */
-export function blockedLine(current: RoleSkillAssessmentCurrent): string | null {
+export function blockedLine(
+  current: RoleSkillAssessmentCurrent,
+  label: (title: string) => string = (title) => title,
+): string | null {
   if (current.state === 'role_not_selected') return 'Сначала выберите роль поиска.';
   if (current.state === 'too_few_vacancies')
-    return `По роли «${current.roleTitle}» мало вакансий для проверки: ${current.sampleSize} из ${current.threshold}.`;
+    return `По роли «${label(current.roleTitle)}» мало вакансий для проверки: ${current.sampleSize} из ${current.threshold}.`;
   if (current.state === 'insufficient_requirements')
     return current.collecting
-      ? `Требования роли «${current.roleTitle}» ещё собираются из вакансий.`
-      : `По роли «${current.roleTitle}» в вакансиях мало требований для проверки.`;
+      ? `Требования роли «${label(current.roleTitle)}» ещё собираются из вакансий.`
+      : `По роли «${label(current.roleTitle)}» в вакансиях мало требований для проверки.`;
   return null;
 }
 
 /** Выбор роли на месте: другие роли поиска, иначе — выбор роли поиска в «Карьере». */
 function RoleChoice({ roles }: { readonly roles: readonly string[] }) {
+  const label = useRoleLabel();
   if (roles.length === 0)
     return (
       <div className="actions">
@@ -41,7 +46,7 @@ function RoleChoice({ roles }: { readonly roles: readonly string[] }) {
     <div className="actions">
       {roles.map((role) => (
         <Link className="btn" key={role} to={skillCheckPath(role)}>
-          Проверить «{role}»
+          Проверить «{label(role)}»
         </Link>
       ))}
     </div>
@@ -49,7 +54,11 @@ function RoleChoice({ roles }: { readonly roles: readonly string[] }) {
 }
 
 /** Проверка готова — первый вопрос открывается сразу, без промежуточного экрана (макет C4). */
-function AutoStart({ busy, failed, onStart }: Pick<SkillStartProps, 'busy' | 'failed' | 'onStart'>) {
+function AutoStart({
+  busy,
+  failed,
+  onStart,
+}: Pick<SkillStartProps, 'busy' | 'failed' | 'onStart'>) {
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return;
@@ -62,8 +71,16 @@ function AutoStart({ busy, failed, onStart }: Pick<SkillStartProps, 'busy' | 'fa
 }
 
 /** Вход в проверку: короткая строка, если роль проверить нельзя; иначе — сразу первый вопрос. */
-export function SkillStart({ current, busy, failed, otherRoles, onStart, onRetry }: SkillStartProps) {
-  const blocked = blockedLine(current);
+export function SkillStart({
+  current,
+  busy,
+  failed,
+  otherRoles,
+  onStart,
+  onRetry,
+}: SkillStartProps) {
+  const label = useRoleLabel();
+  const blocked = blockedLine(current, label);
   if (blocked)
     return (
       <section className="lead" aria-label="Проверка навыков">
@@ -72,12 +89,20 @@ export function SkillStart({ current, busy, failed, otherRoles, onStart, onRetry
       </section>
     );
   if (current.state === 'ready') return <AutoStart busy={busy} failed={failed} onStart={onStart} />;
+  if (current.state === 'counting')
+    return failed ? (
+      <BlockError text="Не удалось загрузить проверку навыков." onRetry={onRetry} />
+    ) : (
+      <section className="lead" aria-label="Проверка навыков" aria-live="polite">
+        <StatusLine state="wait" text="Считаем вакансии роли…" />
+      </section>
+    );
   if (current.state !== 'role_changed')
     return <BlockError text="Не удалось загрузить проверку навыков." onRetry={onRetry} />;
   return (
     <section className="lead" aria-labelledby="sk-title">
       <h2 className="lead-title is-long" id="sk-title">
-        Проверка навыков роли «{current.run.roleTitle}»
+        Проверка навыков роли «{label(current.run.roleTitle)}»
       </h2>
       <div className="actions">
         <Button variant="primary" icon="checkc" busy={busy} onClick={onStart}>

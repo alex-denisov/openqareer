@@ -312,17 +312,13 @@ export async function resizeConnectorSession(
 }
 
 /**
- * Moves the candidate window out of sight again and gives the main window back
- * its focus; the window stays shown so its read script keeps running (B157).
+ * Hides the candidate window once a person is no longer needed in it. The
+ * hidden page keeps running its scripts; focus returns to the cabinet only if
+ * the window held it.
  */
-export async function parkConnectorSession(
-  platform: ConnectionPlatform,
-  layout: SessionLayout,
-): Promise<boolean> {
+export async function parkConnectorSession(platform: ConnectionPlatform): Promise<boolean> {
   if (!isTauriEnvironment()) return false;
-  return (
-    (await invokeDesktopCommand<boolean>('park_connector_session', { platform, layout })) === true
-  );
+  return (await invokeDesktopCommand<boolean>('park_connector_session', { platform })) === true;
 }
 
 /** Explains, honestly, why no sign-in window is on screen. */

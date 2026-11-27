@@ -15,8 +15,10 @@ export interface HistoryViewProps {
   /** Адрес прошлого разговора по его номеру. */
   readonly conversationPath: (id: string) => string;
   readonly onOpen: (id: string) => void;
-  /** «Начать» в пустом списке: открыть текущий разговор. */
+  /** «Начать» в пустом списке: новый разговор. */
   readonly onStart: () => void;
+  /** Список прочитан пустым (K5b) или нет: шапка убирает «Новый разговор». */
+  readonly onEmpty: (empty: boolean) => void;
 }
 
 interface RowsProps {
@@ -65,9 +67,13 @@ function Empty({ onStart }: { readonly onStart: () => void }) {
 }
 
 /** «Все разговоры» (K5, пусто — K5b): темы одной строкой, последние сверху, по 20. */
-export function HistoryView({ conversationPath, onOpen, onStart }: HistoryViewProps) {
+export function HistoryView({ conversationPath, onOpen, onStart, onEmpty }: HistoryViewProps) {
   const { items, nextCursor, status, loadMore, retry } = useHistory();
   const loadingMore = status === 'more';
+  const empty = status === 'ready' && items.length === 0;
+  useEffect(() => {
+    onEmpty(empty);
+  }, [empty, onEmpty]);
   return (
     <div className="chat" aria-live="polite" aria-busy={status === 'loading'}>
       {items.length > 0 ? <Rows items={items} pathOf={conversationPath} onOpen={onOpen} /> : null}

@@ -20,10 +20,18 @@ import {
   type CareerDiaryGoalDetails,
 } from '../../shared/careerDiaryCards';
 import { CareerDiaryIdempotencyConflictError } from '../data/sqliteCareerDiaryRepository';
+import { SqliteDiaryCheckpointRepository } from '../data/sqliteDiaryCheckpointRepository';
 import { SqliteDiaryDetailsRepository } from '../data/sqliteDiaryDetailsRepository';
+import { SqliteGoalTaskSuggestionRepository } from '../data/sqliteGoalTaskSuggestionRepository';
+import { SqliteKpiImportRepository } from '../data/sqliteKpiImportRepository';
 import { careerDiaryPlanningSchema } from '../domain/careerDiaryAdaptation';
 import { buildAdaptationView } from '../domain/careerDiaryAdaptationView';
+import { cardRisk } from '../domain/careerDiaryCardRisk';
 import { requireCabinetB640 } from './cabinetB640Flag';
+import { registerCareerDiaryGoalTransferRoutes } from './careerDiaryGoalTransferRoutes';
+import { registerCareerDiaryKpiRoutes } from './careerDiaryKpiRoutes';
+import { registerCareerDiaryGoalHintRoutes } from './careerDiaryGoalHintRoutes';
+import { registerCareerDiaryTaskSuggestionRoutes } from './careerDiaryTaskSuggestionRoutes';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
 
@@ -34,18 +42,40 @@ import { sendError, withDeps } from './helpers';
  */
 export type CareerDiaryCardRouteDeps = RouteDeps & {
   readonly diaryDetailsRepository?: SqliteDiaryDetailsRepository;
+  readonly kpiImportRepository?: SqliteKpiImportRepository;
+  readonly taskSuggestionRepository?: SqliteGoalTaskSuggestionRepository;
 };
-type BoundDeps = RouteDeps & { readonly details: () => SqliteDiaryDetailsRepository };
+type BoundDeps = RouteDeps & {
+  readonly details: () => SqliteDiaryDetailsRepository;
+  /** B687: отметка проверки на 30-й день — шаг d01 «пройдено» только с ней. */
+  readonly marks: () => SqliteDiaryCheckpointRepository;
+};
 type Handler = (deps: BoundDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 const BASE = '/api/v1/candidate/career-diary';
 const idSchema = z.string().uuid();
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).refine((value) => {
-  const time = Date.parse(`${value}T00:00:00.000Z`);
-  return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === value;
-});
+const dateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/u)
+  .refine((value) => {
+    const time = Date.parse(`${value}T00:00:00.000Z`);
+    return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === value;
+  });
 const note = z.string().trim().max(DIARY_NOTE_MAX);
 const weightSchema = z.number().min(0).max(100);
+const quarterTargetsSchema = z
+  .array(
+    z
+      .object({
+        quarter: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+        value: z.number().finite(),
+      })
+      .strict(),
+  )
+  .min(1)
+  .max(4)
+  .refine((items) => new Set(items.map((item) => item.quarter)).size === items.length)
+  .transform((items) => [...items].sort((a, b) => a.quarter - b.quarter));
 const valueSchema = z.union([z.number().finite(), z.boolean(), z.string().trim().min(1).max(500)]);
 const indicatorSchema = z
   .object({
@@ -65,12 +95,18 @@ const cardSchema = z
     setBy: z.enum(GOAL_SETTERS),
     agreedOn: dateSchema.nullish(),
     weight: weightSchema.nullish(),
+    quarterTargets: quarterTargetsSchema.nullish(),
     indicators: z.array(indicatorSchema).min(1).max(GOAL_INDICATORS_MAX),
   })
   .strict()
   .refine((card) => card.dueDate >= card.startDate);
 const detailsPatchSchema = z
-  .object({ setBy: z.enum(GOAL_SETTERS), agreedOn: dateSchema.nullable(), weight: weightSchema.nullable() })
+  .object({
+    setBy: z.enum(GOAL_SETTERS),
+    agreedOn: dateSchema.nullable(),
+    weight: weightSchema.nullable(),
+    quarterTargets: quarterTargetsSchema.nullable(),
+  })
   .partial()
   .strict()
   .refine((patch) => Object.keys(patch).length > 0);
@@ -91,7 +127,10 @@ const adaptationPatchSchema = z
         .strict()
         .nullable(),
     ),
-    stages: z.object(Object.fromEntries(ADAPTATION_STAGES.map((stage) => [stage, stageGoalSchema]))).partial().strict(),
+    stages: z
+      .object(Object.fromEntries(ADAPTATION_STAGES.map((stage) => [stage, stageGoalSchema])))
+      .partial()
+      .strict(),
     probation: z.object({ endsOn: dateSchema.nullable(), reviewer: note.nullable() }).strict(),
     firstMeeting: z
       .object({
@@ -113,11 +152,26 @@ const adaptationPatchSchema = z
   .refine((patch) => Object.keys(patch).length > 0);
 
 function invalid(reply: FastifyReply, request: FastifyRequest, fields?: Record<string, string>) {
-  return sendError(reply, request, 400, 'invalid_career_diary_input', 'Проверьте данные карьерного дневника.', false, fields);
+  return sendError(
+    reply,
+    request,
+    400,
+    'invalid_career_diary_input',
+    'Проверьте данные карьерного дневника.',
+    false,
+    fields,
+  );
 }
 
 function missing(reply: FastifyReply, request: FastifyRequest) {
-  return sendError(reply, request, 404, 'career_diary_record_not_found', 'Запись дневника не найдена.', false);
+  return sendError(
+    reply,
+    request,
+    404,
+    'career_diary_record_not_found',
+    'Запись дневника не найдена.',
+    false,
+  );
 }
 
 function candidateId(deps: BoundDeps, request: FastifyRequest, reply: FastifyReply): string | null {
@@ -139,9 +193,18 @@ function routeId(request: FastifyRequest, reply: FastifyReply, name: string): st
 
 const today = (): string => new Date().toISOString().slice(0, 10);
 
-function summarize(deps: BoundDeps, candidate: string, goal: CareerDiaryGoal): CareerDiaryGoalSummary {
-  const latestMeasurement = deps.candidateStore.careerDiaryRepo.listMeasurements(candidate, goal.id)[0] ?? null;
-  return { ...goal, latestMeasurement, risk: evaluateCareerGoalRisk(goal, latestMeasurement, today()) };
+function summarize(
+  deps: BoundDeps,
+  candidate: string,
+  goal: CareerDiaryGoal,
+): CareerDiaryGoalSummary {
+  const latestMeasurement =
+    deps.candidateStore.careerDiaryRepo.listMeasurements(candidate, goal.id)[0] ?? null;
+  return {
+    ...goal,
+    latestMeasurement,
+    risk: evaluateCareerGoalRisk(goal, latestMeasurement, today()),
+  };
 }
 
 /** Цели верхнего уровня с показателями внутри; цель без родителя в списке — тоже верхняя. */
@@ -153,13 +216,21 @@ function goalCards(deps: BoundDeps, candidate: string): CareerDiaryGoalCard[] {
   const details = deps.details().goalDetails(candidate);
   return goals
     .filter((goal) => goal.parentGoalId === null || !ids.has(goal.parentGoalId))
-    .map((goal) => ({
-      ...summarize(deps, candidate, goal),
-      details: details.get(goal.id) ?? DEFAULT_GOAL_DETAILS,
-      indicators: goals
+    .map((goal) => {
+      const own = summarize(deps, candidate, goal);
+      const indicators = goals
         .filter((child) => child.parentGoalId === goal.id)
-        .map((child) => summarize(deps, candidate, child)),
-    }));
+        .map((child) => summarize(deps, candidate, child));
+      return {
+        ...own,
+        risk: cardRisk(
+          own.risk,
+          indicators.map((indicator) => indicator.risk),
+        ),
+        details: details.get(goal.id) ?? DEFAULT_GOAL_DETAILS,
+        indicators,
+      };
+    });
 }
 
 function cardOf(deps: BoundDeps, candidate: string, goalId: string): CareerDiaryGoalCard | null {
@@ -182,7 +253,12 @@ const listCards: Handler = async (deps, request, reply) => {
  * («Срок релиза, дней» у цели «Выпускать релиз за неделю»). Сама цель несёт значения первого
  * показателя, чтобы читаться прежними экранами, которые уже знают цели с разбиением.
  */
-function createCard(deps: BoundDeps, candidate: string, input: CareerDiaryGoalCardInput, key: string): string {
+function createCard(
+  deps: BoundDeps,
+  candidate: string,
+  input: CareerDiaryGoalCardInput,
+  key: string,
+): string {
   const repo = deps.candidateStore.careerDiaryRepo;
   const shared = {
     type: input.type ?? ('operational' as const),
@@ -190,7 +266,10 @@ function createCard(deps: BoundDeps, candidate: string, input: CareerDiaryGoalCa
     startDate: input.startDate,
     dueDate: input.dueDate,
   };
-  const inputs: CareerDiaryGoalInput[] = input.indicators.map((indicator) => ({ ...shared, ...indicator }));
+  const inputs: CareerDiaryGoalInput[] = input.indicators.map((indicator) => ({
+    ...shared,
+    ...indicator,
+  }));
   const now = new Date().toISOString();
   const goal = repo.createGoal(candidate, { ...inputs[0], title: input.title }, now, key);
   repo.splitGoal(candidate, goal.id, inputs, now);
@@ -200,6 +279,8 @@ function createCard(deps: BoundDeps, candidate: string, input: CareerDiaryGoalCa
       agreedOn: input.agreedOn ?? null,
       weight: input.weight ?? null,
       archive: null,
+      quarterTargets: input.quarterTargets ?? null,
+      transfer: null,
     };
     deps.details().saveGoalDetail(candidate, goal.id, details);
   }
@@ -211,7 +292,14 @@ const postCard: Handler = async (deps, request, reply) => {
   if (!candidate) return undefined;
   const key = idSchema.safeParse(request.headers['idempotency-key']);
   if (!key.success) {
-    return sendError(reply, request, 400, 'idempotency_key_required', 'Для создания записи передайте Idempotency-Key в формате UUID.', false);
+    return sendError(
+      reply,
+      request,
+      400,
+      'idempotency_key_required',
+      'Для создания записи передайте Idempotency-Key в формате UUID.',
+      false,
+    );
   }
   const parsed = cardSchema.safeParse(request.body);
   if (!parsed.success) return invalid(reply, request);
@@ -223,7 +311,14 @@ const postCard: Handler = async (deps, request, reply) => {
       .send({ data: cardOf(deps, candidate, goalId), meta: { requestId: request.id } });
   } catch (error) {
     if (!(error instanceof CareerDiaryIdempotencyConflictError)) throw error;
-    return sendError(reply, request, 409, 'idempotency_key_reused', 'Ключ идемпотентности уже использован с другими данными.', false);
+    return sendError(
+      reply,
+      request,
+      409,
+      'idempotency_key_reused',
+      'Ключ идемпотентности уже использован с другими данными.',
+      false,
+    );
   }
 };
 
@@ -247,7 +342,10 @@ const patchCard: Handler = async (deps, request, reply) => {
   if (!goalId) return undefined;
   const parsed = detailsPatchSchema.safeParse(request.body);
   if (!parsed.success) return invalid(reply, request);
-  const card = changeDetails(deps, candidate, goalId, (details) => ({ ...details, ...parsed.data }));
+  const card = changeDetails(deps, candidate, goalId, (details) => ({
+    ...details,
+    ...parsed.data,
+  }));
   return card ? { data: card, meta: { requestId: request.id } } : missing(reply, request);
 };
 
@@ -274,7 +372,9 @@ const restoreCard: Handler = async (deps, request, reply) => {
 
 /** Задачи прежнего плана места работы; `null` — плана нет или он не разобран. */
 function planTasks(workplace: object) {
-  const planning = careerDiaryPlanningSchema.safeParse((workplace as { planning?: unknown }).planning);
+  const planning = careerDiaryPlanningSchema.safeParse(
+    (workplace as { planning?: unknown }).planning,
+  );
   return planning.success ? (planning.data.adaptationPlan?.tasks ?? null) : null;
 }
 
@@ -286,6 +386,7 @@ function adaptationView(deps: BoundDeps, candidate: string, workplaceId: string)
     tasks: planTasks(workplace),
     details: deps.details().adaptationDetails(candidate, workplaceId),
     asOf: today(),
+    day30Sent: deps.marks().get(candidate, workplaceId, 'day30').sentOn !== null,
   });
 }
 
@@ -299,7 +400,11 @@ const getAdaptation: Handler = async (deps, request, reply) => {
 };
 
 /** Цели из правки, которых у кандидата нет. */
-function unknownGoals(deps: BoundDeps, candidate: string, patch: z.infer<typeof adaptationPatchSchema>): boolean {
+function unknownGoals(
+  deps: BoundDeps,
+  candidate: string,
+  patch: z.infer<typeof adaptationPatchSchema>,
+): boolean {
   const referenced = [
     ...Object.values(patch.tasks ?? {}).map((task) => task?.goalId ?? null),
     ...Object.values(patch.stages ?? {}).map((stage) => stage?.goalId ?? null),
@@ -346,7 +451,8 @@ const patchAdaptation: Handler = async (deps, request, reply) => {
   if (Object.keys(patch.tasks ?? {}).some((id) => !known.has(id))) {
     return invalid(reply, request, { tasks: 'Такой задачи в плане нет.' });
   }
-  if (unknownGoals(deps, candidate, patch)) return invalid(reply, request, { goalId: 'Такой цели нет.' });
+  if (unknownGoals(deps, candidate, patch))
+    return invalid(reply, request, { goalId: 'Такой цели нет.' });
   const current = deps.details().adaptationDetails(candidate, workplaceId);
   const next: CareerDiaryAdaptationDetails = {
     ...current,
@@ -358,7 +464,10 @@ const patchAdaptation: Handler = async (deps, request, reply) => {
   return { data: adaptationView(deps, candidate, workplaceId), meta: { requestId: request.id } };
 };
 
-export function registerCareerDiaryCardRoutes(app: FastifyInstance, deps: CareerDiaryCardRouteDeps): void {
+export function registerCareerDiaryCardRoutes(
+  app: FastifyInstance,
+  deps: CareerDiaryCardRouteDeps,
+): void {
   // Хранилище открывается при первом запросе под флагом: без флага база не трогается.
   let repository = deps.diaryDetailsRepository ?? null;
   const details = () => {
@@ -369,7 +478,14 @@ export function registerCareerDiaryCardRoutes(app: FastifyInstance, deps: Career
     return repository;
   };
   if (!deps.diaryDetailsRepository) app.addHook('onClose', async () => repository?.close());
-  const bound: BoundDeps = { ...deps, details };
+  let checkpoints: SqliteDiaryCheckpointRepository | null = null;
+  const marks = () =>
+    (checkpoints ??= new SqliteDiaryCheckpointRepository({
+      databasePath: deps.config.databasePath,
+      encryptionKey: deps.config.dataEncryptionKey,
+    }));
+  app.addHook('onClose', async () => checkpoints?.close());
+  const bound: BoundDeps = { ...deps, details, marks };
   const read = { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } };
   const write = { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } };
   app.get(`${BASE}/goal-cards`, read, withDeps(bound, listCards));
@@ -379,4 +495,53 @@ export function registerCareerDiaryCardRoutes(app: FastifyInstance, deps: Career
   app.delete(`${BASE}/goal-cards/:goalId/archive`, write, withDeps(bound, restoreCard));
   app.get(`${BASE}/workplaces/:workplaceId/adaptation`, read, withDeps(bound, getAdaptation));
   app.patch(`${BASE}/workplaces/:workplaceId/adaptation`, write, withDeps(bound, patchAdaptation));
+  registerKpiRoutes(app, deps, bound);
+  registerCareerDiaryTaskSuggestionRoutes(app, {
+    ...deps,
+    goalCard: (candidate, goalId) => cardOf(bound, candidate, goalId),
+    goalTasks: (candidate, goalId) => goalPlanTasks(bound, candidate, goalId),
+  });
+  registerCareerDiaryGoalTransferRoutes(app, {
+    candidateStore: deps.candidateStore,
+    candidateId: (request, reply) => candidateId(bound, request, reply),
+    goalId: (request, reply) => routeId(request, reply, 'goalId'),
+    cardOf: (candidate, goalId) => cardOf(bound, candidate, goalId),
+    saveTransfer: (candidate, goalId, transfer) =>
+      changeDetails(bound, candidate, goalId, (details) => ({ ...details, transfer })),
+    rateLimit: write,
+  });
+  registerCareerDiaryGoalHintRoutes(app, deps);
+}
+
+/** Задачи цели в плане основного места работы; `null` — основного места нет, задаче негде жить. */
+function goalPlanTasks(deps: BoundDeps, candidate: string, goalId: string) {
+  const primary = deps.candidateStore.careerDiaryRepo
+    .listWorkplaces(candidate)
+    .find((workplace) => workplace.isPrimary && workplace.status === 'active');
+  const view = primary ? adaptationView(deps, candidate, primary.id) : null;
+  return view
+    ? view.stages.flatMap((stage) => stage.tasks).filter((task) => task.goalId === goalId)
+    : null;
+}
+
+/** B686: загрузка KPI создаёт цели тем же путём, что и форма цели. */
+function registerKpiRoutes(
+  app: FastifyInstance,
+  deps: CareerDiaryCardRouteDeps,
+  bound: BoundDeps,
+): void {
+  let imports = deps.kpiImportRepository ?? null;
+  const kpiImports = () => {
+    imports ??= new SqliteKpiImportRepository({
+      databasePath: deps.config.databasePath,
+      encryptionKey: deps.config.dataEncryptionKey,
+    });
+    return imports;
+  };
+  if (!deps.kpiImportRepository) app.addHook('onClose', async () => imports?.close());
+  registerCareerDiaryKpiRoutes(app, {
+    ...deps,
+    kpiImports,
+    createCard: (candidate, input, key) => createCard(bound, candidate, input, key),
+  });
 }

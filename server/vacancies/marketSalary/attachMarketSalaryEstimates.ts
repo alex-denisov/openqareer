@@ -1,23 +1,11 @@
-/**
- * B546: adds the precomputed market estimate to page items without salary.
- * Two primary-key reads per item at most; nothing is computed on a request.
- */
-import {
-  marketSalaryCity,
-  marketSalaryKey,
-  pickMarketSalaryEstimate,
-  type MarketSalaryEstimateView,
-} from '../../../shared/marketSalaryEstimate';
+/** B546, B803: оценка openqareer у строк страницы без зарплаты. */
+import type { MarketSalaryEstimateView } from '../../../shared/marketSalaryEstimate';
 import type { MatchedVacancyItem } from '../multiSourceVacancyEngine';
-import { matchedVacancyRegion } from '../matchedVacancyFacets';
-import { normalizeTitleKey } from '../titleParse/normalizeTitleKey';
-import type { StoredMarketSalaryEstimate } from './sqliteMarketSalaryEstimateStore';
+import type { ReadTitle, SalaryEstimateReader } from '../openqareerSalary/salaryEstimateReader';
 
 export interface MarketSalaryEstimateDeps {
-  readonly store: { get(key: string): StoredMarketSalaryEstimate | undefined };
-  readonly readTitle: (
-    titleKey: string,
-  ) => { readonly functions: readonly string[]; readonly levelRank: number | null } | undefined;
+  readonly store: SalaryEstimateReader;
+  readonly readTitle: ReadTitle;
 }
 
 function hasSalary(item: MatchedVacancyItem): boolean {
@@ -29,22 +17,7 @@ export function estimateFor(
   item: Pick<MatchedVacancyItem, 'cluster'>,
   deps: MarketSalaryEstimateDeps,
 ): MarketSalaryEstimateView | undefined {
-  const parsed = deps.readTitle(normalizeTitleKey(item.cluster.canonicalTitle));
-  const functionCode = parsed?.functions[0];
-  if (!parsed || !functionCode) return undefined;
-  const city = marketSalaryCity(item.cluster.canonicalLocation);
-  // Регион читается только по кластеру.
-  const region = matchedVacancyRegion(item as MatchedVacancyItem);
-  const cityEstimate = city
-    ? deps.store.get(marketSalaryKey(functionCode, parsed.levelRank, 'city', city))
-    : undefined;
-  const regionEstimate = region
-    ? deps.store.get(marketSalaryKey(functionCode, parsed.levelRank, 'region', region))
-    : undefined;
-  const picked = pickMarketSalaryEstimate(cityEstimate, regionEstimate);
-  if (!picked) return undefined;
-  const source = picked.basis === 'city' ? cityEstimate : regionEstimate;
-  return { ...picked, computedAt: source?.computedAt ?? '' };
+  return deps.store.estimate(item.cluster, deps.readTitle);
 }
 
 export function attachMarketSalaryEstimates(

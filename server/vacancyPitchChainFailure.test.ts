@@ -137,4 +137,26 @@ describe('POST /pitch: письмо модели (B601)', () => {
     await request();
     expect(inputs.at(-1)?.gender).toBeUndefined();
   });
+
+  it('город вакансии без условий кандидата — отказ, из условий поиска — письмо', async () => {
+    const body = 'Здравствуйте! Готов рассмотреть роль в Перми.';
+    const { app, candidates } = await createApp([{ ...sampleCluster, canonicalLocation: 'Пермь' }], {
+      coverLetterWriter: { writeCoverLetter: async () => ({ body, stage: 'test' }) },
+    });
+    const { cookie, candidateId } = await login(app);
+    vi.spyOn(candidates, 'getSnapshot').mockImplementation(
+      () => ({ memory: [], documents: [], resume: { draft: { ...EMPTY_RESUME_DRAFT, candidate: { headline: 'CTO' } } } }) as never,
+    );
+    const request = () => app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: {},
+    });
+    expect((await request()).statusCode).toBe(503);
+    candidates.decisionProfileRepo.put(candidateId, {
+      citizenship: [], languages: [], workFormats: [], searchLocations: ['Пермь'],
+    } as never, '2026-11-25T00:00:00.000Z');
+    expect((await request()).statusCode).toBe(200);
+  });
 });

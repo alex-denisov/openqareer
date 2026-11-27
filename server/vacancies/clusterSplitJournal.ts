@@ -1,0 +1,136 @@
+import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
+import { tableExists } from './clusterSplit';
+
+/**
+ * B752: журнал разбиения. Перед записью кусков шаг снимает прежнее состояние
+ * всех затронутых id (строка кластера, ключи, строки каталога), откат кладёт
+ * его обратно строка в строку, с прежними rowid.
+ */
+
+/** Строки каталога, привязанные к id кластера. `rowid` — у таблиц с ним. */
+export const CATALOG_CLUSTER_TABLES: readonly { table: string; rowid: boolean }[] = [
+  { table: 'catalog_entries', rowid: true },
+  { table: 'catalog_entries_seen', rowid: true },
+  { table: 'catalog_card_rollout', rowid: false },
+  { table: 'catalog_ru_summaries', rowid: true },
+];
+
+export type Row = Record<string, SQLInputValue>;
+const ROWID = '__rowid';
+const IDENTIFIER = /^[a-z_][a-z0-9_]*$/u;
+
+interface OldClusterRow {
+  rowid: number;
+  id: string;
+  fingerprint: string;
+  title: string;
+  company: string;
+  cluster_json: string;
+  representative: string | null;
+  items_count: number;
+  updated_at: number;
+}
+
+export interface JournalInput {
+  readonly stepId: string;
+  readonly clusterId: string;
+  readonly pieceIds: readonly string[];
+  readonly now: number;
+}
+
+function placeholders(count: number): string {
+  return Array.from({ length: count }, () => '?').join(', ');
+}
+
+function snapshotCatalog(db: DatabaseSync, ids: readonly string[]): Record<string, Row[]> {
+  const rows: Record<string, Row[]> = {};
+  for (const { table, rowid } of CATALOG_CLUSTER_TABLES) {
+    if (!tableExists(db, table)) continue;
+    const select = rowid ? `rowid AS ${ROWID}, *` : '*';
+    rows[table] = db
+      .prepare(`SELECT ${select} FROM ${table} WHERE cluster_id IN (${placeholders(ids.length)})`)
+      .all(...ids) as Row[];
+  }
+  return rows;
+}
+
+/**
+ * Список кусков разбиения, недописанного частями, после смены плана. Снятые
+ * куски уже удалены, новые до записи свободны: откат удалит ровно этот список.
+ */
+export function setJournalPieces(
+  db: DatabaseSync,
+  stepId: string,
+  clusterId: string,
+  pieceIds: readonly string[],
+): void {
+  db.prepare(
+    'UPDATE cluster_split_journal SET new_piece_ids_json = ? WHERE step_id = ? AND old_cluster_id = ?',
+  ).run(JSON.stringify(pieceIds), stepId, clusterId);
+}
+
+/** Прежнее состояние кластера и всех id его кусков — одной строкой журнала. */
+export function journalClusterSplit(db: DatabaseSync, input: JournalInput): void {
+  const ids = [input.clusterId, ...input.pieceIds];
+  const old = db
+    .prepare('SELECT rowid, * FROM vacancy_clusters WHERE id = ?')
+    .get(input.clusterId) as unknown as OldClusterRow;
+  const keys = db
+    .prepare(
+      `SELECT kind, key, cluster_id FROM vacancy_cluster_keys
+        WHERE cluster_id IN (${placeholders(ids.length)})`,
+    )
+    .all(...ids);
+  db.prepare(
+    `INSERT INTO cluster_split_journal (
+       step_id, old_cluster_id, old_rowid, old_fingerprint, old_title, old_company,
+       old_cluster_json, old_representative, old_items_count, old_updated_at,
+       old_keys_json, old_catalog_json, new_piece_ids_json, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    input.stepId,
+    input.clusterId,
+    old.rowid,
+    old.fingerprint,
+    old.title,
+    old.company,
+    old.cluster_json,
+    old.representative,
+    old.items_count,
+    old.updated_at,
+    JSON.stringify(keys),
+    JSON.stringify(snapshotCatalog(db, ids)),
+    JSON.stringify(input.pieceIds),
+    input.now,
+  );
+}
+
+export interface JournalRow {
+  id: number;
+  step_id: string;
+  old_cluster_id: string;
+  old_rowid: number;
+  old_fingerprint: string;
+  old_title: string;
+  old_company: string;
+  old_cluster_json: string;
+  old_representative: string | null;
+  old_items_count: number;
+  old_updated_at: number;
+  old_keys_json: string;
+  old_catalog_json: string;
+  new_piece_ids_json: string;
+}
+
+export function restoreRows(db: DatabaseSync, table: string, rows: readonly Row[]): void {
+  for (const row of rows) {
+    const columns = Object.keys(row);
+    if (!columns.every((column) => column === ROWID || IDENTIFIER.test(column))) {
+      throw new Error(`cluster_split_journal: bad column in ${table}`);
+    }
+    const names = columns.map((column) => (column === ROWID ? 'rowid' : column));
+    db.prepare(
+      `INSERT INTO ${table} (${names.join(', ')}) VALUES (${placeholders(names.length)})`,
+    ).run(...columns.map((column) => row[column]!));
+  }
+}

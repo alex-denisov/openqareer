@@ -69,9 +69,38 @@ describe('B678: «станет» на языке резюме hh.ru', () => {
       id, section: 'experience', was: '', now: '', language: 'en', lines: Array.from({ length: count }, () => line),
     });
     const ru = translator(RU);
-    const edits = await localizeHhResumeEdits([big('experience:0', 8), big('experience:1', 8), big('experience:2', 8), big('experience:3', 8)], 'ru', ru, 1_000);
-    expect(edits.map((edit) => edit.id)).toEqual(['experience:0', 'experience:1', 'experience:2']);
+    const size = TRANSLATED_LINES_MAX / 4;
+    const drafts = Array.from({ length: 5 }, (_, index) => big(`experience:${index}`, size));
+    const edits = await localizeHhResumeEdits(drafts, 'ru', ru, 1_000);
+    expect(edits.map((edit) => edit.id)).toEqual(['experience:0', 'experience:1', 'experience:2', 'experience:3']);
     const sent = ru.translate.mock.calls.reduce((total, [request]) => total + request.bullets.length, 0);
     expect(sent).toBe(TRANSLATED_LINES_MAX);
+  });
+});
+
+describe('B787: exit через продажу не переводится как закрытие', () => {
+  const source = 'Led the company to a successful exit through acquisition by a US fund.';
+  it('«вышла из бизнеса» отклоняется', async () => {
+    const { checkedTranslation } = await import('./hhResumeEditTranslation');
+    expect(checkedTranslation(source, 'Компания успешно вышла из бизнеса в результате приобретения фондом США.', 'ru')).toBeNull();
+  });
+  it('«состоялась продажа компании» принимается', async () => {
+    const { checkedTranslation } = await import('./hhResumeEditTranslation');
+    const text = 'Вывел компанию на продажу: состоялась продажа компании фонду США.';
+    expect(checkedTranslation(source, text, 'ru')).toBe(text);
+  });
+  it('промпт перевода называет exit продажей', async () => {
+    const { BULLET_TRANSLATION_INSTRUCTIONS } = await import('./experienceBulletLanguage');
+    expect(BULLET_TRANSLATION_INSTRUCTIONS).toContain('компания была продана');
+  });
+});
+
+describe('B787: суммы по-русски одним видом', () => {
+  it('«$73K … $50M+ … $10M» — «73 тыс. $ … более 50 млн $ … 10 млн $»', async () => {
+    const { russianMoney } = await import('./hhResumeEditTranslation');
+    expect(russianMoney('с $73K до $50M+, бюджеты до $10M, сделка $1.5B')).toBe(
+      'с 73 тыс. $ до более 50 млн $, бюджеты до 10 млн $, сделка 1,5 млрд $',
+    );
+    expect(russianMoney('выручка свыше 50 млн $')).toBe('выручка более 50 млн $');
   });
 });

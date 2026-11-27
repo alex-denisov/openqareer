@@ -1,3 +1,4 @@
+import { parse as parseQuery } from 'node:querystring';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -95,7 +96,8 @@ async function triageRows(
   const context = readB640ListContext(deps, candidateId);
   if (profileIsEmpty(context)) return { rows: [] };
   if (body.query !== undefined) {
-    const filters = Object.fromEntries(new URLSearchParams(body.query));
+    // Как у списка: повторный параметр (`role=A&role=B`) — массив, а не последнее значение.
+    const filters = { ...parseQuery(body.query) };
     const pool = await readB640PoolRows(deps, request, candidateId, context, filters);
     return pool && { rows: pool.slice(0, VACANCY_TRIAGE_MAX_IDS), poolTotal: pool.length };
   }

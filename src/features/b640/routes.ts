@@ -89,7 +89,7 @@ const ROWS: readonly NodeRow[] = [
   ['p10', 'p10-istoriya-izmenenij', 'profile', 'profile', '/app/profile/history', 'Профиль', 'list', { tabs: 'profile', crumb: 'История изменений' }],
   ['p11', 'p11-svyazi', 'profile', 'profile', '/app/profile/connections', 'Связи', 'list', { parent: 's01' }],
   // Цифровой след
-  ['p02', 'p02-profil-cifrovoj-sled', 'footprint', 'profile', '/app/profile/footprint', 'Профиль', 'list', { tabs: 'profile', crumb: 'Цифровой след' }],
+  ['p02', 'p02-profil-cifrovoj-sled', 'footprint', 'profile', '/app/profile/footprint', 'Профиль', 'list', { tabs: 'profile', parent: 's01', crumb: 'Цифровой след' }],
   ['f01', 'f01-cifrovoj-sled-do-poiska', 'footprint', 'profile', '/app/profile/footprint/start', 'Профиль', 'list', { tabs: 'profile', crumb: 'Цифровой след', tabOf: 'p02' }],
   ['f03', 'f03-razbor-po-odnoj', 'footprint', 'profile', '/app/profile/footprint/findings', 'Профиль', 'focus', { parent: 'p02', crumb: 'Сводка' }],
   ['f03b', 'f03b-nahodka-put-udaleniya', 'footprint', 'profile', '/app/profile/footprint/findings/:findingId', 'Профиль', 'focus', { parent: 'f03', crumb: 'Находка' }],
@@ -137,11 +137,11 @@ const ROWS: readonly NodeRow[] = [
   ['k01', 'k01-konsultant-dialog', 'consultant', null, '/app/consultant', 'Консультант', 'list'],
   ['k05', 'k05-konsultant-istoriya', 'consultant', null, '/app/consultant/history', 'Консультант', 'list', { parent: 'k01', crumb: 'История разговоров' }],
   // Аккаунт и тарифы
-  ['n00', 'n00-akkaunt-razdely', 'account', 'settings', '/app/account', 'Аккаунт', 'list'],
+  ['n00', 'n00-akkaunt-razdely', 'account', 'settings', '/app/account', 'Аккаунт', 'list', { parent: 's03' }],
   ['n03', 'n03-akkaunt', 'account', 'settings', '/app/account/connections', 'Подключения', 'settings', { parent: 'n00', tabs: 'account' }],
   ['n02', 'n02-nastrojki-uvedomlenij', 'account', 'settings', '/app/account/notifications', 'Уведомления', 'settings', { parent: 'n00', tabs: 'account' }],
   ['n04', 'n04-vhod-i-bezopasnost', 'account', 'settings', '/app/account/security', 'Вход и безопасность', 'settings', { parent: 'n00', tabs: 'account' }],
-  ['n05', 'n05-soglasiya-i-dannye', 'account', 'settings', '/app/account/data', 'Аккаунт', 'settings', { parent: 'n00', tabs: 'account', crumb: 'Согласия и данные' }],
+  ['n05', 'n05-soglasiya-i-dannye', 'account', 'settings', '/app/account/data', 'Согласия и данные', 'settings', { parent: 'n00', tabs: 'account', crumb: 'Согласия и данные' }],
   ['t03', 't03-podpiska-i-oplata', 'account', 'tariffs', '/app/account/billing', 'Подписка', 'settings', { parent: 'n00', tabs: 'account', crumb: 'Подписка и оплата' }],
   ['n06', 'n06-prilozhenie', 'account', 'settings', '/app/account/app', 'Приложение', 'settings', { parent: 'n00', tabs: 'account' }],
   ['t01', 't01-tarify', 'account', 'tariffs', '/app/tariffs', 'Тарифы', 'focus'],

@@ -11,7 +11,13 @@ import { resolveCompany } from './deterministicResolver';
 import { politeFetch } from './hostLimiter';
 import { publicApiCounter } from '../freehire/freehireRepoCheck';
 import { DirectAtsDiscovery, DIRECT_ATS_FRESH_MS } from './directAtsDiscovery';
-import { readPendingPage, writeDiscovery, type HostCheck, type PendingCompany } from './siteDiscovery';
+import {
+  directoryWindowEnd,
+  readPendingPage,
+  writeDiscovery,
+  type HostCheck,
+  type PendingCompany,
+} from './siteDiscovery';
 
 interface Log {
   info(details: Record<string, unknown>, message: string): void;
@@ -23,9 +29,12 @@ const BATCH = 200;
 const WORKERS = 12;
 const FIRST_RUN_MS = 7 * 60_000;
 const BETWEEN_MS = 5_000;
-const PAGE = 2_000;
+/** Directory rows one read looks at; a page of matches walked the whole directory at once (B761). */
+const WINDOW = 500;
 const QUEUE_TTL_MS = 6 * 60 * 60_000;
-const IDLE_MS = 6 * 60 * 60_000;
+const IDLE_MS = 10 * 60_000;
+const MAX_QUEUE_BUFFER = 500;
+const DEMAND_PREFETCH_LIMIT = 100;
 
 export interface TickResult {
   readonly checked: number;
@@ -35,18 +44,7 @@ export interface TickResult {
   readonly liveDirectBoards: number;
 }
 
-/**
- * Pending companies, most pool vacancies first. The directory is read in pages
- * of PAGE rows with the event loop free between pages; the list is reread when
- * empty or older than QUEUE_TTL_MS.
- */
-const MAX_QUEUE_BUFFER = 500;
-const DEMAND_PREFETCH_LIMIT = 100;
-
-function loadDemandPriorityRows(
-  database: DatabaseSync,
-  demandSince: number | undefined,
-): PendingCompany[] {
+function loadDemandPriorityRows(database: DatabaseSync): PendingCompany[] {
   const hasVc = database
     .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'vacancy_company'")
     .get();
@@ -66,14 +64,20 @@ function loadDemandPriorityRows(
     .all(DEMAND_PREFETCH_LIMIT) as unknown as Array<
     Omit<PendingCompany, 'siteSearched'> & { siteSearched: number }
   >;
-  void demandSince;
-  return rows.map(({ siteSearched, ...rest }) => ({ ...rest, ...(siteSearched ? { siteSearched: true } : {}) }));
+  return rows.map(({ siteSearched, ...rest }) => ({
+    ...rest,
+    ...(siteSearched ? { siteSearched: true } : {}),
+  }));
 }
 
+/**
+ * Pending companies bounded in memory (`MAX_QUEUE_BUFFER`), scanning primary-key windows (`B761`).
+ * Once a full pass finishes, re-reading rests for `QUEUE_TTL_MS` (6 h).
+ */
 export class PendingQueue {
   private items: PendingCompany[] = [];
-  private readAt = -Infinity;
   private cursor = '';
+  private exhaustedAt = -Infinity;
 
   constructor(
     private readonly database: DatabaseSync,
@@ -82,36 +86,50 @@ export class PendingQueue {
   ) {}
 
   async next(count: number): Promise<readonly PendingCompany[]> {
-    if (this.items.length === 0 || this.now() - this.readAt > QUEUE_TTL_MS) await this.refresh(count);
+    if (
+      this.items.length === 0 &&
+      (this.cursor !== '' || this.now() - this.exhaustedAt > QUEUE_TTL_MS)
+    ) {
+      await this.refresh(count);
+    }
     return this.items.splice(0, count);
   }
 
   private async refresh(requestedCount: number): Promise<void> {
-    const demandSince = this.direct ? this.now() - DIRECT_ATS_FRESH_MS : undefined;
-    const buffered = loadDemandPriorityRows(this.database, demandSince);
+    const directSince = this.direct ? this.now() - DIRECT_ATS_FRESH_MS : undefined;
+    const buffered: PendingCompany[] =
+      this.cursor === '' ? loadDemandPriorityRows(this.database) : [];
     const seen = new Set(buffered.map((c) => c.companyKey));
     const cap = Math.max(requestedCount, MAX_QUEUE_BUFFER);
 
     while (buffered.length < cap) {
-      const chunkCap = Math.min(PAGE, cap - buffered.length);
-      const page = readPendingPage(this.database, this.cursor, chunkCap, demandSince);
-      for (const c of page) {
+      const until = directoryWindowEnd(this.database, this.cursor, WINDOW);
+      if (until === undefined) {
+        this.cursor = '';
+        this.exhaustedAt = this.now();
+        break;
+      }
+      for (const c of readPendingPage(this.database, this.cursor, WINDOW, directSince, until)) {
         if (!seen.has(c.companyKey)) {
           seen.add(c.companyKey);
           buffered.push(c);
         }
       }
-      this.cursor = page.length === chunkCap ? page.at(-1)!.companyKey : '';
-      if (this.cursor === '') break;
+      this.cursor = until;
       await new Promise((resolve) => setImmediate(resolve));
     }
-    this.items = this.direct
-      ? [
-          ...buffered.filter((c) => this.direct!.prioritized(c)),
-          ...buffered.filter((c) => !this.direct!.prioritized(c) && !c.siteSearched),
-        ]
-      : buffered;
-    this.readAt = this.now();
+
+    if (this.direct) {
+      const priority: PendingCompany[] = [];
+      const fallback: PendingCompany[] = [];
+      for (const company of buffered) {
+        if (this.direct.prioritized(company)) priority.push(company);
+        else if (!company.siteSearched) fallback.push(company);
+      }
+      this.items = [...priority, ...fallback];
+    } else {
+      this.items = buffered;
+    }
   }
 }
 

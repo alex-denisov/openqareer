@@ -5,32 +5,40 @@
  */
 import { DatabaseSync } from 'node:sqlite';
 import { computeLandingStats } from '../../landing/landingStatsJob';
-import { computeCatalogSources } from '../../vacancies/catalogSources';
+import { catalogSourcesOf, readPoolCounts } from '../../vacancies/catalogSources';
 import { computeCatalogSalaryStats } from '../../vacancies/catalogSalaryStatsStore';
 import { computeCatalogChips } from '../../vacancies/catalogChipStore';
 import { computeSalaryMarketSnapshots } from '../../salaryMarket/salaryMarketSnapshot';
-import { computeCatalogSitemaps } from '../../seo/catalogSitemapJob';
+import { computeAndWriteSitemaps } from '../../seo/catalogSitemapWrite';
+import { chooseCardRolloutCandidates } from '../../seo/catalogCardRollout';
 import { computeAndWriteLanding } from '../../landing/landingResultWrite';
-import { applySqliteBusyTimeout } from '../../data/sqliteBusyTimeout';
+import { applySqliteBusyTimeout, SQLITE_HTTP_BUSY_TIMEOUT_MS } from '../../data/sqliteBusyTimeout';
 
 export interface HeavyReadArgs {
   readonly nowMs: number;
+  /** B761: сколько карточек выбрать в порцию открытия (`cardRolloutCandidates`). */
+  readonly quota?: number;
 }
 
 const JOBS = {
-  landing: (database: DatabaseSync, { nowMs }: HeavyReadArgs) => ({
-    landing: computeLandingStats(database, new Date(nowMs)),
-    sources: computeCatalogSources(database),
-    salaryStats: computeCatalogSalaryStats(database),
-    chips: computeCatalogChips(database, nowMs),
-  }),
+  landing: (database: DatabaseSync, { nowMs }: HeavyReadArgs) => {
+    const pool = readPoolCounts(database);
+    return {
+      landing: computeLandingStats(database, new Date(nowMs), { pool }),
+      sources: catalogSourcesOf(pool),
+      salaryStats: computeCatalogSalaryStats(database),
+      chips: computeCatalogChips(database, nowMs),
+    };
+  },
   salarySnapshots: (database: DatabaseSync, { nowMs }: HeavyReadArgs) =>
     computeSalaryMarketSnapshots(database, new Date(nowMs)),
-  sitemaps: (database: DatabaseSync, { nowMs }: HeavyReadArgs) =>
-    computeCatalogSitemaps(database, new Date(nowMs)),
+  cardRolloutCandidates: (database: DatabaseSync, { nowMs, quota }: HeavyReadArgs) =>
+    chooseCardRolloutCandidates(database, new Date(nowMs), quota ?? 0),
   // B649-5: в процессе (тесты, dev) читатель и писатель — одно соединение.
   landingWrite: (database: DatabaseSync, { nowMs }: HeavyReadArgs) =>
     computeAndWriteLanding(database, () => database, nowMs),
+  sitemapsWrite: (database: DatabaseSync, { nowMs }: HeavyReadArgs) =>
+    computeAndWriteSitemaps(database, database, new Date(nowMs)),
 };
 
 export type HeavyReadJob = keyof typeof JOBS;
@@ -51,6 +59,7 @@ export function runHeavyReadJob<K extends HeavyReadJob>(
   args: HeavyReadArgs,
 ): HeavyReadResult<K> {
   if (job === 'landingWrite') return runLandingWriteJob(path, args) as HeavyReadResult<K>;
+  if (job === 'sitemapsWrite') return runSitemapsWriteJob(path, args) as HeavyReadResult<K>;
   const database = new DatabaseSync(path, { readOnly: true });
   try {
     database.exec('PRAGMA busy_timeout = 10000;');
@@ -87,6 +96,27 @@ function runLandingWriteJob(
       nowMs,
       closeReader,
     );
+  } finally {
+    closeReader();
+    writer?.close();
+  }
+}
+
+/** Прод 24.11: карты сайта читают одним соединением и пишут порциями другим. */
+function runSitemapsWriteJob(
+  path: string,
+  { nowMs }: HeavyReadArgs,
+): HeavyReadResult<'sitemapsWrite'> {
+  const reader = new DatabaseSync(path, { readOnly: true });
+  let writer: DatabaseSync | undefined;
+  const closeReader = () => {
+    if (reader.isOpen) reader.close();
+  };
+  try {
+    reader.exec('PRAGMA busy_timeout = 10000;');
+    writer = new DatabaseSync(path);
+    applySqliteBusyTimeout(writer, SQLITE_HTTP_BUSY_TIMEOUT_MS);
+    return computeAndWriteSitemaps(reader, writer, new Date(nowMs), closeReader);
   } finally {
     closeReader();
     writer?.close();

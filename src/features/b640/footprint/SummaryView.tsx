@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import type { FootprintRiskItem, FootprintRiskSummary } from '../../../../shared/footprintRisk';
 import { Button, Icon, InfoTip, Link, PagedList, StatusLine } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
@@ -8,19 +8,22 @@ import { dayMonth, findingsWord, levelTag, pageAttrs, shortDate } from './footpr
 import type { FootprintData } from './useFootprint';
 import { repeatIds, useStartSearch } from './useStartSearch';
 import { reportFailure } from './reportFailure';
+import { checksStatus } from './removalModel';
 
 const PAGE = 20;
 
 interface ListProps {
   readonly items: readonly FootprintRiskItem[];
   readonly showLevel?: boolean;
+  /** F4 «Полезное»: только «В профиль». */
+  readonly profileOnly?: boolean;
   readonly onChanged: () => void;
 }
 
 /** Находки списком; больше 20 — порциями с «Показать ещё». */
-export function FindingList({ items, showLevel = false, onChanged }: ListProps) {
+export function FindingList({ items, showLevel = false, profileOnly = false, onChanged }: ListProps) {
   const render = (item: FootprintRiskItem) => (
-    <FindingRow key={item.id} item={item} showLevel={showLevel} onChanged={onChanged} />
+    <FindingRow key={item.id} item={item} showLevel={showLevel} profileOnly={profileOnly} onChanged={onChanged} />
   );
   if (items.length <= PAGE) return <ul className="rows exp-rows fp-finds">{items.map(render)}</ul>;
   return <PagedList items={items} renderItem={render} listClassName="rows exp-rows fp-finds" />;
@@ -85,13 +88,24 @@ function SummaryLead({ data, reload }: ViewProps) {
 function ChecksModule({ data, reload }: ViewProps) {
   const repeat = useStartSearch(data, reload);
   const checked = dayMonth(data.summary.checkedAt);
+  const status = checksStatus(data.summary.items);
   return (
     <section className="mod" aria-labelledby="fp-sum">
-      <h3 className="mod-title" id="fp-sum">Проверки</h3>
-      {checked ? (
+      <h3 className="mod-title" id="fp-sum">Проверки и запросы</h3>
+      {checked || status.requests.length > 0 ? (
         <dl className="kv">
-          <dt>Последняя проверка</dt>
-          <dd>{checked}</dd>
+          {checked ? (
+            <>
+              <dt>Последняя проверка</dt>
+              <dd>{[checked, status.lastCheck].filter(Boolean).join(' · ')}</dd>
+            </>
+          ) : null}
+          {status.requests.map((request) => (
+            <Fragment key={request.id}>
+              <dt>Жалоба отправлена</dt>
+              <dd>{`${request.title} — сайту ${request.date}`}</dd>
+            </Fragment>
+          ))}
         </dl>
       ) : null}
       {repeat.error ? <StatusLine state="err" text={repeat.error} /> : null}
@@ -108,7 +122,7 @@ function ChecksModule({ data, reload }: ViewProps) {
   );
 }
 
-/** «Отозвать» спрашивает подтверждение на месте: находки удалятся вместе с согласием. */
+/** «Отозвать» спрашивает подтверждение на месте: проверки и находки удалятся вместе с согласием. */
 function ConsentModule({ data, reload }: ViewProps) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -139,7 +153,7 @@ function ConsentModule({ data, reload }: ViewProps) {
           <span className="row-act">Отозвать</span>
         </summary>
         <div className="revoke-box" role="group" aria-label="Отозвать согласие?">
-          <p className="revoke-q">Отозвать согласие? Находки удалятся.</p>
+          <p className="revoke-q">Отозвать согласие? Проверки и находки удалятся.</p>
           {error ? <StatusLine state="err" text="Не удалось отозвать. Повторите." /> : null}
           <div className="actions">
             <Button variant="danger" busy={busy} onClick={() => void revoke()}>Отозвать</Button>

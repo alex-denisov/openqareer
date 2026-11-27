@@ -110,6 +110,41 @@ describe('a recount of one candidate (04.11)', () => {
   });
 });
 
+describe('the last result after a profile edit (25.11)', () => {
+  const edit = (row: VacancyFitInput, statement: string): VacancyFitInput => ({ ...row, profileContextHash: 'edited', facts: [{ ...row.facts[0]!, statement }] });
+  /** Puts in the latest table what a release with other rules stored. */
+  const stored = (percent: number) => {
+    const { database, store } = setup();
+    const row = input();
+    store.putCache(row, evaluateVacancyFit({ ...row, assessments: row.assessments!.slice(0, 2) }, now), now);
+    const { latest_key: key } = database.prepare('SELECT latest_key FROM vacancy_fit_latest').get() as { latest_key: string };
+    const sealed = new SealedText(Buffer.alloc(32, 7));
+    const { result_cipher: cipher } = database.prepare('SELECT result_cipher FROM vacancy_fit_latest').get() as { result_cipher: string };
+    database.prepare('UPDATE vacancy_fit_latest SET result_cipher = ?').run(sealed.seal(JSON.stringify({ ...JSON.parse(sealed.open(cipher, key)), coveragePercent: percent }), key));
+    return { database, store, row };
+  };
+  it('shows the percent of the current rules, not the higher one stored under earlier rules', () => {
+    const { database, store, row } = stored(100);
+    const percent = evaluateVacancyFit({ ...row, assessments: row.assessments!.slice(0, 2) }, now).coveragePercent;
+    expect(percent).toBeLessThan(100);
+    expect(store.getPreviousCache(edit(row, `${row.facts[0]!.statement}, Go`))?.coveragePercent).toBe(percent);
+    database.close();
+  });
+  it('a deleted or corrected fact holds no percent', () => {
+    const { database, store, row } = stored(100);
+    const deleted = { ...row, profileContextHash: 'edited', facts: [{ ...row.facts[0]!, id: 'f2', statement: 'Go services' }] };
+    expect(store.getPreviousCache(edit(row, 'Go services'))?.coveragePercent).toBe(0);
+    expect(store.getPreviousCache(deleted)?.coveragePercent).toBe(0);
+    database.close();
+  });
+  it('a text that only moved to another id keeps its verdicts', () => {
+    const { database, store, row } = stored(100);
+    const moved = { ...row, profileContextHash: 'edited', facts: [{ ...row.facts[0]!, id: 'f2' }] };
+    expect(store.getPreviousCache(moved)?.coveragePercent).toBe(71);
+    database.close();
+  });
+});
+
 describe('duties of the text (04.11)', () => {
   it('a row stored before the rule still reads, with its verdicts, and asks the model nothing', () => {
     const { database, store } = setup();
@@ -417,6 +452,64 @@ describe('jobs queued by another release (B562-r)', () => {
     const order = [1, 2, 3].map(() => store.claim({ now: '2026-10-18T10:00:03.000Z' })?.input.vacancyId);
 
     expect(order).toEqual(['visible', 'sweep-1', 'sweep-2']);
+    database.close();
+  });
+});
+
+describe('B702 part 2: the stored ids of a candidate survive the process', () => {
+  const key = new SealedText(Buffer.alloc(32, 7));
+  const put = (store: SqliteVacancyFitStore, from: number, count: number) => {
+    for (let i = from; i < from + count; i += 1) {
+      const row = { ...input(), vacancyId: `vacancy-${i}` };
+      store.putCache(row, evaluateVacancyFit(row, now), now);
+    }
+  };
+  /** A new process: another store on the same database, counting what it opens. */
+  const reopened = (database: DatabaseSync) => {
+    const sealed = new SealedText(Buffer.alloc(32, 7));
+    const open = vi.spyOn(sealed, 'open');
+    return { store: new SqliteVacancyFitStore(database, sealed), open };
+  };
+
+  it('opens one sealed row and the results written after it, not every stored result', async () => {
+    const database = new DatabaseSync(':memory:');
+    const first = new SqliteVacancyFitStore(database, key);
+    put(first, 0, 250);
+    await first.warmCachedVacancyIds('candidate-a');
+    await first.lastSeal;
+    put(first, 250, 3);
+
+    const { store, open } = reopened(database);
+    await store.warmCachedVacancyIds('candidate-a');
+
+    expect(open).toHaveBeenCalledTimes(1 + 3);
+    expect(store.cachedVacancyIds('candidate-a').size).toBe(253);
+    database.close();
+  });
+
+  it('a result deleted since the seal opens the rows again', async () => {
+    const database = new DatabaseSync(':memory:');
+    const first = new SqliteVacancyFitStore(database, key);
+    put(first, 0, 210);
+    await first.warmCachedVacancyIds('candidate-a');
+    await first.lastSeal;
+    database.exec('DELETE FROM vacancy_fit_cache WHERE rowid = 5');
+    const { store } = reopened(database);
+    await store.warmCachedVacancyIds('candidate-a');
+    expect(store.cachedVacancyIds('candidate-a').size).toBe(209);
+    database.close();
+  });
+
+  it('views answer only their stamp and go with the candidate, also when a write is still packing', async () => {
+    const { database, store } = setup();
+    await store.sealViews('candidate-a', 'p1', '[["v",{}]]');
+    expect(store.readSealedViews('candidate-a', 'p1')).toBe('[["v",{}]]');
+    expect(store.readSealedViews('candidate-a', 'p2')).toBeUndefined();
+    expect(store.readSealedViews('candidate-b', 'p1')).toBeUndefined();
+    const late = store.sealViews('candidate-a', 'p1', '[]');
+    store.deleteCandidate('candidate-a');
+    await late;
+    expect(database.prepare('SELECT COUNT(*) AS n FROM vacancy_fit_seals').get()).toEqual({ n: 0 });
     database.close();
   });
 });

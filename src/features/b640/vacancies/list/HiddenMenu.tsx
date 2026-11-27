@@ -3,6 +3,7 @@ import type { HiddenRow } from '../b640Api';
 import { Icon } from '../../kit';
 import { safeHttpUrl } from '../format';
 import { ErrorLine, MenuButton, useMenuDismiss, useRunner } from './RowMenu';
+import { sourceLinkLabel } from '../sourceLinkLabel';
 
 export interface HiddenMenuProps {
   readonly item: HiddenRow;
@@ -36,7 +37,7 @@ export function HiddenMenu({ item, onUnhide, onClose }: HiddenMenuProps) {
             <li>
               <a className="va-mi" href={href} target="_blank" rel="noopener noreferrer">
                 <Icon name="out" />
-                Открыть на сайте работодателя
+                {sourceLinkLabel(cluster)}
               </a>
             </li>
           ) : null}

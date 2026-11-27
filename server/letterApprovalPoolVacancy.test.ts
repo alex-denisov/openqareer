@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { UnifiedVacancy } from './domain/unifiedVacancy';
+import type { UnifiedVacancy, VacancyCluster } from './domain/unifiedVacancy';
 import { LETTER } from './testHelpers/letterApprovalHarness';
 import { createApp, login } from './testHelpers/vacancyPitchHarness';
 
@@ -37,7 +37,7 @@ async function poolOnly() {
   // Как на проде: ни в куче процесса, ни среди сохранённых кластеров этой записи нет.
   harness.poolStore.replaceClusters([]);
   (harness.multiSourceEngine as unknown as { clusters: unknown[] }).clusters = [];
-  const { cookie } = await login(harness.app);
+  const { cookie, candidateId } = await login(harness.app);
   const post = (path: string, payload?: Record<string, unknown>) =>
     harness.app.inject({
       method: 'POST',
@@ -45,7 +45,7 @@ async function poolOnly() {
       headers: { cookie, origin: 'http://localhost:3000' },
       ...(payload ? { payload } : {}),
     });
-  return { ...harness, post };
+  return { ...harness, post, candidateId: candidateId as string };
 }
 
 describe('B707: одобрение письма к вакансии из подборки', () => {
@@ -69,5 +69,33 @@ describe('B707: одобрение письма к вакансии из под�
     expect(approved.statusCode).toBe(410);
     expect(approved.json().error.code).toBe('vacancy_gone');
     expect((await post('letter-resume')).statusCode).toBe(410);
+  });
+});
+
+describe('B778: строка подборки внутри чужого склеенного кластера', () => {
+  it('одобрение сохраняет отклик по выбранной записи, а не по основателю склейки', async () => {
+    const harness = await poolOnly();
+    const founder = {
+      id: 'cluster-src-himalayas:1',
+      canonicalTitle: 'Fractional Chief Administrative Officer',
+      canonicalCompany: 'Himalayas Co',
+      primaryUrl: 'https://himalayas.app/jobs/1',
+      status: 'active',
+      sources: [{ sourceName: 'Himalayas', sourceType: 'json_api' }],
+    } as unknown as VacancyCluster;
+    // Как на проде: `cluster-<запись>` по ключу участника находит основателя склейки.
+    harness.multiSourceEngine.getActiveCluster = (id: string) => (id === ROW_ID ? founder : undefined);
+
+    expect((await harness.post('letter-approvals', LETTER)).statusCode).toBe(200);
+    expect((await harness.post('letter-resume')).statusCode).toBe(200);
+    const saved = harness.candidates
+      .listApplications(harness.candidateId)
+      .find((item) => item.clusterId === ROW_ID);
+    expect(saved?.vacancy).toMatchObject({
+      title: 'Директор по данным',
+      company: 'Ромашка',
+      // B635: отклик из письма хранит текст вакансии.
+      description: 'Строим платформу данных',
+    });
   });
 });

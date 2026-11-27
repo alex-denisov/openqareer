@@ -1,7 +1,9 @@
-import type { HhResumeContent, HhResumeEdit, HhResumeSections, HhResumeSnapshot } from '../../shared/hhCandidateSession';
+import { createHash } from 'node:crypto';
+import { hhSectionsRead, type HhResumeContent, type HhResumeEdit, type HhResumeSections, type HhResumeSnapshot } from '../../shared/hhCandidateSession';
 import type { HhEditsInput, HhPlatformPlace } from '../domain/hhResumeEdits';
 import { buildTargetedResumeSlice } from '../domain/resumeStudio';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
+import { sameVacancyTitle } from '../vacancies/vacancyIdentity';
 import type { RouteDeps } from './deps';
 import { currentMaster } from './resumeMaster';
 
@@ -9,11 +11,19 @@ import { currentMaster } from './resumeMaster';
  * B678: из чего платформа предлагает правки резюме hh.ru: мастер-резюме кандидата с его
  * подтверждёнными пунктами в порядке пользы для вакансии и настоящие названия компаний (B639).
  */
-type SelectedWithSections = HhResumeContent & { readonly sections: HhResumeSections };
+export type SelectedWithSections = HhResumeContent & { readonly sections: HhResumeSections };
+
+/** Прочитанные резюме списка с разделами; у выбранного разделы могли прийти вместе со сверкой. */
+export function readWithSections(snapshot: HhResumeSnapshot): SelectedWithSections[] {
+  const all = [...(snapshot.selected ? [snapshot.selected] : []), ...(snapshot.contents ?? [])];
+  const withSections = all.flatMap((content) => (hhSectionsRead(content.sections) ? [{ ...content, sections: content.sections }] : []));
+  return withSections.filter((content, index) => withSections.findIndex((item) => item.id === content.id) === index);
+}
 
 export function selectedWithSections(snapshot: HhResumeSnapshot | null): SelectedWithSections | null {
   const selected = snapshot?.selected;
-  return selected?.sections ? { ...selected, sections: selected.sections } : null;
+  if (!selected) return null;
+  return readWithSections(snapshot).find((content) => content.id === selected.id) ?? null;
 }
 
 function platformPlaces(deps: RouteDeps, candidateId: string, cluster: VacancyCluster) {
@@ -34,39 +44,57 @@ function platformPlaces(deps: RouteDeps, candidateId: string, cluster: VacancyCl
       ),
     };
   });
-  const facts = [
-    master.document.about ?? '',
-    ...places.flatMap((place) => place.bullets),
-    ...(master.document.skills ?? []).map((skill) => skill.name),
-  ].filter(Boolean);
-  return { about: master.document.about?.trim() || null, places, facts };
+  // B787: подтверждённые факты профиля («Верно» у консультанта) — их сверяет правка «исправить факт».
+  const confirmed = [...deps.candidateStore.getSnapshot(candidateId).memory]
+    .filter((fact) => (fact.status === 'confirmed' || fact.status === 'corrected') && !fact.sensitive)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .map((fact) => fact.statement.trim());
+  const facts = [master.document.about ?? '', ...places.flatMap((place) => place.bullets), ...confirmed].filter(Boolean);
+  // B787: «О себе» мастер-резюме — импортированный LinkedIn About, а не текст для резюме hh.ru:
+  // правку «О себе» он не предлагает. Отдельного «О себе» для резюме пока нет.
+  return { about: null, places, facts, confirmed };
+}
+
+/** Отклик на этот id сохранён под другим названием: вакансия из пула — не его. */
+function matchesApplication(deps: RouteDeps, candidateId: string, cluster: VacancyCluster, vacancyId: string): boolean {
+  return deps.candidateStore
+    .listApplications(candidateId)
+    .filter((item) => item.clusterId === vacancyId && item.vacancy?.title)
+    .every((item) => sameVacancyTitle(item.vacancy!.title, cluster.canonicalTitle));
 }
 
 export function hhEditsInput(
   deps: RouteDeps,
   candidateId: string,
-  snapshot: HhResumeSnapshot,
   selected: SelectedWithSections,
   cluster: VacancyCluster,
+  vacancyId: string,
 ): HhEditsInput {
+  const sameVacancy = matchesApplication(deps, candidateId, cluster, vacancyId);
   return {
     resume: { id: selected.id, title: selected.title, sections: selected.sections },
-    otherTitles: snapshot.resumes.filter((item) => item.id !== selected.id).map((item) => item.title),
-    vacancy: { title: cluster.canonicalTitle, requirements: cluster.skills },
+    vacancy: {
+      title: cluster.canonicalTitle,
+      requirements: sameVacancy ? cluster.skills : [],
+    },
     platform: platformPlaces(deps, candidateId, cluster),
   };
 }
 
 /**
  * B678: разбор одного резюме под одну вакансию держится 10 минут: повторное открытие шага отправки
- * не переводит те же строки снова. Новое чтение резюме (readAt) — новый ключ.
+ * не переводит те же строки снова. Ключ — само содержимое: изменилось резюме — новый разбор, а выбор из листа его не сбрасывает.
  */
 const EDITS_CACHE_TTL_MS = 10 * 60_000;
 const EDITS_CACHE_LIMIT = 200;
 const editsCache = new Map<string, { readonly at: number; readonly edits: readonly HhResumeEdit[] }>();
 
-export function editsCacheKey(candidateId: string, snapshot: HhResumeSnapshot, resumeId: string, vacancyId: string): string {
-  return [candidateId, resumeId, snapshot.readAt, vacancyId].join('\u0000');
+/** B787 (k06): в ключе и профиль, из которого собраны «станет»: правка консультанта даёт новый разбор. */
+export function editsCacheKey(candidateId: string, input: HhEditsInput, vacancyId: string): string {
+  const content = createHash('sha256')
+    .update(JSON.stringify([input.resume.title, input.resume.sections, input.platform, input.vacancy]))
+    .digest('hex');
+  return [candidateId, input.resume.id, content, vacancyId].join('\u0000');
 }
 
 export function cachedEdits(key: string, now = Date.now()): readonly HhResumeEdit[] | null {

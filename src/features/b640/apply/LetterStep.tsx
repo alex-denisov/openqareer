@@ -22,15 +22,20 @@ const LANGUAGES = [
 ] as const;
 const LANGUAGE_NAMES = { ru: 'русский', en: 'English' } as const;
 
+/** Письмо одобрено или ждёт пересборки по новым фактам: его настройки и текст не меняются. */
+function isLocked(letter: LetterScreenState): boolean {
+  return Boolean(letter.approval.saved) || letter.approval.stale === true;
+}
+
 interface RecipientProps {
   readonly letter: LetterScreenState;
   readonly options: readonly RecipientOption[];
 }
 
-/** «Кому»: работодателю напрямую или через знакомого. Один адресат — выбора нет. */
+/** «Кому»: работодателю напрямую или через знакомого. Строка видна и при одном адресате (B645). */
 function Recipient({ letter, options }: RecipientProps) {
   const id = useId();
-  if (options.length < 2) return null;
+  if (options.length === 0) return null;
   const value = letter.circle.selectedPathId ?? COLD_RECIPIENT;
   return (
     <div className="lt-to">
@@ -40,7 +45,7 @@ function Recipient({ letter, options }: RecipientProps) {
       <select
         id={id}
         value={options.some((option) => option.value === value) ? value : COLD_RECIPIENT}
-        disabled={Boolean(letter.approval.saved)}
+        disabled={isLocked(letter)}
         onChange={(event) => {
           const picked = options.find((option) => option.value === event.currentTarget.value);
           if (!picked) return;
@@ -95,7 +100,7 @@ function ToneAndLanguage({ letter }: { readonly letter: LetterScreenState }) {
   const used = letter.draft.pitch?.language;
   const language = letter.language === 'auto' ? used : letter.language;
   // Одобренное письмо не пересобирается: сначала «Изменить письмо».
-  const locked = Boolean(letter.approval.saved);
+  const locked = isLocked(letter);
   return (
     <details className="ls ls-chip">
       <summary className="ls-sum">
@@ -156,8 +161,39 @@ function ResumeGate({ letter }: { readonly letter: LetterScreenState }) {
   );
 }
 
+/** Факты профиля опровергли число письма: дальше только пересборка и новое одобрение. */
+function StaleFacts({ letter }: { readonly letter: LetterScreenState }) {
+  return (
+    <>
+      <StatusLine state="err" text="Факты профиля изменились" />
+      <div className="actions m-commit">
+        <Button variant="primary" icon="repeat" onClick={letter.approval.rebuild}>
+          Пересобрать письмо
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function DraftSaveFailure({ letter }: { readonly letter: LetterScreenState }) {
+  const { retryDraftSave } = letter.approval;
+  if (!retryDraftSave) return null;
+  return (
+    <StatusLine
+      state="err"
+      text="Правка не сохранилась"
+      action={
+        <Button size="sm" onClick={retryDraftSave}>
+          Повторить
+        </Button>
+      }
+    />
+  );
+}
+
 function Approval({ letter, variants, onSend }: ApprovalProps) {
   const { approval, draft } = letter;
+  if (approval.stale) return <StaleFacts letter={letter} />;
   if (approval.saved) {
     return (
       <>
@@ -176,31 +212,42 @@ function Approval({ letter, variants, onSend }: ApprovalProps) {
   return (
     <>
       <ResumeGate letter={letter} />
+      <DraftSaveFailure letter={letter} />
       {approval.error ? <StatusLine state="err" text={approval.error} /> : null}
       <div className="actions m-commit">
         <Button
           variant="primary"
           icon="check"
-          busy={approval.busy}
+          busy={approval.busy || draft.loading}
           disabled={!draft.text.trim()}
           onClick={() => void approval.approve()}
         >
           Одобрить
         </Button>
         <VariantButton variants={variants} />
+        {approval.revert ? (
+          <Button variant="quiet" icon="undo" onClick={approval.revert}>
+            Вернуть прежний
+          </Button>
+        ) : null}
       </div>
     </>
   );
 }
 
 function DraftFailure({ letter }: { readonly letter: LetterScreenState }) {
-  const { circles, draft } = letter;
+  const { draft } = letter;
   return (
     <StatusLine
       state="err"
       text="Письмо не собралось"
       action={
-        <Button size="sm" variant="primary" icon="repeat" onClick={circles.error ? circles.retry : draft.retry}>
+        <Button
+          size="sm"
+          variant="primary"
+          icon="repeat"
+          onClick={draft.retry}
+        >
           Повторить
         </Button>
       }
@@ -220,9 +267,13 @@ export function LetterStep({ letter, variants, head, onSend }: LetterStepProps) 
   const { draft, circles, approval } = letter;
   const options = recipientOptions(circles.data?.circles ?? [], head.source);
   // B716: одобренное письмо — свой текст с сервера; пересборка черновика ему не нужна.
-  const saved = Boolean(approval.saved);
-  const pending = !saved && (circles.loading || (draft.loading && !draft.pitch));
-  const failed = !saved && (circles.error || draft.error);
+  const saved = isLocked(letter);
+  // B724: после «Изменить письмо» в поле одобренный (или исправленный) текст — его не прячем,
+  // пока черновик собирается или если он не собрался.
+  const kept = !saved && draft.text.trim() !== '';
+  const rebuilding = !saved && draft.loading && !approval.keepsText;
+  const pending = !saved && !kept && (circles.loading || (draft.loading && !draft.pitch));
+  const failed = !saved && Boolean(draft.error);
   return (
     <section className="lead" aria-labelledby="lt-title">
       <h2 className="lead-title is-long" id="lt-title">
@@ -235,21 +286,23 @@ export function LetterStep({ letter, variants, head, onSend }: LetterStepProps) 
           Собираем письмо…
         </p>
       ) : null}
-      {!pending && failed ? <DraftFailure letter={letter} /> : null}
-      {!pending && !failed ? (
+      {!pending && failed && !kept ? <DraftFailure letter={letter} /> : null}
+      {!pending && (!failed || kept) ? (
         <>
-          {approval.saved ? null : <VariantSwitch variants={variants} />}
+          {saved ? null : <VariantSwitch variants={variants} />}
           <textarea
             className="letter full ap-letter"
             aria-label="Текст письма"
             value={draft.text}
-            readOnly={Boolean(approval.saved)}
+            readOnly={saved || rebuilding}
             onChange={(event) => draft.setText(event.currentTarget.value)}
           />
-          {draft.loading && !saved ? (
+          {rebuilding ? (
             <p className="ls-state" role="status">
               Пересобираем письмо…
             </p>
+          ) : failed ? (
+            <DraftFailure letter={letter} />
           ) : (
             <Approval letter={letter} variants={variants} onSend={onSend} />
           )}

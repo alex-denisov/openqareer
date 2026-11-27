@@ -21,8 +21,19 @@ const api = vi.hoisted(() => ({
   createGoalCard: vi.fn(),
   patchGoal: vi.fn(),
   patchGoalDetails: vi.fn(),
+  getOverview: vi.fn(),
 }));
 vi.mock('./diaryApi', () => api);
+// B744: подсказки формы цели — в GoalHints.test.tsx; здесь модели нет.
+vi.mock('./goalHintsApi', () => ({
+  getGoalExamples: vi.fn(async () => null),
+  getGoalBaseline: vi.fn(async () => null),
+  getRoleTitleRu: vi.fn(async () => null),
+}));
+const resume = vi.hoisted(() => ({ getResumeStudio: vi.fn() }));
+vi.mock('../../resume/resumeApi', () => resume);
+const people = vi.hoisted(() => ({ getPeople: vi.fn() }));
+vi.mock('../adaptation/adaptationApi', () => people);
 const toast = vi.hoisted(() => ({ show: vi.fn(), hide: vi.fn() }));
 vi.mock('../kit/Toast', () => ({ useToast: () => toast }));
 
@@ -85,7 +96,7 @@ const archived = {
     setBy: 'manager',
     agreedOn: null,
     weight: null,
-    archive: { archivedAt: '', reason: 'Банк меняет платформу' },
+    archive: { archivedAt: '2026-12-22T09:00:00.000Z', reason: 'Банк меняет платформу' },
   },
   indicators: [],
 };
@@ -130,6 +141,8 @@ const button = (root: ParentNode, text: string) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  api.getOverview.mockResolvedValue({ primaryWorkplace: null });
+  resume.getResumeStudio.mockResolvedValue({ projection: { master: null } });
   api.listGoalCards.mockResolvedValue({ items: [hiring], archived: [archived] });
   api.listEntries.mockResolvedValue({ items: [], nextCursor: null, summaries: [] });
   api.listMeasurements.mockResolvedValue({ items: [], nextCursor: null });
@@ -141,6 +154,23 @@ afterEach(() => {
 });
 
 describe('d02 «Цели и показатели»', () => {
+  it('B686: цель из KPI — одна строка цели, показатель не повторяет её название', async () => {
+    const kpi = {
+      ...summary('k1', { title: 'Срок релиза' }),
+      details: { setBy: 'manager', agreedOn: null, weight: 50, archive: null },
+      indicators: [summary('k1i', { title: 'Срок релиза', parentGoalId: 'k1' })],
+    };
+    api.listGoalCards.mockResolvedValue({ items: [kpi], archived: [] });
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(page.querySelectorAll('.dn-goal')).toHaveLength(1);
+    expect(page.querySelector('.dn-goal-t')?.textContent).toBe('Срок релиза');
+    // Название не повторяется и колонку не занимает: значение с начала строки.
+    const solo = page.querySelector('.dn-ind');
+    expect(solo?.className).toBe('dn-ind is-solo');
+    expect(solo?.firstElementChild?.className).toBe('num');
+    expect(page.querySelector('.dn-ind strong')?.textContent).toBe('не внесено');
+  });
+
   it('заголовок по отстающей цели, показатели, архив с причиной', async () => {
     const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
     expect(page.querySelector('.lead-title')?.textContent).toBe(
@@ -155,6 +185,90 @@ describe('d02 «Цели и показатели»', () => {
     ).toEqual(['Закрыто вакансий', 'Кандидатов в финале']);
     expect(page.querySelectorAll('.dn-ind strong')[1]?.textContent).toBe('не внесено');
     expect(page.querySelector('.eyebrow')?.textContent).toBe('Архив · 1');
+    expect(page.querySelector('#kp-arch .tip-bubble')?.textContent).toMatch(
+      /^Убрана в архив \d+ [а-я]+( \d{4})?\. Причина: /u,
+    );
+  });
+
+  it('B742: ближайшая встреча с темой и «Подготовить встречу»; без встречи блока нет', async () => {
+    api.getOverview.mockResolvedValue({ primaryWorkplace: { id: 'w1' } });
+    const person = { id: 'p1', name: 'Анна', role: 'директор', headcount: 1 };
+    people.getPeople.mockResolvedValue({
+      nextMeeting: { personId: 'p1', date: '2099-01-14', topic: 'цели года с директором' },
+      groups: [{ name: 'Руководитель', headcount: 1, people: [person] }],
+    });
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(people.getPeople).toHaveBeenCalledWith('w1');
+    expect(page.querySelector('#kp-meet')?.textContent).toBe(
+      '14 января 2099 — цели года с директором',
+    );
+    const prepare = page.querySelector('#kp-meet + .actions a');
+    expect(prepare?.textContent).toBe('Подготовить встречу');
+    expect(prepare?.getAttribute('href')).toBe('/app/diary/adaptation/manager-meeting');
+
+    view?.unmount();
+    people.getPeople.mockResolvedValue({ nextMeeting: null, groups: [] });
+    const none = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(none.querySelector('#kp-meet')).toBeNull();
+  });
+
+  it('B742: достигнутая цель — «в Итоги и в профиль» и «Перенести» в d04', async () => {
+    const done = {
+      ...hiring,
+      id: 'g3',
+      risk: { status: 'achieved', rule: 'linear_progress_v1', explanation: '' },
+    };
+    api.listGoalCards.mockResolvedValue({ items: [hiring, done], archived: [] });
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    const flags = [...page.querySelectorAll('.dn-goal')].map(
+      (goal) => goal.querySelector('.dn-flag.is-done')?.textContent ?? null,
+    );
+    expect(flags).toEqual([null, 'Достигнута → в Итоги и в профильПеренести']);
+    const move = page.querySelector('.dn-flag.is-done a');
+    expect(move?.getAttribute('href')).toBe('/app/diary/results');
+    expect(move?.className).toBe('btn is-quiet is-sm');
+  });
+
+  it('B645: на «Квартале» годовая цель идёт после квартальных — с целью этого квартала', async () => {
+    const yearly = {
+      ...summary('g5', {
+        title: 'Релизы без отката: 95 % за год',
+        horizon: 'year',
+        unit: '%',
+        dueDate: '2099-12-31',
+        targetValue: 95,
+        latestMeasurement: {
+          id: 'm5',
+          goalId: 'g5',
+          value: 82,
+          measuredAt: '2099-01-03',
+          note: null,
+          source: 'candidate_entered',
+          createdAt: '',
+        },
+      }),
+      details: {
+        setBy: 'manager',
+        agreedOn: null,
+        weight: null,
+        archive: null,
+        quarterTargets: [
+          { quarter: 1, value: 85 },
+          { quarter: 2, value: 88 },
+        ],
+      },
+      indicators: [],
+    };
+    api.listGoalCards.mockResolvedValue({ items: [yearly, hiring], archived: [] });
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    const titles = () => [...page.querySelectorAll('.dn-goal-t')].map((item) => item.textContent);
+    expect(titles()).toEqual(['Закрыть 2 вакансии в команду', 'Релизы без отката: 95 % за год']);
+    const year = page.querySelectorAll('.dn-goal')[1]!;
+    expect(year.querySelector('.dn-ind .num')?.textContent).toBe('82 % из 85 % в I кв.');
+    expect(year.textContent).toContain('Вклад кварталов: I — 85 %, II — 88 %');
+    click(button(page, 'Год'));
+    expect(titles()).toEqual(['Релизы без отката: 95 % за год']);
+    expect(page.querySelector('.dn-ind .num')?.textContent).toBe('82 % из 95 %');
   });
 
   it('горизонт «Год» без целей — строка пустого состояния', async () => {
@@ -170,6 +284,37 @@ describe('d02 «Цели и показатели»', () => {
     expect(page.querySelector('.gc-title')).not.toBeNull();
     expect(page.querySelector('.ghost')).not.toBeNull();
   });
+
+  it('целей нет — роль из места работы в вопросе, примеры без релизов', async () => {
+    api.listGoalCards.mockResolvedValue({ items: [], archived: [] });
+    api.getOverview.mockResolvedValue({
+      primaryWorkplace: { id: 'w1', company: 'Вектор Банк', title: 'Операционный директор' },
+    });
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(page.querySelector('.gc-title')?.textContent).toBe(
+      'Какие цели в роли «Операционный директор» в первом квартале?',
+    );
+    expect(page.querySelector('.ghost')?.textContent).not.toMatch(/релиз/iu);
+    expect(resume.getResumeStudio).not.toHaveBeenCalled();
+  });
+
+  it('целей и места работы нет — роль из профиля', async () => {
+    api.listGoalCards.mockResolvedValue({ items: [], archived: [] });
+    api.getOverview.mockResolvedValue({ primaryWorkplace: null });
+    resume.getResumeStudio.mockResolvedValue({ projection: { master: { targetRole: 'COO' } } });
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(page.querySelector('.gc-title')?.textContent).toBe(
+      'Какие цели в роли «COO» в первом квартале?',
+    );
+  });
+
+  it('роли нигде нет — общий вопрос', async () => {
+    api.listGoalCards.mockResolvedValue({ items: [], archived: [] });
+    api.getOverview.mockRejectedValue(new Error('down'));
+    resume.getResumeStudio.mockRejectedValue(new Error('down'));
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(page.querySelector('.gc-title')?.textContent).toBe('Какие у вас цели на этот квартал?');
+  });
 });
 
 describe('d02a «Цель»', () => {
@@ -177,6 +322,8 @@ describe('d02a «Цель»', () => {
     const page = await open(<GoalCardScreen node={nodeByCode('d02a')!} goalId="g1" />);
     expect(page.querySelector('.gt-h')?.textContent).toBe('Закрыть 2 вакансии в команду');
     expect(page.querySelector('.gt-num')?.textContent).toBe('0 из 2');
+    expect(page.querySelector('.gt-tag [aria-label="Почему отстаёт"]')).not.toBeNull();
+    expect(page.querySelector('#ga-p')?.textContent).toBe('Показатели рядом');
     api.recordMeasurement.mockResolvedValue({});
     click(button(page, 'Внести замер'));
     const dialog = document.querySelector('[role="dialog"]')!;
@@ -188,6 +335,39 @@ describe('d02a «Цель»', () => {
       expect.objectContaining({ value: 1, note: null }),
     );
     click(button(page, 'Кандидатов в финале'));
+    expect(page.querySelector('.gt-num')?.textContent).toBe('0 из 2');
+  });
+
+  it('B684: без замеров — исходное значение и строка «старт» в истории', async () => {
+    api.listMeasurements.mockResolvedValue({
+      items: [
+        {
+          id: 'm2',
+          goalId: 'i1',
+          value: 1,
+          measuredAt: '2026-10-20',
+          note: 'финал',
+          source: 'candidate_entered',
+          createdAt: '',
+        },
+      ],
+      nextCursor: null,
+    });
+    const page = await open(<GoalCardScreen node={nodeByCode('d02a')!} goalId="g1" />);
+    expect(page.querySelector('.gt-hist-l')?.textContent).toBe('Замеры · 2');
+    const cells = [...page.querySelectorAll('.gt-hist tbody tr')].map((row) =>
+      [...row.querySelectorAll('td')].map((cell) => cell.textContent),
+    );
+    expect(cells[0]).toEqual(['1 октября', '0 из 2', 'старт', '']);
+    expect(cells[1]?.slice(1)).toEqual(['1 из 2', 'вы', 'финал']);
+  });
+
+  it('B684: исходного значения нет и замеров нет — «не внесено»', async () => {
+    api.listGoalCards.mockResolvedValue({
+      items: [{ ...hiring, indicators: [summary('i3', { baselineValue: null })] }],
+      archived: [],
+    });
+    const page = await open(<GoalCardScreen node={nodeByCode('d02a')!} goalId="g1" />);
     expect(page.querySelector('.gt-num')?.textContent).toBe('не внесено');
   });
 
@@ -220,7 +400,7 @@ describe('d02b «Новая цель»', () => {
     ]);
     api.createGoalCard.mockResolvedValue({ id: 'new-goal' });
     typeInto(page.querySelector('#gb-n'), 'Сократить время ревью');
-    typeInto(page.querySelector('#gb-d'), '2099-03-31');
+    typeInto(page.querySelector('#gb-d'), '31.03.2099');
     typeInto(page.querySelector('#gb-0-i'), 'Время до ревью, часов');
     typeInto(page.querySelector('#gb-0-now'), '18');
     typeInto(page.querySelector('#gb-0-tg'), '4');

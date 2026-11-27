@@ -1,3 +1,4 @@
+import { exportPasskeys } from './passkeyExport';
 import type {
   CandidateExport,
   CandidateSnapshot,
@@ -14,8 +15,21 @@ import type { SqliteInterviewSimulatorRepository } from './sqliteInterviewSimula
 import type { SqliteStarStoriesRepository } from './sqliteStarStoriesRepository';
 import type { RoleSkillAssessmentRepository } from './sqliteRoleSkillAssessmentRepository';
 import { toExportedSourceConnection } from './store/exportedSourceConnection';
+import { createTrackerExport, type TrackerExportSources, type TrackerExportStore } from './trackerExport';
+import { exportNotifications, type NotificationExportStore } from './notificationExport';
+import { exportProfileHistory, type ProfileHistoryExportStore } from './profileHistoryExport';
+import { exportContent } from './contentExport';
+import { exportCareerSections, exportContacts } from './contactsCareerExport';
+import { type AccountExportStore, exportAccount } from './accountExport';
+import { exportAutomation } from './automationExport';
+import { strippedExportPaths, withoutForbiddenKeys } from './exportForbiddenKeys';
+import { exportInterviewRecordings } from './interviewRecordingExport';
+import { createCareerDiaryExportSources, exportCareerDiary } from './careerDiaryExport';
 
-type CandidateExportMethod = Required<Pick<CandidateStore, 'exportCandidate'>>;
+interface CandidateExportMethod extends Required<Pick<CandidateStore, 'exportCandidate'>> {
+  /** B738: шаблоны путей, которые последний шаг убрал из выгрузки кандидата (для тестов и проверки). */
+  exportCandidateStripReport(candidateId: string): string[];
+}
 
 interface CandidateExportDependencies {
   readonly getSnapshot: (candidateId: string) => CandidateSnapshot;
@@ -27,22 +41,40 @@ interface CandidateExportDependencies {
     SqliteRelocationQuestionnaireRepository,
     'getProfile' | 'getConsent' | 'scenarios'
   >;
-  readonly careerDiaryRepo: Pick<import('./sqliteCareerDiaryRepository').SqliteCareerDiaryRepository, 'exportInterviewPractices' | 'adaptationApplications'>;
+  readonly careerDiaryRepo: Pick<
+    import('./sqliteCareerDiaryRepository').SqliteCareerDiaryRepository,
+    | 'exportInterviewPractices'
+    | 'adaptationApplications'
+    | 'listGoals'
+    | 'listMeasurements'
+    | 'listWeeklyReviewsPage'
+    | 'listAchievements'
+    | 'listWorkplaces'
+  >;
+  /** B689/B738: само хранилище, его соединение и ключ — для дневника и трекера. */
+  readonly ownStorage: TrackerExportSources & { readonly store: OwnStorageStore };
   readonly diaryEntryRepo: Pick<import('./sqliteDiaryEntryRepository').SqliteDiaryEntryRepository, 'exportAll'>;
   readonly exportConsultantConversations: (
     candidateId: string,
   ) => ConsultantConversationExport[];
   readonly exportExecutiveRequests: (candidateId: string) => StoredExecutiveRequest[];
+  /** n02: «Как часто» и «Не показывать название компании». */
+  readonly readDeliverySettings: (candidateId: string) => import('./notificationDeliverySettings').DeliverySettings;
   readonly roleSkillAssessments: Pick<RoleSkillAssessmentRepository, 'list'>;
   readonly starStoriesRepo: Pick<SqliteStarStoriesRepository, 'list'>;
   readonly interviewSimulatorRepo: Pick<SqliteInterviewSimulatorRepository, 'getCurrent'>;
 }
 
+/** Хранилище глазами выгрузки: методы трекера, уведомлений и истории профиля. */
+export type OwnStorageStore = TrackerExportStore & NotificationExportStore & ProfileHistoryExportStore & AccountExportStore;
+
 export function createSqliteCandidateStoreExportMethods(
   dependencies: CandidateExportDependencies,
 ): CandidateExportMethod {
-  return {
-    exportCandidate(candidateId): CandidateExport {
+  const { database, encryptionKey } = dependencies.ownStorage;
+  const careerDiary = createCareerDiaryExportSources(database, encryptionKey, dependencies.careerDiaryRepo);
+  const exportTracker = createTrackerExport(dependencies.ownStorage);
+  const build = (candidateId: string): CandidateExport => {
       const snapshot = dependencies.getSnapshot(candidateId);
       return {
         ...snapshot,
@@ -58,6 +90,18 @@ export function createSqliteCandidateStoreExportMethods(
         interviewPractices: dependencies.careerDiaryRepo.exportInterviewPractices(candidateId),
         adaptationApplications: dependencies.careerDiaryRepo.adaptationApplications.exportApplications(candidateId),
         careerDiaryEntries: dependencies.diaryEntryRepo.exportAll(candidateId),
+        careerDiary: exportCareerDiary(careerDiary, candidateId),
+        notificationDeliverySettings: dependencies.readDeliverySettings(candidateId),
+        tracker: exportTracker(candidateId),
+        passkeys: exportPasskeys(database, candidateId),
+        notifications: exportNotifications(database, dependencies.ownStorage.store, candidateId),
+        profileHistory: exportProfileHistory(dependencies.ownStorage, candidateId),
+        content: exportContent(dependencies.ownStorage, candidateId),
+        contacts: exportContacts(dependencies.ownStorage, candidateId),
+        careerSections: exportCareerSections(dependencies.ownStorage, candidateId),
+        account: exportAccount(dependencies.ownStorage, candidateId),
+        automation: exportAutomation(dependencies.ownStorage, candidateId),
+        interviewRecordings: exportInterviewRecordings(dependencies.ownStorage, candidateId),
         relocationScenarios: dependencies.relocationQuestionnaireRepo.scenarios.list(candidateId, 50).items,
         consultantConversations: dependencies.exportConsultantConversations(candidateId),
         documentContents: snapshot.documents.flatMap((document) => {
@@ -65,6 +109,9 @@ export function createSqliteCandidateStoreExportMethods(
           return stored ? [stored] : [];
         }),
       };
-    },
+  };
+  return {
+    exportCandidate: (candidateId) => withoutForbiddenKeys(build(candidateId)),
+    exportCandidateStripReport: (candidateId) => strippedExportPaths(build(candidateId)),
   };
 }

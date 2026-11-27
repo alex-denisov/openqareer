@@ -4,13 +4,16 @@ import {
   type CareerDiaryEntry,
   type CareerDiaryEntryKind,
 } from '../../../../shared/careerDiaryEntries';
-import { useDictation } from '../consultant/useDictation';
+import { useVoiceInput } from '../voice/useVoiceInput';
 import { Icon } from '../kit/Icon';
 import type { ComposerDictation } from '../kit/Composer';
 import { StatusLine } from '../kit/ResultLine';
 import { createEntry } from './diaryApi';
 import { today } from './model';
 import { RetryButton } from './parts';
+
+/** Поле быстрой записи: в него ставит курсор «Первая запись» (d00a). */
+export const QUICK_ENTRY_INPUT_ID = 'dn-new';
 
 export interface QuickEntryProps {
   /** Вид новой записи: выбранный фильтр, при «Все» — заметка. */
@@ -70,7 +73,7 @@ function MicButton({
 export function QuickEntry(props: QuickEntryProps) {
   const { text, setText, busy, failed, submit } = useQuickSubmit(props);
   const onDictated = useCallback((value: string) => setText(value), [setText]);
-  const dictation = useDictation(onDictated);
+  const dictation = useVoiceInput(onDictated);
   return (
     <>
       <form
@@ -83,11 +86,11 @@ export function QuickEntry(props: QuickEntryProps) {
       >
         <div className="dn-q-row dn-q-grid">
           <div className="fld-mic">
-            <label className="vh" htmlFor="dn-new">
+            <label className="vh" htmlFor={QUICK_ENTRY_INPUT_ID}>
               Новая запись
             </label>
             <input
-              id="dn-new"
+              id={QUICK_ENTRY_INPUT_ID}
               type="text"
               placeholder="Что произошло?"
               value={text}

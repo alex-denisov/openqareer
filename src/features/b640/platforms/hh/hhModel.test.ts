@@ -14,7 +14,7 @@ describe('buildHhView', () => {
     expect(buildHhView([], null)).toEqual({ kind: 'off' });
   });
   it('собирает цифры из подключения и учёта действий', () => {
-    const view = buildHhView([on], { hhBoostsCount: 2, lastHhBoostAt: '2026-11-16T09:40:00Z' });
+    const view = buildHhView([on], { raisedToday: 2, lastRaisedAt: '2026-11-16T09:40:00Z' });
     expect(view.kind).toBe('on');
     const ids = view.kind === 'on' ? view.stats.map((stat) => stat.id) : [];
     expect(ids).toEqual(['last', 'today', 'loaded']);
@@ -24,7 +24,22 @@ describe('buildHhView', () => {
     expect(view.kind === 'on' && view.stats.map((stat) => stat.id)).toEqual(['loaded']);
   });
   it('без последнего поднятия строки о нём нет', () => {
-    const view = buildHhView([on], { hhBoostsCount: 0, lastHhBoostAt: null });
+    const view = buildHhView([on], { raisedToday: 0, lastRaisedAt: null });
     expect(view.kind === 'on' && view.stats.map((stat) => stat.id)).toEqual(['today', 'loaded']);
+  });
+  it('дата данных — последнее чтение резюме: снимок новее импорта или импорт новее снимка', () => {
+    const snapshot = (readAt: string, read = true) => ({
+      resumes: [{ id: 'r1', title: 'COO' }], selected: read ? { id: 'r1', title: 'COO', text: 'Опыт' } : null, readAt,
+    });
+    const loaded = (readAt: string, read = true) => {
+      const view = buildHhView([on], null, snapshot(readAt, read));
+      return view.kind === 'on' ? view.stats[0]?.value : null;
+    };
+    const imported = buildHhView([on], null);
+    const importDay = imported.kind === 'on' ? imported.stats[0]?.value : null;
+    expect(loaded('2026-11-24T17:00:49Z')).toContain('24');
+    expect(loaded('2026-11-02T10:00:00Z')).toBe(importDay);
+    // Прочитан только список — содержимое резюме не обновлялось.
+    expect(loaded('2026-11-24T17:00:49Z', false)).toBe(importDay);
   });
 });

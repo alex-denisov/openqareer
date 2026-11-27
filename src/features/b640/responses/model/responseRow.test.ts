@@ -10,13 +10,55 @@ function row(overrides: Partial<ApplicationView>) {
 }
 
 describe('B656: строка отклика', () => {
-  it('черновик зовёт проверить письмо', () => {
+  it('B723: письмо одобрено, отклик не отправлен — зовёт отправить, как «Сегодня»', () => {
     const view = row({ stage: 'saved', updatedAt: '2026-11-11T10:00:00.000Z' });
+    expect(view.tag).toEqual({ tone: 'part', label: 'письмо одобрено' });
+    expect(view.next).toBe('Отправьте отклик');
+    expect(view.event).toBe('письмо одобрено 11.11');
+    expect(view.sent).toBe('не отправлен');
+    expect(view.action).toEqual({
+      kind: 'letter',
+      label: 'Отправить',
+      short: 'Отправить',
+      icon: 'send',
+    });
+    expect(view.yours).toBe(true);
+  });
+
+  it('черновик зовёт проверить письмо', () => {
+    const view = row({
+      stage: 'saved',
+      updatedAt: '2026-11-11T10:00:00.000Z',
+      materials: { coverLetter: false, resume: false },
+    });
     expect(view.tag).toEqual({ tone: 'part', label: 'Черновик' });
     expect(view.next).toBe('Проверьте и отправьте');
     expect(view.event).toBe('черновик сохранён 11.11');
     expect(view.sent).toBe('черновик');
-    expect(view.action).toEqual({ kind: 'letter', label: 'Проверить письмо', short: 'Проверить', icon: 'file' });
+    expect(view.action).toEqual({
+      kind: 'letter',
+      label: 'Проверить письмо',
+      short: 'Проверить',
+      icon: 'file',
+    });
+    expect(view.yours).toBe(true);
+  });
+
+  it('черновик с одобренным письмом говорит то же, что экран письма (B645)', () => {
+    const view = buildResponseRow(
+      application({ stage: 'saved', updatedAt: '2026-11-11T10:00:00.000Z' }),
+      NOW,
+      { letterApproved: true },
+    );
+    expect(view.tag).toEqual({ tone: 'part', label: 'письмо одобрено' });
+    expect(view.next).toBe('Отправьте отклик');
+    expect(view.event).toBe('письмо одобрено 11.11');
+    expect(view.action).toEqual({
+      kind: 'letter',
+      label: 'Отправить',
+      short: 'Отправить',
+      icon: 'send',
+    });
     expect(view.yours).toBe(true);
   });
 
@@ -39,7 +81,12 @@ describe('B656: строка отклика', () => {
     const view = row({
       stage: 'applied',
       appliedAt: '2026-11-02T10:00:00.000Z',
-      followUp: { dueAt: '2026-11-09T00:00:00.000Z', urgency: 'overdue', source: 'standard_schedule', daysSinceContact: 8 },
+      followUp: {
+        dueAt: '2026-11-09T00:00:00.000Z',
+        urgency: 'overdue',
+        source: 'standard_schedule',
+        daysSinceContact: 8,
+      },
     });
     expect(view.tag).toEqual({ tone: '', label: 'молчат 8 дней' });
     expect(view.next).toBe('Письмо-напоминание готово');
@@ -59,14 +106,19 @@ describe('B656: строка отклика', () => {
     const view = row({
       stage: 'interview',
       stageChangedAt: '2026-11-10T10:00:00.000Z',
-      nearestInterview: { id: 'i1', scheduledAt: '2026-11-14T12:00:00.000Z', prepStatus: 'ready', round: 1 },
+      nearestInterview: {
+        id: 'i1',
+        scheduledAt: '2026-11-14T12:00:00.000Z',
+        prepStatus: 'ready',
+        round: 1,
+      },
     });
     expect(view.tag).toEqual({ tone: '', label: 'интервью 14 ноября' });
     expect(view.next).toBe('Подготовка готова');
     expect(view.event).toBe('приглашение 10.11');
   });
 
-  it('прошедшее интервью просит рассказать, как прошло', () => {
+  it('прошедшее интервью ведёт к разбору записи (макет o01c)', () => {
     const view = row({
       stage: 'interview',
       whoseTurn: 'candidate',
@@ -74,23 +126,44 @@ describe('B656: строка отклика', () => {
       interviewScheduledAt: ['2026-11-11T12:00:00.000Z'],
     });
     expect(view.tag).toEqual({ tone: 'ok', label: 'интервью прошло' });
-    expect(view.next).toBe('Расскажите, как прошло');
+    expect(view.next).toBe('Разобрать запись');
     expect(view.event).toBe('интервью 11.11');
+    expect(view.action).toEqual({
+      kind: 'debrief',
+      label: 'Разобрать запись',
+      short: 'Разобрать',
+      icon: 'play',
+    });
   });
 
   it('оффер показывает срок ответа', () => {
     const view = row({
       stage: 'offer',
       stageChangedAt: '2026-11-10T10:00:00.000Z',
-      offer: { applicationId: 'a1', terms: {}, respondBy: '2026-11-14T12:00:00.000Z', createdAt: '', updatedAt: '' },
+      offer: {
+        applicationId: 'a1',
+        terms: {},
+        respondBy: '2026-11-14T12:00:00.000Z',
+        createdAt: '',
+        updatedAt: '',
+      },
     });
     expect(view.tag).toEqual({ tone: 'ok', label: 'оффер' });
     expect(view.next).toBe('Ответить до 14 ноября');
-    expect(view.action).toEqual({ kind: 'offer', label: 'Ответить на оффер', short: 'Ответить', icon: 'send' });
+    expect(view.action).toEqual({
+      kind: 'offer',
+      label: 'Ответить на оффер',
+      short: 'Ответить',
+      icon: 'send',
+    });
   });
 
   it('отказ и архив не требуют действия', () => {
-    const rejected = row({ stage: 'rejected', whoseTurn: null, stageChangedAt: '2026-11-09T10:00:00.000Z' });
+    const rejected = row({
+      stage: 'rejected',
+      whoseTurn: null,
+      stageChangedAt: '2026-11-09T10:00:00.000Z',
+    });
     expect(rejected.tag.label).toBe('отказ');
     expect(rejected.event).toBe('отказ 9.11');
     const closed = row({
@@ -104,8 +177,21 @@ describe('B656: строка отклика', () => {
     expect(closed.event).toBe('закрыта 25.10');
   });
 
+  it('B801: архив после интервью, отказа или ответа — не «Без ответа»', () => {
+    const next = (reachedStages: ApplicationView['reachedStages'], more: Partial<ApplicationView> = {}) =>
+      row({ stage: 'archived', whoseTurn: null, reachedStages, ...more }).next;
+    expect(next(['applied', 'interview', 'archived'])).toBe('Было интервью');
+    expect(next(['applied', 'archived'], { archivePreviousStage: 'interview' })).toBe('Было интервью');
+    expect(next(['applied', 'interview', 'offer', 'archived'])).toBe('Был оффер');
+    expect(next(['applied', 'rejected', 'archived'])).toBe('Отказ получен');
+    expect(next(['applied', 'responded', 'archived'])).toBe('Компания ответила');
+    expect(next(['applied', 'archived'])).toBe('Без ответа');
+  });
+
   it('компания без названия не выдумывается', () => {
-    const view = row({ vacancy: { title: 'Аналитик', company: '', url: '', source: 'manual', companyHidden: true } });
+    const view = row({
+      vacancy: { title: 'Аналитик', company: '', url: '', source: 'manual', companyHidden: true },
+    });
     expect(view.company).toBe('Компания скрыта');
   });
 });

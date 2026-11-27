@@ -164,7 +164,10 @@ async fn read_back(
 }
 
 /// Opens the experience list freshly loaded from hh.ru, whatever the window showed.
-async fn open_clean(app: &AppHandle, url: &str) -> Result<Option<tauri::Webview>, String> {
+pub(crate) async fn open_clean(
+    app: &AppHandle,
+    url: &str,
+) -> Result<Option<tauri::Webview>, String> {
     let window = open_editor(app, url).await?;
     if !on_hh(&window) {
         return Ok(None);

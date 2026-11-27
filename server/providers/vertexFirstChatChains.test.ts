@@ -33,7 +33,10 @@ const vertex: VertexConfig = {
   model: 'gemini-3.8-flash',
   location: 'global',
 };
-const credentials = { openai: 'sk-openai-test-key-long-enough', openrouter: 'sk-or-test-key-long-enough' };
+const credentials = {
+  openai: 'sk-openai-test-key-long-enough',
+  openrouter: 'sk-or-test-key-long-enough',
+};
 
 function gateAndLedger(patch: Partial<VertexCreditConfig> = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'vchat-'));
@@ -41,7 +44,12 @@ function gateAndLedger(patch: Partial<VertexCreditConfig> = {}) {
   const ledger = new SqliteBulkLlmLedger(join(dir, 'l.db'));
   return {
     ledger,
-    gate: createVertexGate({ ledger, config: { ...creditConfig, ...patch }, env: {}, log: vi.fn() }),
+    gate: createVertexGate({
+      ledger,
+      config: { ...creditConfig, ...patch },
+      env: {},
+      log: vi.fn(),
+    }),
   };
 }
 
@@ -77,14 +85,19 @@ function metered(
 
 const labels = (mechanic: keyof typeof MODEL_CHAINS) => MODEL_CHAINS[mechanic].map(chainStageLabel);
 
-describe('цепочка пунктов: Vertex первым; диалог, разбор резюме и квиз без него (05.11)', () => {
-  it('experienceBullets: Vertex первой ступенью, прочие прежние и в прежнем порядке', () => {
-    const stages = labels('experienceBullets');
-    expect(stages[0]).toBe('vertex');
-    expect(stages.filter((label) => label === 'vertex')).toHaveLength(1);
-  });
-
-  it.each(['coach', 'coachFree', 'resumeParsing', 'skillQuizzes'] as const)('%s: без Vertex', (mechanic) => {
+describe('цепочки без Vertex (выключен решением владельца 20.11)', () => {
+  it.each([
+    'coach',
+    'coachFree',
+    'resumeParsing',
+    'skillQuizzes',
+    'experienceBullets',
+    'bulk',
+    'campaignRoles',
+    'kpiImport',
+    'linkedinDrafts',
+    'roleNames',
+  ] as const)('%s: без Vertex', (mechanic) => {
     expect(labels(mechanic)).not.toContain('vertex');
   });
 
@@ -104,7 +117,7 @@ describe('цепочка пунктов: Vertex первым; диалог, ра
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openrouter:z-ai/glm-5.3-flash',
     ]);
-    expect(labels('experienceBullets').slice(1)).toEqual([
+    expect(labels('experienceBullets')).toEqual([
       'openai:gpt-5.6-luna',
       'openrouter:z-ai/glm-5.3-flash',
     ]);
@@ -115,35 +128,19 @@ describe('цепочка пунктов: Vertex первым; диалог, ра
   });
 });
 
-describe('квиз, пункты: ступень Vertex', () => {
-  it('пункты: Vertex первая ступень, ответ читается теми же проверками', async () => {
+describe('пункты резюме: Vertex не зовётся и когда настроен', () => {
+  it('ни одного вызова Vertex, расхода Gemini в журнале нет', async () => {
     const { gate, ledger } = gateAndLedger();
-    const answer = {
-      places: [
-        { experienceId: 'exp-1', bullets: [{ text: 'Сократил тикеты на 40%.', sourceFactIds: ['f-1'] }] },
-      ],
-      droppedFactIds: [],
-      unmatchedFactIds: [],
-    };
     const calls: Call[] = [];
     const built = buildExperienceFactRewriter({
       providerCredentials: credentials,
       vertex,
-      vertexFetch: metered(gate, 'experienceBullets', transport(JSON.stringify(answer), calls)),
+      vertexFetch: metered(gate, 'experienceBullets', transport('{}', calls)),
     })!;
-    const output = await built.rewrite({
-      places: [
-        { experienceId: 'exp-1', employer: 'Cloud', title: 'Head', period: '2020', existingBullets: [], language: 'ru' },
-      ],
-      facts: [{ id: 'f-1', domain: 'outcome', statement: 'Тикетов стало на 40% меньше.' }],
-    } as never);
-    expect(output).toEqual(answer);
-    expect(built.provenance?.model).toBe('gemini-3.8-flash');
-    // Without the schema the model picks the shape itself: 04.11 the resume lost its places of work.
-    const config = calls[0]!.body.generationConfig as Record<string, unknown>;
-    expect(config.responseJsonSchema).toMatchObject({ type: 'object' });
-    expect(ledger.db.prepare("SELECT task FROM bulk_llm_spend WHERE provider='gemini'").all()).toEqual([
-      { task: 'experienceBullets' },
-    ]);
+    expect(built.provenance?.model).not.toBe('gemini-3.8-flash');
+    expect(calls).toEqual([]);
+    expect(
+      ledger.db.prepare("SELECT task FROM bulk_llm_spend WHERE provider='gemini'").all(),
+    ).toEqual([]);
   });
 });

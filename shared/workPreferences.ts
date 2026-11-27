@@ -416,8 +416,24 @@ export interface CandidateDecisionLanguage {
   readonly context?: string;
 }
 
+/** B788: подтверждённое кандидатом право на работу; страна — ISO-код или `EU`. */
+export interface WorkRight {
+  readonly country: string;
+  readonly status: 'authorized' | 'needs_visa';
+}
+
+export const workRightsSchema = z
+  .array(
+    z.object({
+      country: z.string().regex(/^[A-Z]{2}$/u),
+      status: z.enum(['authorized', 'needs_visa']),
+    }),
+  )
+  .max(60);
+
 export interface CandidateDecisionProfile {
   readonly citizenship: readonly string[];
+  readonly workRights?: readonly WorkRight[];
   /** Где кандидат ищет работу (B445): города и «удалённо», не гражданство. */
   readonly searchLocations?: readonly string[];
   readonly taxStatus?: string;
@@ -425,6 +441,8 @@ export interface CandidateDecisionProfile {
   readonly workFormats: readonly DecisionWorkFormatId[];
   readonly salaryFloor?: number;
   readonly salaryCurrency?: string;
+  /** `false` — вакансии без зарплаты не показывать; без поля они показаны. */
+  readonly showWithoutSalary?: boolean;
   readonly cushionMonths?: number;
   readonly hasFamily?: boolean;
   readonly updatedAt?: string;
@@ -451,6 +469,7 @@ const decisionProfileFormatIds = DECISION_WORK_FORMATS.map((format) => format.id
 const storedDecisionProfileSchema = z
   .object({
     citizenship: z.array(z.string().max(80)).max(10),
+    workRights: workRightsSchema.optional(),
     taxStatus: z.string().max(120).optional(),
     languages: z
       .array(
@@ -465,6 +484,7 @@ const storedDecisionProfileSchema = z
     workFormats: z.array(z.enum(decisionProfileFormatIds)).max(10),
     salaryFloor: z.number().finite().min(0).max(1_000_000_000).optional(),
     salaryCurrency: z.string().max(8).optional(),
+    showWithoutSalary: z.boolean().optional(),
     cushionMonths: z.number().finite().min(0).max(240).optional(),
     hasFamily: z.boolean().optional(),
     updatedAt: z.string().optional(),
@@ -488,8 +508,10 @@ export function parseStoredDecisionProfile(raw: string | null): CandidateDecisio
 export const CONFIDENTIAL_DECISION_KEYS = [
   'salaryFloor',
   'salaryCurrency',
+  'showWithoutSalary',
   'cushionMonths',
   'citizenship',
+  'workRights',
   'taxStatus',
   'hasFamily',
 ] as const;
@@ -548,6 +570,10 @@ function matchesWorkFormat(
   return true;
 }
 
+function hasSalary(salary: SalaryAmounts | undefined): boolean {
+  return salary?.from !== undefined || salary?.to !== undefined;
+}
+
 export function matchesDecisionProfile(
   cluster: {
     readonly isRemote?: boolean;
@@ -559,6 +585,7 @@ export function matchesDecisionProfile(
   rates?: CurrencyRates,
 ): boolean {
   if (!profile) return true;
+  if (profile.showWithoutSalary === false && !hasSalary(cluster.salary)) return false;
   if (!matchesSalaryFloor(cluster.salary, profile.salaryFloor, profile.salaryCurrency, rates)) {
     return false;
   }

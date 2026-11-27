@@ -4,12 +4,12 @@ import type {
   CareerDiaryAdaptationStepId,
   CareerDiaryAdaptationTask,
 } from '../../../../shared/careerDiaryCards';
-import { ActionDock } from '../kit/ActionDock';
 import { Button } from '../kit/Button';
 import { Icon } from '../kit/Icon';
 import { InfoTip } from '../kit/InfoTip';
 import { buildNodePath, type B640Node } from '../routes';
 import { Link } from '../shell/Link';
+import { useScreenChrome } from '../shell/ShellContext';
 import {
   dayHeading,
   dayLabel,
@@ -17,13 +17,15 @@ import {
   PROGRESS_TAG,
   stageSub,
   stageTitle,
-  STEP_TAG,
   STEP_TITLE,
   stepSub,
+  stepTag,
   taskWhen,
 } from './adaptationModel';
 import { AddTaskDialog } from './AddTaskDialog';
 import { AdaptationGate, type AdaptationActions } from './AdaptationGate';
+import { getDay30 } from './checkpointsApi';
+import { useCheckpoint } from './useCheckpoint';
 import type { AdaptationData } from './useAdaptation';
 
 /** Узел экрана шага; шаг без готового экрана в списке не показывается. */
@@ -81,18 +83,20 @@ function Stage({ stage, onToggle }: {
 }
 
 function Steps({ data }: { readonly data: AdaptationData }) {
+  const day30 = useCheckpoint(data.workplace.id, getDay30).data;
+  const check = day30.state === 'ready' ? day30.value : null;
   const shown = data.view.steps.filter((step) => STEP_NODE[step.id]);
   return (
     <section className="mod" aria-labelledby="pl-subs">
       <h3 className="mod-title" id="pl-subs">Адаптация по шагам</h3>
       <ul className="rows">
         {shown.map((step) => {
-          const [tone, text] = STEP_TAG[step.status];
+          const [tone, text] = stepTag(step, check);
           return (
             <li className="row" key={step.id}>
               <div>
                 <Link className="row-title" to={buildNodePath(STEP_NODE[step.id]!)}>{STEP_TITLE[step.id]}</Link>
-                <div className="row-sub">{stepSub(step, data.view, data.people)}</div>
+                <div className="row-sub">{stepSub(step, data.view, data.people, check)}</div>
               </div>
               <span className={`tag ${tone}`.trim()}>{text}</span>
             </li>
@@ -105,6 +109,8 @@ function Steps({ data }: { readonly data: AdaptationData }) {
 
 function Lead({ data, actions }: { readonly data: AdaptationData; readonly actions: AdaptationActions }) {
   const [adding, setAdding] = useState(false);
+  // Как у макета d01 (`data-mtight`).
+  useScreenChrome({ rootData: { mtight: '1' } });
   const { view, workplace } = data;
   const probation = probationLine(view);
   const goalId = view.stages.find((stage) => stage.status === 'active')?.goalId ?? null;
@@ -120,18 +126,15 @@ function Lead({ data, actions }: { readonly data: AdaptationData; readonly actio
         {probation ? <InfoTip label="Испытательный срок" text={probation} /> : null}
       </div>
       <p className="lead-sub">{`${workplace.company} · ${workplace.title} · с ${dayLabel(view.startDate)}`}</p>
-      <ActionDock
-        kind="commit"
-        primary={
-          goalId ? (
-            <Link className="btn is-primary" to={buildNodePath('d02a', { goalId })}>
-              <Icon name="plus" />
-              Внести замер
-            </Link>
-          ) : add
-        }
-        secondary={goalId ? add : undefined}
-      />
+      <div className="actions">
+        {goalId ? (
+          <Link className="btn is-primary" to={buildNodePath('d02a', { goalId })}>
+            <Icon name="plus" />
+            Внести замер
+          </Link>
+        ) : null}
+        {add}
+      </div>
       <ol className="steps dn-plan">
         {view.stages.filter((stage) => stage.stage !== 'prep').map((stage) => (
           <Stage key={stage.stage} stage={stage} onToggle={(id, done) => void actions.toggleTask(id, done)} />

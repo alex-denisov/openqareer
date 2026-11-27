@@ -91,6 +91,10 @@ const handleSaveCampaign: Handler = async (deps, request, reply) => {
       updatedAt: new Date().toISOString(),
       ...(stored.campaign?.auto ? { auto: stored.campaign.auto } : {}),
       ...(stored.campaign?.careerRoles ? { careerRoles: stored.campaign.careerRoles } : {}),
+      ...(stored.campaign?.roleTitlesRu ? { roleTitlesRu: stored.campaign.roleTitlesRu } : {}),
+      ...(stored.campaign?.titlesRuVersion
+        ? { titlesRuVersion: stored.campaign.titlesRuVersion }
+        : {}),
       // A saved list is not a refusal: the premises form replaces it with one role. 03.11 that
       // dismissed CTO and CIO for adenisov.test. A role is declined by removing it on «Карьера».
       ...(stored.campaign?.dismissed?.length ? { dismissed: stored.campaign.dismissed } : {}),

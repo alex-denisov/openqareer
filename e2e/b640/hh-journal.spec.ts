@@ -29,25 +29,71 @@ const hh = (connected: boolean) =>
         status: 'disconnected',
       };
 
-const entry = (index: number) => ({
-  id: `j${index}`,
-  queueItemId: `q${index}`,
-  platform: index % 3 === 0 ? 'linkedin' : 'hh',
-  result: index % 7 === 0 ? 'error' : index % 5 === 0 ? 'removed' : 'delivered',
-  receiptStatus: 'delivered',
-  attempted: true,
-  localDate: '2026-11-10',
-  company: ['Гринкод', 'Ладога Банк', 'Лента Финанс', 'Арка Холдинг'][index % 4]!,
-  occurredAt: `2026-11-${String(18 - (index % 17)).padStart(2, '0')}T16:05:00.000Z`,
-  receiptId: null,
-  failureCode: null,
-});
+const KINDS = ['post_published', 'comment_published', 'removed'] as const;
+const event = (index: number) =>
+  index === 0
+    ? {
+        id: 'reply:pavel',
+        kind: 'replied',
+        at: '2026-11-18T13:05:00.000Z',
+        text: null,
+        url: null,
+        contact: { id: 'pavel', name: 'Павел Ким' },
+      }
+    : {
+        id: `queue:q${index}`,
+        kind: KINDS[index % 3]!,
+        at: `2026-11-${String(18 - (index % 17)).padStart(2, '0')}T07:00:00.000Z`,
+        text: [
+          'Платёжная очередь без потерь на пиках',
+          'Платформенная команда: кто платит',
+          'Как мы ушли от ночных релизов',
+        ][index % 3]!,
+        url: null,
+        contact: null,
+      };
 
 async function mockHh(page: Page, connected: boolean): Promise<void> {
   await mockSignedInCabinet(page, { cabinetB640: true });
   await page.route('**/api/v1/candidate/connections', (route) =>
     route.fulfill({ json: { data: [hh(connected)] } }),
   );
+  let enabled = true;
+  let resumeId = 'cv-1';
+  await page.route('**/api/v1/candidate/b640/hh/raise', (route) => {
+    if (route.request().method() === 'PUT') {
+      const body = route.request().postDataJSON();
+      enabled = Boolean(body?.enabled);
+      resumeId = body?.resumeId ?? resumeId;
+    }
+    return route.fulfill({
+      json: {
+        data: {
+          connected,
+          resumeId: connected ? resumeId : null,
+          resumes: connected
+            ? [
+                {
+                  id: 'cv-1',
+                  title: 'Руководитель разработки',
+                  updatedLabel: 'обновлено 3 ноября',
+                },
+                { id: 'cv-2', title: 'Ведущий разработчик Go', updatedLabel: 'обновлено в 2023' },
+              ]
+            : [],
+          enabled,
+          everyHours: 4,
+          raisedToday: 1,
+          lastRaisedAt: '2026-11-19T06:40:00.000Z',
+          nextRaiseAt: '2026-11-19T10:40:00.000Z',
+          lastResult: { status: 'ok', reason: null, at: '2026-11-19T06:40:00.000Z' },
+          pausedUntil: null,
+          pauseReason: null,
+          pending: false,
+        },
+      },
+    });
+  });
   await page.route('**/api/v1/candidate/actions/usage', (route) =>
     route.fulfill({
       json: {
@@ -69,29 +115,34 @@ async function mockJournal(
 ): Promise<void> {
   await mockSignedInCabinet(page, { cabinetB640: true });
   let failed = !options.failFirst;
-  await page.route('**/api/v1/candidate/automation/journal?*', (route) => {
+  await page.route('**/api/v1/candidate/b640/linkedin/journal?*', (route) => {
     if (!failed) {
       failed = true;
-      return route.fulfill({ status: 500, json: { error: { code: 'internal', message: 'x' } } });
+      return route.fulfill({
+        status: 500,
+        json: { error: { code: 'internal', message: 'x', retryable: false } },
+      });
     }
     const offset = Number(new URL(route.request().url()).searchParams.get('offset') ?? 0);
-    const all = options.empty ? [] : Array.from({ length: TOTAL }, (_, i) => entry(i));
+    const all = options.empty ? [] : Array.from({ length: TOTAL }, (_, i) => event(i));
     return route.fulfill({
       json: {
         data: {
-          entries: all.slice(offset, offset + 20),
-          periodDays: 30,
-          counts: { total: all.length, delivered: 19, errors: 4, removed: 4 },
-          limit: 20,
+          events: all.slice(offset, offset + 20),
+          total: all.length,
           offset,
+          limit: 20,
+          month: { month: '2026-11-01', posts: 1, comments: 4, replies: 2 },
         },
       },
     });
   });
 }
 
-test.describe('B664: hh.ru и журнал нового кабинета', () => {
-  test('hh.ru подключён: данные, без автоподнятия и аналитики', async ({ page }) => {
+test.describe('B664/B696: hh.ru и журнал LinkedIn нового кабинета', () => {
+  test('hh.ru подключён: «Автоподнятие резюме» и выбор резюме, данные, без аналитики', async ({
+    page,
+  }) => {
     await mockHh(page, true);
     await page.goto(HH_PATH, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-b640-node="a11"]')).toBeVisible({ timeout: 15_000 });
@@ -100,7 +151,16 @@ test.describe('B664: hh.ru и журнал нового кабинета', () =>
       'Поднятий сегодня',
       'Данные из резюме обновлены',
     ]);
-    await expect(page.getByRole('switch')).toHaveCount(0);
+    const raise = page.getByRole('switch', { name: 'Автоподнятие резюме' });
+    await expect(raise).toBeChecked();
+    await expect(page.getByText(/^Резюме поднято · /u)).toBeVisible();
+    const resume = page.getByLabel('Резюме', { exact: true });
+    await expect(resume).toHaveValue('cv-1');
+    await resume.selectOption('Ведущий разработчик Go · обновлено в 2023');
+    await expect(resume).toBeEnabled();
+    await expect(resume).toHaveValue('cv-2');
+    await raise.click();
+    await expect(raise).not.toBeChecked();
     await expectGates(page);
   });
 
@@ -113,12 +173,20 @@ test.describe('B664: hh.ru и журнал нового кабинета', () =>
     await expect(page).toHaveURL(/\/app\/account\/connections/);
   });
 
-  test('журнал: по 20, «Показать ещё», итоги периода', async ({ page }) => {
+  test('журнал LinkedIn: «Павел ответил», по 20, «Показать ещё», итоги месяца', async ({
+    page,
+  }) => {
     await mockJournal(page);
     await page.goto(JOURNAL_PATH, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-b640-node="a05c"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.lead-title')).toHaveText('Павел ответил');
+    await expect(page.getByRole('link', { name: 'Написать Павлу' })).toHaveAttribute(
+      'href',
+      /#write-pavel$/u,
+    );
     await expect(page.locator('li.row')).toHaveCount(20);
-    await expect(page.locator('.kv dt')).toHaveText(['Отправлено', 'Ошибки', 'Убрано']);
+    await expect(page.locator('#jn-sum')).toHaveText('За ноябрь');
+    await expect(page.locator('.kv dt')).toHaveText(['Посты', 'Комментарии', 'Ответы']);
     await page.getByRole('button', { name: /Показать ещё/ }).click();
     await expect(page.locator('li.row')).toHaveCount(TOTAL);
     await expectGates(page);
@@ -127,7 +195,7 @@ test.describe('B664: hh.ru и журнал нового кабинета', () =>
   test('журнал пуст: одна строка', async ({ page }) => {
     await mockJournal(page, { empty: true });
     await page.goto(JOURNAL_PATH, { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('.vl-empty-t')).toHaveText('За 30 дней действий не было');
+    await expect(page.locator('.vl-empty-t')).toHaveText('Событий LinkedIn пока нет');
   });
 
   test('журнал: ошибка с «Повторить» на месте', async ({ page }) => {

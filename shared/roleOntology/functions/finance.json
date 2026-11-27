@@ -48,6 +48,11 @@
       "family": "finance.core",
       "titleEn": "Accountant",
       "titleRu": "Бухгалтер",
+      "forms": {
+        "toBecome": "бухгалтеры",
+        "genitive": "бухгалтера",
+        "instrumental": "бухгалтером"
+      },
       "levels": [
         "ic"
       ],

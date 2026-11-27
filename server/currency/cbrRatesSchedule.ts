@@ -6,6 +6,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import type { CurrencyRates } from '../../shared/currencyRates';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
+import { labelledTimer } from '../observability/backgroundSteps';
 import {
   parseCbrDailyXml,
   readCurrencyRates,
@@ -93,7 +94,7 @@ export function scheduleCurrencyRatesJob(database: DatabaseSync, log: RatesLog):
 
 /** Веб: чтение маленькой таблицы в память. */
 export function scheduleCurrencyRatesRefresh(databasePath: string, log: RatesLog): () => void {
-  const refresh = () => {
+  const read = () => {
     let database: DatabaseSync | undefined;
     try {
       database = new DatabaseSync(databasePath, { readOnly: true });
@@ -105,6 +106,10 @@ export function scheduleCurrencyRatesRefresh(databasePath: string, log: RatesLog
       database?.close();
     }
   };
+  // B776: под своим именем в журнале задержек веб-процесса.
+  const refresh = labelledTimer('web:currency-refresh', read, (error) =>
+    log.error({ errorName: errorName(error) }, 'currency-rates-refresh-failed'),
+  );
   refresh();
   const every = setInterval(refresh, REFRESH_INTERVAL_MS);
   every.unref();

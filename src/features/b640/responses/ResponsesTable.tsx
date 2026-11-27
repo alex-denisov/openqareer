@@ -1,3 +1,4 @@
+import { pressSend } from '../apply/applyIntent';
 import { Fragment, type ReactNode } from 'react';
 import { Icon, Link } from '../kit';
 import { buildNodePath } from '../routes';
@@ -74,9 +75,10 @@ function TableHead({ sort, onSort }: HeadProps) {
 
 /** Адрес действия строки: письмо или условия оффера. */
 export function actionPath(row: ResponseRow): string {
-  return row.action?.kind === 'offer'
-    ? buildNodePath('o06a', { offerId: row.id })
-    : buildNodePath('o02', { responseId: row.id });
+  if (row.action?.kind === 'offer') return buildNodePath('o06a', { offerId: row.id });
+  if (row.action?.kind === 'debrief') return buildNodePath('o01c', { responseId: row.id });
+  const path = buildNodePath('o02', { responseId: row.id });
+  return row.action?.step ? `${path}?step=${row.action.step}` : path;
 }
 
 function RowActionCell({ row, primary }: { readonly row: ResponseRow; readonly primary: boolean }) {
@@ -95,6 +97,7 @@ function RowActionCell({ row, primary }: { readonly row: ResponseRow; readonly p
     <Link
       className={primary ? 'btn ev-act is-primary' : 'btn ev-act'}
       to={actionPath(row)}
+      onClick={() => row.action && pressSend(row.action, actionPath(row))}
       aria-label={row.action.label}
     >
       <Icon name={row.action.icon} />
@@ -130,7 +133,7 @@ function TableRow({ row, open, next, detailId, onToggle }: RowProps) {
           aria-controls={open ? detailId : undefined}
           onClick={() => onToggle(row.id)}
         >
-          <span>{row.role}</span>
+          <span title={row.role}>{row.role}</span>
           <Icon name="down" className="vt-chev" />
         </button>
         <span className="ot-sub">
@@ -189,7 +192,11 @@ export function ResponsesTable(props: ResponsesTableProps) {
                 {open ? (
                   <tr className="vt-detail-row is-next">
                     <td colSpan={6}>
-                      <section className="od od-one" id={detailId} aria-labelledby={`${detailId}-t`}>
+                      <section
+                        className="od od-one"
+                        id={detailId}
+                        aria-labelledby={`${detailId}-t`}
+                      >
                         {detail}
                       </section>
                     </td>

@@ -1,6 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { DECISION_WORK_FORMATS, type CandidateDecisionProfile } from '../../shared/workPreferences';
+import {
+  DECISION_WORK_FORMATS,
+  workRightsSchema,
+  type CandidateDecisionProfile,
+} from '../../shared/workPreferences';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, withDeps } from './helpers';
 
@@ -11,6 +15,7 @@ const formatIds = DECISION_WORK_FORMATS.map((format) => format.id) as [string, .
 export const putDecisionProfileSchema = z
   .object({
     citizenship: z.array(z.string().max(80)).max(10).default([]),
+    workRights: workRightsSchema.optional(),
     searchLocations: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
     taxStatus: z.string().max(120).optional(),
     languages: z
@@ -27,6 +32,7 @@ export const putDecisionProfileSchema = z
     workFormats: z.array(z.enum(formatIds)).max(10).default([]),
     salaryFloor: z.number().finite().min(0).max(1_000_000_000).optional(),
     salaryCurrency: z.string().max(8).optional(),
+    showWithoutSalary: z.boolean().optional(),
     cushionMonths: z.number().finite().min(0).max(240).optional(),
     hasFamily: z.boolean().optional(),
   })
@@ -56,9 +62,18 @@ const handlePut: Handler = async (deps, request, reply) => {
       },
     });
   }
+  // Экраны условий о праве на работу не знают: без поля прежние факты остаются (B788).
+  // Так же с «Показывать вакансии без зарплаты»: её правит только «Зарплата от» (c10).
+  const stored = candidateStore.decisionProfileRepo.get(candidate.id);
+  const workRights = parsed.data.workRights ?? stored?.workRights;
+  const showWithoutSalary = parsed.data.showWithoutSalary ?? stored?.showWithoutSalary;
   const data = candidateStore.decisionProfileRepo.put(
     candidate.id,
-    parsed.data as CandidateDecisionProfile,
+    {
+      ...parsed.data,
+      ...(workRights ? { workRights } : {}),
+      ...(showWithoutSalary === undefined ? {} : { showWithoutSalary }),
+    } as CandidateDecisionProfile,
     new Date().toISOString(),
   );
   return { data, meta: { requestId: request.id } };

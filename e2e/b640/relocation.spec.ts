@@ -53,6 +53,31 @@ test.describe('B653 C06: «Релокация»', () => {
       'href',
       '/app/vacancies/companies?relocation=true',
     );
+    // Главное действие — в ведущем блоке, как в макете c06 (B645): на 390 закреплено
+    // у правого поля, на 1440 стоит в левой колонке. «Изменить места» — вторичная ссылка.
+    const dock = screen.locator('.lead > .actions');
+    await expect(dock.getByRole('button')).toHaveText(['Уточнить: кто едет и бюджет']);
+    const places = screen.locator('.lead .row-act', { hasText: 'Изменить места' });
+    await expect(places).toBeVisible();
+    // Как в макете: строчная ссылка по ширине текста, отступ −8 от края карточки (B645 c06).
+    const placesBox = await places.boundingBox();
+    const leadBox = await screen.locator('.lead').first().boundingBox();
+    expect(placesBox?.width ?? 0).toBeLessThan(160);
+    const padding = await screen
+      .locator('.lead')
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft));
+    expect(Math.round((placesBox?.x ?? 0) - (leadBox?.x ?? 0))).toBe(padding - 8);
+    const leadContentX = (leadBox?.x ?? 0) + padding;
+    const button = await dock.getByRole('button').boundingBox();
+    if ((page.viewportSize()?.width ?? 0) < 768) {
+      expect(Math.round((button?.x ?? 0) + (button?.width ?? 0))).toBe(374);
+      expect(button?.width ?? 0).toBeLessThan(358);
+      await expect(screen).toHaveCSS('padding-top', '12px');
+      await expect(screen.locator('.rl-row').first()).toHaveCSS('padding-top', '8px');
+    } else {
+      expect(Math.round(button?.x ?? 0)).toBe(Math.round(leadContentX));
+    }
     await expectGates(page);
   });
 
@@ -103,7 +128,7 @@ test.describe('B653 C06: «Релокация»', () => {
       relocationProfile: profile,
     });
     await screenOf(page)
-      .getByRole('button', { name: 'Уточнить, кто едет' })
+      .getByRole('button', { name: 'Уточнить: кто едет и бюджет' })
       .click({ timeout: 15_000 });
     const dialog = page.getByRole('dialog', { name: 'Кто едет' });
     await dialog.getByRole('button', { name: 'Я и партнёр' }).click();

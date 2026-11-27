@@ -1,12 +1,15 @@
+import type { ParsedUrlQuery } from 'node:querystring';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   B640_SORT_DIRECTIONS,
   B640_SORT_KEYS,
 } from '../../shared/b640Vacancies';
+import { meetsMonthlySalaryMinimum } from '../../shared/monthlySalaryMinimum';
 import { DEFAULT_VACANCY_SORT, type VacancySort } from '../../shared/vacancySort';
+import { getCurrencyRates } from '../currency/cbrRates';
 import { sortMatchedByColumn, type ColumnSortKey } from '../vacancies/matchedColumnSort';
-import { matchedVacancySourceRegistry } from '../vacancies/matchedVacancyFacets';
+import { cachedMatchedSourceRegistry } from '../vacancies/matchedSourceRegistryCache';
 import {
   matchedVacanciesQuerySchema,
   type MatchedVacancyFilters,
@@ -27,14 +30,21 @@ import {
 } from './b640VacancyContext';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
-import { withShownPageFitViews, withWantedCompanyOrder } from './matchedVacancyFit';
-import { readMatchedList } from './matchedVacancyList';
+import { withFilteredDates, type FacetsSource } from './matchedVacancyPart';
+import { withOrderedPercents, withShownPageFitViews, withWantedCompanyOrder } from './matchedVacancyFit';
+import { engineListReads, readMatchedList } from './matchedVacancyList';
 import { fitWorkIds, prepareMatchedRead, startFitWork, startShownPageFit, withMarketSalary } from './matchedVacancyRoutes';
+import { createListPages } from './b640ListPages';
 import { readB640Sealed } from './b640SealedAnswer';
+import { careerTimeZone, withinLastDays } from './careerRoleCounts';
 import { selectionFitLimit } from './fitSelectionSweep';
 import { candidatePlan, withDeps } from './helpers';
+import { titleFactsCount } from './matchedFitRelevance';
 import { withRequestScopedCandidateReads } from './requestScopedCandidateReads';
 
+
+/** Валюты фильтра «Зарплата» списка (MoneyCurrency без «как в вакансии» — она считается в рублях). */
+const MONEY_FILTER_CURRENCIES = ['RUB', 'USD', 'EUR', 'AED'] as const;
 
 const querySchema = matchedVacanciesQuerySchema
   .omit({ sort: true, dir: true, offset: true })
@@ -42,6 +52,20 @@ const querySchema = matchedVacanciesQuerySchema
     ...pagingSchema,
     sort: z.enum(B640_SORT_KEYS).default('fit'),
     direction: z.enum(B640_SORT_DIRECTIONS).default('desc'),
+    /**
+     * B726: фильтр «Дата» на сервере — те же дни и та же граница дня, что у числа роли «Карьеры».
+     * Без него в серверном порядке число подборки с «Датой» было неизвестно, пока не дочитаны все порции.
+     */
+    days: z.coerce.number().int().min(0).max(366).optional(),
+    tz: z.string().max(64).optional(),
+    /**
+     * B765 (B645 s07): «Зарплата от» в месяц, в валюте `moneyCurrency`, — тоже на сервере, иначе
+     * «Показать N» и «осталось N» не знали числа, пока подборка не дочитана.
+     */
+    money: z.coerce.number().int().min(1).max(1_000_000_000).optional(),
+    moneyCurrency: z.enum(MONEY_FILTER_CURRENCIES).default('RUB'),
+    /** Первое чтение списка: роли поиска подставляет сервер и называет их в `meta.roles`. */
+    roles: z.literal('campaign').optional(),
   });
 type Query = z.infer<typeof querySchema>;
 
@@ -58,6 +82,17 @@ function savedOrder(deps: RouteDeps, candidateId: string): VacancySort {
 function listFilters(query: Query, order: VacancySort): MatchedVacancyFilters {
   const { region, level, source, role, remote, place, placeRemote } = query;
   return { offset: 0, region, level, source, role, remote, place, placeRemote, sort: order.by, dir: order.dir };
+}
+
+/**
+ * B776: основной вид подборки — только роли. Его список пишется в запечатанную строку, как у
+ * прежнего маршрута, иначе после перезапуска первое открытие строило его заново (прод 23.11,
+ * 13 ролей — 14–18 с). Сужающие фильтры не пишутся (B674): строк на кандидата четыре, и выбор
+ * фильтров вытеснял бы общий список. Ключ строки — тот же выбор, что у чтения (`readB640Sealed`).
+ */
+function sealsMainView(filters: MatchedVacancyFilters): boolean {
+  const { region, level, source, place, remote, placeRemote } = filters;
+  return !remote && !placeRemote && [region, level, source, place].every((values) => !values?.length);
 }
 
 function emptyResponse(request: FastifyRequest, query: Query, context: B640ListContext) {
@@ -83,9 +118,11 @@ async function readList(
   context: B640ListContext,
   query: Query,
 ) {
+  const startedAt = performance.now();
   const order = savedOrder(deps, candidateId);
   const filters = listFilters(query, order);
   const read = await prepareMatchedRead(deps, candidateId, context.targetRoles, order, request.log);
+  const snapshotAt = performance.now();
   const snapshot = await readMatchedSnapshot(
     deps.multiSourceEngine,
     candidateId,
@@ -94,8 +131,9 @@ async function readList(
     context.targetLevel,
     context.geography,
   );
-  const sourceRegistry = matchedVacancySourceRegistry(deps.multiSourceEngine.getSources?.() ?? []);
-  const { list } = await readMatchedList(
+  const { registry: sourceRegistry } = cachedMatchedSourceRegistry(deps.multiSourceEngine);
+  const listAt = performance.now();
+  const { list, served } = await readMatchedList(
     {
       ...context,
       candidateStore: deps.candidateStore,
@@ -105,19 +143,60 @@ async function readList(
       filters,
       sourceRegistry,
       order: read.order,
-      seal: false,
-      ...(typeof deps.multiSourceEngine.getCatalogTotals === 'function'
-        ? { catalogTotals: () => deps.multiSourceEngine.getCatalogTotals!() }
-        : {}),
+      seal: sealsMainView(filters),
+      ...engineListReads(deps.multiSourceEngine),
     },
     request.log,
   );
-  return { list, saved: order, fitLimit: read.fitLimit, targetLevel: read.targetLevel };
+  const timing: ListReadTiming = {
+    served,
+    setupMs: roundMs(snapshotAt - startedAt),
+    snapshotMs: roundMs(listAt - snapshotAt),
+    listReadMs: roundMs(performance.now() - listAt),
+    ...(served === 'built'
+      ? { prepareMs: list.prepareMs, listMs: list.listMs, phasesMs: list.phasesMs }
+      : {}),
+  };
+  return { list, saved: order, fitLimit: read.fitLimit, targetLevel: read.targetLevel, timing };
+}
+
+/** B770: what the b640 list spent, by step; built lists carry their phases. */
+interface ListReadTiming {
+  readonly served: string;
+  readonly setupMs: number;
+  readonly snapshotMs: number;
+  readonly listReadMs: number;
+  readonly prepareMs?: number;
+  readonly listMs?: number;
+  readonly phasesMs?: Readonly<Record<string, number>>;
+}
+
+const roundMs = (ms: number): number => Number(ms.toFixed(2));
+
+function logListTiming(
+  request: FastifyRequest,
+  query: Query,
+  timing: ListReadTiming,
+  orderMs: number,
+): void {
+  request.log.info(
+    {
+      ...timing,
+      orderMs: roundMs(orderMs),
+      offset: query.offset,
+      sort: query.sort,
+      titleFacts: titleFactsCount(),
+      heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1_048_576),
+    },
+    'b640-matched-timing',
+  );
 }
 
 type Rows = readonly MatchedVacancyItem[];
 
-/** Порядок «Совпадение» или «Деньги» поверх готового списка; список уже в этом порядке — не трогаем. */
+const inPageOrder = createListPages();
+
+/** Порядок «Совпадение» или «Деньги» поверх готового списка. */
 async function reordered(
   deps: RouteDeps,
   request: FastifyRequest,
@@ -142,18 +221,27 @@ async function orderRows(
   request: FastifyRequest,
   candidateId: string,
   context: B640ListContext,
-  read: { readonly list: { readonly filtered: Rows }; readonly saved: VacancySort },
+  read: { readonly list: { readonly filtered: Rows } },
   query: Query,
 ): Promise<Ordering> {
   const { filtered } = read.list;
-  const sameAsSaved = (order: VacancySort) => order.by === read.saved.by && order.dir === read.saved.dir;
-  const arrange = (order: VacancySort) =>
-    sameAsSaved(order) ? Promise.resolve(filtered) : reordered(deps, request, candidateId, context, filtered, order);
+  // B789: и в порядке готового списка — проценты досчитались после его сборки.
+  const arrange = (order: VacancySort) => reordered(deps, request, candidateId, context, filtered, order);
   const byFit = await arrange(DEFAULT_VACANCY_SORT);
+  if (query.sort === 'fit' && query.direction === 'desc') return { byFit, rows: byFit };
   if (query.sort === 'fit' || query.sort === 'money') {
     return { byFit, rows: await arrange({ by: query.sort, dir: query.direction }) };
   }
-  return { byFit, rows: sortMatchedByColumn(byFit, query.sort as ColumnSortKey, query.direction) };
+  return { byFit, rows: sortMatchedByColumn(byFit, query.sort as ColumnSortKey, query.direction, careerTimeZone(query)) };
+}
+
+/** Фасеты — с первой порцией; числа «Даты» — по поясу кандидата, как у прежнего маршрута. */
+function firstPageFacets(
+  query: Query,
+  source: Pick<FacetsSource, 'facets' | 'filteredObserved'>,
+): { readonly facets?: FacetsSource['facets'] } {
+  if (query.offset !== 0 || !source.facets) return {};
+  return { facets: withFilteredDates(source.facets, source.filteredObserved, careerTimeZone(query)) };
 }
 
 /** B702: страница из списка прошлого процесса; проценты, уровни и деньги читаются как обычно. */
@@ -179,9 +267,10 @@ async function sealedAnswer(
   if (!slice) return undefined;
   const shown = slice.rows.map(trim);
   const levels = addStoredVacancyLevels(shown, context.targetLevel, (key) => deps.titleParseStore.getByKey(key));
-  const data = withMarketSalary(deps, await withShownPageFitViews(deps, candidateId, levels));
+  const live = await withShownPageFitViews(deps, candidateId, levels);
+  const data = withMarketSalary(deps, withOrderedPercents(live, slice.rows));
   const fitLimit = selectionFitLimit(candidatePlan(deps, candidateId));
-  startShownPageFit(backgroundDeps, candidateId, data, query.offset, fitLimit, request);
+  startShownPageFit(backgroundDeps, candidateId, live, query.offset, fitLimit, request);
   request.log.info({ rows: slice.total, offset: query.offset }, 'b640-matched-served-sealed');
   return {
     data,
@@ -194,9 +283,38 @@ async function sealedAnswer(
       nextOffset: nextOffsetOf(query.offset, shown.length, slice.total),
       campaign: campaignMeta(slice.campaignWithHypotheses),
       candidateLevel: context.targetLevel ?? null,
-      ...(query.offset === 0 ? { facets: slice.facets } : {}),
+      ...firstPageFacets(query, slice),
     },
   };
+}
+
+/** Строки с месячной суммой не ниже `money` и строки без месячной суммы; без `money` — все. */
+function withinMoney(rows: Rows, query: Query): Rows {
+  const { money, moneyCurrency } = query;
+  if (!money) return rows;
+  const rates = getCurrencyRates();
+  return rows.filter((item) => meetsMonthlySalaryMinimum(item.cluster.salary, money, moneyCurrency, rates));
+}
+
+/** Строки за последние `days` дней кандидата; без `days` — все. */
+function withinDays(rows: Rows, query: Query): Rows {
+  const { days } = query;
+  if (!days) return rows;
+  return withinLastDays(rows, days, new Date(), careerTimeZone(query));
+}
+
+interface ListQuery {
+  readonly query: Query;
+  /** Роли, которые подставил сервер; их не выбирали — пусто. */
+  readonly roles: { readonly roles: readonly string[] } | undefined;
+}
+
+/** Роли «по умолчанию» (кандидат их не выбирал) подборку не сужают — как `defaultRoles` клиента. */
+function withCampaignRoles(parsed: Query, { campaign }: B640ListContext): ListQuery {
+  const { roles: asked, ...query } = parsed;
+  if (!asked || query.role?.length) return { query, roles: undefined };
+  const roles = campaign.roles.origin === 'default' ? [] : [...campaign.roles.value];
+  return { query: roles.length > 0 ? { ...query, role: roles } : query, roles: { roles } };
 }
 
 const getMatchedVacancies = async (
@@ -210,21 +328,31 @@ const getMatchedVacancies = async (
   if (!candidate) return reply;
   const parsed = querySchema.safeParse(request.query);
   if (!parsed.success) return invalidQuery(request, reply);
-  const query = parsed.data;
   const deps = withRequestScopedCandidateReads(backgroundDeps);
   const context = readB640ListContext(deps, candidate.id);
+  const { query, roles } = withCampaignRoles(parsed.data, context);
   if (profileIsEmpty(context)) return emptyResponse(request, query, context);
-  const sealed = await sealedAnswer(deps, backgroundDeps, request, candidate.id, context, query);
-  if (sealed) return sealed;
+  // Запечатанный список прошлого процесса — без окна дат и суммы: с ними читаем список как обычно.
+  const sealed = query.days || query.money
+    ? undefined
+    : await sealedAnswer(deps, backgroundDeps, request, candidate.id, context, query);
+  if (sealed) return { ...sealed, meta: { ...sealed.meta, ...roles } };
   const read = await readList(deps, request, candidate.id, context, query);
   const { list, fitLimit, targetLevel } = read;
-  const { rows, byFit } = await orderRows(deps, request, candidate.id, context, read, query);
+  const orderStartedAt = performance.now();
+  const ordered = await orderRows(deps, request, candidate.id, context, read, query);
+  logListTiming(request, query, read.timing, performance.now() - orderStartedAt);
+  const { byFit } = ordered;
+  const { offset: _offset, limit: _limit, ...view } = query;
+  const pagesKey = `${candidate.id}|${JSON.stringify(view)}`;
+  const rows = inPageOrder(pagesKey, withinMoney(withinDays(ordered.rows, query), query), query.offset);
   const shown = rows.slice(query.offset, query.offset + query.limit).map(trim);
   const levels = addStoredVacancyLevels(shown, targetLevel, (key) => deps.titleParseStore.getByKey(key));
-  const data = withMarketSalary(deps, await withShownPageFitViews(deps, candidate.id, levels));
+  const live = await withShownPageFitViews(deps, candidate.id, levels);
+  const data = withMarketSalary(deps, withOrderedPercents(live, rows.slice(query.offset)));
   // Подсчёт процентов идёт по порядку совпадения, а не по выбранному столбцу.
   const work = fitWorkIds(byFit, query.offset, fitLimit);
-  startFitWork(backgroundDeps, candidate.id, { ...work, data }, { offset: query.offset, fitLimit }, request);
+  startFitWork(backgroundDeps, candidate.id, { ...work, data: live }, { offset: query.offset, fitLimit }, request);
   return {
     data,
     meta: {
@@ -236,7 +364,8 @@ const getMatchedVacancies = async (
       nextOffset: nextOffsetOf(query.offset, shown.length, rows.length),
       campaign: campaignMeta(list.campaignWithHypotheses),
       candidateLevel: targetLevel ?? null,
-      ...(query.offset === 0 ? { facets: list.facets } : {}),
+      ...roles,
+      ...firstPageFacets(query, list),
     },
   };
 };
@@ -250,7 +379,7 @@ export async function readB640PoolRows(
   request: FastifyRequest,
   candidateId: string,
   context: B640ListContext,
-  filters: Readonly<Record<string, string>>,
+  filters: Readonly<ParsedUrlQuery>,
 ): Promise<Rows | null> {
   const parsed = querySchema.safeParse(filters);
   if (!parsed.success) return null;
@@ -258,7 +387,7 @@ export async function readB640PoolRows(
   return read.list.filtered;
 }
 
-/** B674: подборка с сортировкой по любому столбцу; запомненную сортировку и запечатанный список прежнего маршрута читает как он, но не пишет. */
+/** B674: подборка с сортировкой по любому столбцу; запомненную сортировку читает как прежний маршрут, но не пишет; запечатанный список пишет только для основного вида (B776). */
 export function registerB640MatchedVacancyRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/candidate/b640/matched-vacancies', withDeps(deps, getMatchedVacancies));
 }

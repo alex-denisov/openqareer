@@ -195,8 +195,11 @@ const probe = (): Probe => {
         `${label(p)}: верх кнопок разный на ${Math.round(d)} px (${cs.map(label).join(' | ')})`,
       );
   }
-  // (б) на экране
-  const prim = [...document.querySelectorAll('.btn.is-primary')].filter(
+  // (б) на экране; при открытом модальном окне страница за ним инертна — считаем только окно.
+  const modal = [
+    ...document.querySelectorAll('dialog[open]:modal, [role="dialog"][aria-modal="true"]'),
+  ].find(shown);
+  const prim = [...(modal ?? document).querySelectorAll('.btn.is-primary')].filter(
     (e) => shown(e) && !e.closest('dialog:not([open])'),
   );
   if (prim.length > 1)

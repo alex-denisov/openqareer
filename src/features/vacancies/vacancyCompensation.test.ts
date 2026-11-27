@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatCompensationCompact } from './vacancyCompensation';
+import { formatCompensationCompact, formatStatedCompensation } from './vacancyCompensation';
 
 describe('formatCompensationCompact (B446-g4: thousands, ₽ at the end)', () => {
   it('formats a rouble range as «450–600 тыс. ₽»', () => {
@@ -40,5 +40,34 @@ describe('formatCompensationCompact (B446-g4: thousands, ₽ at the end)', () =>
     expect(formatCompensationCompact({ from: 5000000, to: 6000000, currency: 'jpy' })).toBe(
       '5 000–6 000 тыс. JPY',
     );
+  });
+});
+
+describe('formatCompensationCompact: суммы меньше тысячи (B765, B645 23.11)', () => {
+  it('почасовая ставка — целыми суммами с «в час», без «$0–0 тыс.»', () => {
+    expect(formatCompensationCompact({ from: 200, to: 300, currency: 'USD', period: 'hour' })).toBe(
+      '$200–300 в час',
+    );
+    expect(formatCompensationCompact({ from: 115, to: 130, currency: 'EUR' })).toBe('€115–130');
+    expect(formatCompensationCompact({ from: 900, currency: 'USD' })).toBe('от $900');
+  });
+
+  it('тысячи и больше — как прежде', () => {
+    expect(
+      formatCompensationCompact({ from: 218000, to: 265000, currency: 'USD', period: 'year' }),
+    ).toBe('$218–265 тыс.');
+  });
+});
+
+describe('B803: период суммы вакансии', () => {
+  it('называет год и час, неуказанный период выводит сам', () => {
+    expect(formatStatedCompensation({ from: 90_000, to: 120_000, currency: 'EUR' })).toBe(
+      '€90–120 тыс. в год',
+    );
+    expect(
+      formatStatedCompensation({ from: 200_000, to: 300_000, currency: 'USD', period: 'year' }),
+    ).toBe('$200–300 тыс. в год');
+    expect(formatStatedCompensation({ from: 450_000, currency: 'RUR' })).toBe('от 450 тыс. ₽');
+    expect(formatStatedCompensation({ from: 800_000, currency: 'KZT' })).toBe('от 800 тыс. KZT');
   });
 });

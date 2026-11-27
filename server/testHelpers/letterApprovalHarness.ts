@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import type { CoverLetterWriter } from '../providers/coverLetterWriter';
-import { createApp, login } from './vacancyPitchHarness';
+import { createApp, login, type PitchAppOptions } from './vacancyPitchHarness';
 
 /** Стенд одобрения письма с резюме (B601): вакансия, засев резюме и чтение привязки из таблицы. */
 export const cluster: VacancyCluster = {
@@ -33,13 +33,18 @@ export const LETTER = {
 export type Candidates = Awaited<ReturnType<typeof createApp>>['candidates'];
 
 /** Место работы попадает в снимок, только когда его подтверждает факт профиля. */
-export function seedResume(candidates: Candidates, candidateId: string, title: string): void {
+export function seedResume(candidates: Candidates, candidateId: string, title: string, bullets: readonly string[] = []): void {
   const memoryId = 'import:test:role-' + title.length;
+  const bulletId = (index: number) => 'import:test:bullet-' + index;
+  const bulletMemoryIds = bullets.map((_, index) => bulletId(index));
   candidates.importResumeEvidence(candidateId, {
     sourceLabel: 'synthetic',
-    entries: [{ memoryId, domain: 'outcome', statement: title + ', Финтех Лаб, с 2021 года.' }],
+    entries: [
+      { memoryId, domain: 'outcome', statement: title + ', Финтех Лаб, с 2021 года.' },
+      ...bullets.map((statement, index) => ({ memoryId: bulletId(index), domain: 'outcome', statement })),
+    ],
   } as never);
-  candidates.reviewMemories(candidateId, [memoryId], 'confirm');
+  candidates.reviewMemories(candidateId, [memoryId, ...bulletMemoryIds], 'confirm');
   const draft: ResumeDraft = {
     ...EMPTY_RESUME_DRAFT,
     candidate: { fullName: 'Мила Пример' },
@@ -50,20 +55,23 @@ export function seedResume(candidates: Candidates, candidateId: string, title: s
       employer: 'Финтех Лаб',
       startDate: '2021-01',
       current: true,
-      bulletMemoryIds: [],
+      bulletMemoryIds,
     }],
   };
   candidates.saveResumeDraft(candidateId, draft, []);
 }
 
 export interface SetupOptions {
+  readonly vacancy?: Partial<VacancyCluster>;
   readonly billingEnforcement?: boolean;
   readonly coverLetterWriter?: CoverLetterWriter;
+  readonly experienceFactRewriter?: PitchAppOptions['experienceFactRewriter'];
 }
 
 export async function setup(role?: string, options: SetupOptions = {}) {
-  const { app, candidates, databasePath } = await createApp([cluster], {
+  const { app, candidates, databasePath } = await createApp([{ ...cluster, ...options.vacancy }], {
     ...(options.billingEnforcement ? { billingEnforcement: true } : {}),
+    ...(options.experienceFactRewriter ? { experienceFactRewriter: options.experienceFactRewriter } : {}),
     ...(options.coverLetterWriter ? { coverLetterWriter: options.coverLetterWriter } : {}),
   });
   const { cookie, candidateId } = await login(app);
@@ -104,6 +112,9 @@ export async function setup(role?: string, options: SetupOptions = {}) {
       database.close();
     }
   };
-  return { candidates, candidateId, approve, readApproval, prepareResume, pitch, resumeDocuments, versions, linkedResume };
+  const call = (method: 'GET' | 'PUT' | 'PATCH', url: string, payload?: object) => app.inject({
+    method, url, headers: { cookie, origin: 'http://localhost:3000' }, ...(payload ? { payload } : {}),
+  });
+  return { call, candidates, candidateId, approve, readApproval, prepareResume, pitch, resumeDocuments, versions, linkedResume };
 }
 

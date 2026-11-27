@@ -201,10 +201,10 @@ const putMeeting: Handler = async (deps, request, reply) => {
   const { at, person } = found;
   const blocked = meetingBlocked(at, person);
   if (blocked) return conflict(reply, request, 'career_diary_plan_locked', blocked);
-  const { date } = parsedBody.data;
+  const { date, topic } = parsedBody.data;
   savePlan(deps, at, (tasks) => withMeetingTask(tasks, person, date, at.workplace.startDate));
   setTaskStep(deps, at, meetingTaskId(person.id), true);
-  const meeting = { taskId: meetingTaskId(person.id), date };
+  const meeting = { taskId: meetingTaskId(person.id), date, topic };
   deps.people().save(at.candidate, at.workplace.id, { ...person, meeting });
   return ok(deps, request, at);
 };

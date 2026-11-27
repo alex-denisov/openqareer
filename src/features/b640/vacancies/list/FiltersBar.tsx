@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react';
+import type { RoleTitlesRu } from '../../career/roleLabel';
 import { Icon } from '../../kit';
 import { vacanciesWord, type MoneyCurrency } from '../format';
 import { FilterPane, type PaneProps } from './FilterPanes';
@@ -16,10 +17,13 @@ import {
 
 export interface FiltersBarProps extends PaneProps, HiddenChipProps {
   readonly openKind: FilterKind | null;
-  readonly shown: number;
+  /** `null` — подборка ещё читается и число неполное (B728): кнопка без числа. */
+  readonly shown: number | null;
   readonly onOpenKind: (kind: FilterKind | null) => void;
   readonly onOpenSheet: () => void;
   readonly onReset: () => void;
+  /** B726: русские названия ролей поиска для чипов (`titlesRu` кампании). */
+  readonly roleTitlesRu?: RoleTitlesRu;
 }
 
 export function RelocChip({ filters, onChange }: Pick<PaneProps, 'filters' | 'onChange'>) {
@@ -50,15 +54,15 @@ function Popover(props: FiltersBarProps & { kind: FilterKind }) {
           Сбросить
         </button>
         <button className="btn is-primary" type="button" onClick={() => onOpenKind(null)}>
-          Показать {shown} {vacanciesWord(shown)}
+          {shown === null ? 'Показать' : `Показать ${shown} ${vacanciesWord(shown)}`}
         </button>
       </div>
     </div>
   );
 }
 
-function Chips({ filters, currency, onChange, onReset, onMore }: Pick<FiltersBarProps, 'filters' | 'currency' | 'onChange' | 'onReset'> & { onMore: () => void }) {
-  const chips = chipsOf(filters, currency);
+function Chips({ filters, roleTitlesRu, currency, onChange, onReset, onMore }: Pick<FiltersBarProps, 'filters' | 'roleTitlesRu' | 'currency' | 'onChange' | 'onReset'> & { onMore: () => void }) {
+  const chips = chipsOf(filters, currency, roleTitlesRu);
   const shown = chips.slice(0, CHIP_LIMIT);
   const rest = chips.length - shown.length;
   return (
@@ -150,7 +154,7 @@ export function FiltersBar(props: FiltersBarProps) {
         <Icon name="funnel" />
         Фильтры · {activeCount(filters)}
       </button>
-      <Chips filters={filters} currency={currency} onChange={props.onChange} onReset={props.onReset} onMore={more} />
+      <Chips filters={filters} roleTitlesRu={props.roleTitlesRu} currency={currency} onChange={props.onChange} onReset={props.onReset} onMore={more} />
     </div>
   );
 }

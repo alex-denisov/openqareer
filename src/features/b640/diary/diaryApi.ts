@@ -21,7 +21,12 @@ import type {
   CareerDiaryWeekSummary,
   CareerDiaryWeekSummaryInput,
 } from '../../../../shared/careerDiaryEntries';
-import { apiFetch, readData } from '../../coach/apiClient';
+import type {
+  CareerDiaryKpiAcceptInput,
+  CareerDiaryKpiImport,
+  CareerDiaryKpiImportInput,
+} from '../../../../shared/careerDiaryKpi';
+import { apiFetch, readData, throwApiError } from '../../coach/apiClient';
 
 /** Клиент маршрутов дневника B683/B684 для экранов раздела (все под флагом B640). */
 const ROOT = '/api/v1/candidate/career-diary';
@@ -53,7 +58,7 @@ export function listEntries(
 }
 
 export function createEntry(input: CareerDiaryEntryInput): Promise<CareerDiaryEntry> {
-  return read(`${ROOT}/entries`, json('POST', input));
+  return read(`${ROOT}/entries`, json('POST', input, true));
 }
 
 export function updateEntry(
@@ -63,8 +68,12 @@ export function updateEntry(
   return read(`${ROOT}/entries/${encodeURIComponent(entryId)}`, json('PATCH', patch));
 }
 
+/** Удаление отвечает 204 без тела: читать конверт нельзя, достаточно статуса. */
 export async function deleteEntry(entryId: string): Promise<void> {
-  await read(`${ROOT}/entries/${encodeURIComponent(entryId)}`, { method: 'DELETE' });
+  const response = await apiFetch(`${ROOT}/entries/${encodeURIComponent(entryId)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) await throwApiError(response);
 }
 
 export function getWeek(weekStart: string): Promise<CareerDiaryWeekDraft> {
@@ -104,6 +113,14 @@ export function archiveGoal(goalId: string, reason: string): Promise<CareerDiary
   return read(`${ROOT}/goal-cards/${encodeURIComponent(goalId)}/archive`, json('PUT', { reason }));
 }
 
+/** B742: строка результата достигнутой цели — под местом работы в «Опыте». */
+export function transferGoal(
+  goalId: string,
+  input: { readonly experienceId: string; readonly line: string },
+): Promise<CareerDiaryGoalCard> {
+  return read(`${ROOT}/goal-cards/${encodeURIComponent(goalId)}/transfer`, json('POST', input));
+}
+
 export function restoreGoal(goalId: string): Promise<CareerDiaryGoalCard> {
   return read(`${ROOT}/goal-cards/${encodeURIComponent(goalId)}/archive`, { method: 'DELETE' });
 }
@@ -121,4 +138,26 @@ export function patchGoalDetails(
 
 export function patchGoal(goalId: string, patch: CareerDiaryGoalPatch): Promise<unknown> {
   return read(`${ROOT}/goals/${encodeURIComponent(goalId)}`, json('PATCH', patch));
+}
+
+const KPI = `${ROOT}/kpi-imports`;
+
+/** B686: разбор KPI в черновик; ошибка несёт код (`kpi_rows_not_found`, `kpi_source_unreadable`…). */
+export function createKpiImport(input: CareerDiaryKpiImportInput): Promise<CareerDiaryKpiImport> {
+  return read(KPI, json('POST', input));
+}
+
+export function getKpiImport(id: string): Promise<CareerDiaryKpiImport> {
+  return read(`${KPI}/${encodeURIComponent(id)}`);
+}
+
+export function acceptKpiImport(
+  id: string,
+  input: CareerDiaryKpiAcceptInput,
+): Promise<{ readonly goalIds: readonly string[] }> {
+  return read(`${KPI}/${encodeURIComponent(id)}/accept`, json('POST', input));
+}
+
+export function deleteKpiSource(id: string): Promise<CareerDiaryKpiImport> {
+  return read(`${KPI}/${encodeURIComponent(id)}/source`, { method: 'DELETE' });
 }

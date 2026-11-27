@@ -48,7 +48,7 @@ function DeskTable({ rows, picked, onToggle }: PickProps) {
     </tr>
   );
   return (
-    <table className="cmp only-desk-t">
+    <table className="cmp cmp-roles only-desk-t">
       <thead>
         <tr>
           <th scope="col">
@@ -62,7 +62,7 @@ function DeskTable({ rows, picked, onToggle }: PickProps) {
                   checked={picked.has(roleKey(row.title))}
                   onChange={() => onToggle(row.title)}
                 />
-                <span className="r2-pick-t">{row.title}</span>
+                <span className="r2-pick-t">{row.label}</span>
               </label>
             </th>
           ))}
@@ -72,9 +72,7 @@ function DeskTable({ rows, picked, onToggle }: PickProps) {
         {line('Рынок', (row) => (
           <>
             {row.wage ?? 'нет данных о зарплатах'}
-            <span className="sub">
-              {vacancyCount(row)}
-            </span>
+            <span className="sub">{vacancyCount(row)}</span>
           </>
         ))}
         {line('Подтверждает опыт', (row) => row.confirms ?? '—')}
@@ -98,11 +96,11 @@ function MobileList({ rows, picked, onToggle }: PickProps) {
               checked={picked.has(roleKey(row.title))}
               onChange={() => onToggle(row.title)}
             />
-            <span className="vh">Выбрать роль: {row.title}</span>
+            <span className="vh">Выбрать роль: {row.label}</span>
           </label>
           <details className="rr-row">
             <summary>
-              <span className="rr-name">{row.title}</span>
+              <span className="rr-name">{row.label}</span>
               <CheckTag row={row} />
               <span className="rr-meta num">{market(row)}</span>
               <Icon name="down" />
@@ -140,7 +138,9 @@ function SearchActions({
   const busy = pick.state === 'busy';
   const first = columns.find((row) => row.title === pick.selected[0]);
   const checkLabel = first?.check ? 'Проверить вторую роль' : 'Проверить навыки';
-  const checkRole = first?.check ? pick.selected[1] : pick.selected[0];
+  // B764: вторую роль выбирает C04 — первую роль поиска, проверку которой можно начать;
+  // названная здесь роль могла оказаться без требований (тупик «мало требований»).
+  const checkRole = first?.check ? undefined : pick.selected[0];
   return (
     <>
       {pick.state === 'error' ? <StatusLine state="err" text={PICK_ERROR} /> : null}
@@ -201,7 +201,7 @@ export function CompareView({
       <section className="lead col-wide" aria-labelledby="cmp-title">
         <div className="lead-head">
           <h2 className="lead-title is-long" id="cmp-title">
-            {top ? `Ближе всего — ${top.title}` : 'Ролей пока нет'}
+            {top ? `Ближе всего — ${top.label}` : 'Ролей пока нет'}
           </h2>
           <InfoTip label="Как посчитано" text={TIP} />
         </div>

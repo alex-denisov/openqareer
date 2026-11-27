@@ -87,6 +87,31 @@ export async function removePhoto(): Promise<PhotoResult> {
   return readData<PhotoResult>(response);
 }
 
+/** p08 «Взять из LinkedIn»: снова ставит фото из последнего импорта LinkedIn. */
+export async function takeLinkedinPhoto(): Promise<PhotoResult> {
+  const response = await apiFetch(`${PROFILE_API}/photo/linkedin`, { method: 'POST' });
+  return readData<PhotoResult>(response);
+}
+
+export interface ResumePhoto {
+  /** «Фото в резюме»; по умолчанию включено. */
+  readonly inResume: boolean;
+}
+
+export async function getResumePhoto(signal?: AbortSignal): Promise<ResumePhoto> {
+  const response = await apiFetch(`${PROFILE_API}/photo/resume`, { signal });
+  return readData<ResumePhoto>(response);
+}
+
+export async function saveResumePhoto(inResume: boolean): Promise<ResumePhoto> {
+  const response = await apiFetch(`${PROFILE_API}/photo/resume`, {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ inResume }),
+  });
+  return readData<ResumePhoto>(response);
+}
+
 export async function getIncome(signal?: AbortSignal): Promise<ProfileIncome> {
   const response = await apiFetch(`${PROFILE_API}/income`, { signal });
   return readData<ProfileIncome>(response);

@@ -1,6 +1,9 @@
 import type { CampaignMetaView } from '../../coach/matchedVacancyApi';
 import { Button, Dialog, Icon, Link, StatusLine } from '../kit';
 import { buildNodePath } from '../routes';
+import { BlockError, BlockSkeleton } from '../today/parts';
+import { useLoad } from '../today/useLoad';
+import { loadFreshCampaign } from './careerApi';
 import type { RoleRow } from './rolesModel';
 import { roleKey, searchButtonLabel, useRolePick, type RolePick } from './useRolePick';
 
@@ -33,7 +36,7 @@ function RoleOptions({
                 onChange={() => pick.toggle(row.title)}
               />
               <span className="vt-opt-t">
-                {row.title}
+                {row.label}
                 {row.wage ? <small className="rs-sub num">{row.wage}</small> : null}
               </span>
               <span className="vt-opt-n num">
@@ -48,10 +51,26 @@ function RoleOptions({
   );
 }
 
+/** Выбор ролей по свежей кампании: показанная раньше могла устареть (B792). */
+export function RolePickLoad({ rows, onClose }: Pick<RolePickDialogProps, 'rows' | 'onClose'>) {
+  const campaign = useLoad(loadFreshCampaign);
+  if (campaign.state === 'ready') {
+    return <RolePickDialog open onClose={onClose} rows={rows} campaign={campaign.data} />;
+  }
+  return (
+    <Dialog open onClose={onClose} title="Роли поиска" className="rs-dlg">
+      {campaign.state === 'loading' ? (
+        <BlockSkeleton label="Подбираем роли" rows={3} />
+      ) : (
+        <BlockError text="Не удалось загрузить роли." onRetry={campaign.retry} />
+      )}
+    </Dialog>
+  );
+}
+
 /** S9c «Роли поиска»: отметить роли, сохранить и перейти к вакансиям. */
 export function RolePickDialog({ open, onClose, rows, campaign }: RolePickDialogProps) {
-  const initial = rows.filter((row) => row.origin === 'search').map((row) => row.title);
-  const pick = useRolePick(rows, initial, campaign);
+  const pick = useRolePick(rows, campaign.roles.value, campaign);
   const footer = (
     <>
       <Button

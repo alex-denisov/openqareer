@@ -10,9 +10,10 @@ import {
   resumeCandidateAutomation,
 } from '../../automation/automationApi';
 import { exportCandidateData } from '../../coach/coachApi';
+import { getSearchConsent } from '../../vacancies/recruiterContactsApi';
 import {
   CAPABILITY_CONSENT_CURRENT_VERSION,
-  CAPABILITY_CONSENT_DOCUMENTS,
+  capabilityConsentDocument,
   type CandidateCapability,
 } from '../../legal/capabilityConsents';
 import { triggerFileDownload } from '../../resume/resumeExport';
@@ -20,34 +21,58 @@ import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { Dialog } from '../kit/Dialog';
 import { Icon } from '../kit/Icon';
 import { ResultLine } from '../kit/ResultLine';
-import type { B640Node } from '../routes';
+import { buildNodePath, type B640Node } from '../routes';
+import { Link } from '../shell/Link';
+import { AccountDeletionGroup } from './AccountDeletion';
+import { getAccountDeletion, type AccountDeletion } from './accountDeletionApi';
+import { countScheduledPosts } from '../platforms/linkedin/linkedinQueueApi';
+import { ConsentDialog, ConsentItems, ConsentSwitch, ConsentTextLink, useAction } from './consentParts';
 import { automationLine, CONSENT_ROWS, type AutomationState, type ConsentRow } from './dataModel';
+import { SearchConsentRow } from './SearchConsentRow';
 import { ErrorLine, SettingsPage, useLoad, type Load } from './parts';
+
+/** Действующие согласия и принятая версия каждого. */
+type GrantedVersions = Partial<Readonly<Record<CandidateCapability, string>>>;
 
 interface AccountData {
   /** Согласия, которые сейчас действуют. */
-  readonly granted: readonly CandidateCapability[];
+  readonly granted: GrantedVersions;
+  /** «Вы в поиске» (B263); `null` — не прочиталось: строка с ошибкой и «Повторить». */
+  readonly searchConsent: boolean | null;
   /** Автоотклики; `null` — состояние не прочиталось. */
   readonly automation: AutomationState | null;
+  /** Удаление аккаунта; `undefined` — состояние не прочиталось, группы нет. */
+  readonly deletion: AccountDeletion | null | undefined;
 }
 
 /** Пауза «Остановить всё» ставится на предельный срок: снимает её сам кандидат. */
 const STOP_DAYS = 365;
 
 async function loadData(): Promise<AccountData> {
-  const [consents, automation] = await Promise.all([
+  const [consents, searchConsent, automation, deletion, scheduledPosts] = await Promise.all([
     getAccountCapabilityConsents(),
+    getSearchConsent().then(
+      (consent) => consent.granted,
+      () => null,
+    ),
     getCandidateAutomation().catch(() => null),
+    getAccountDeletion().catch(() => undefined),
+    countScheduledPosts().catch(() => 0),
   ]);
   return {
-    granted: consents.filter((item) => item.revokedAt === null).map((item) => item.capability),
+    granted: Object.fromEntries(
+      consents.filter((item) => item.revokedAt === null).map((item) => [item.capability, item.versionId]),
+    ),
+    searchConsent,
     automation: automation
       ? {
           enabled: automation.settings.enabled,
           pausedUntil: automation.settings.pausedUntil,
           emergencyPaused: automation.schedulerRuntime?.emergencyPaused === true,
+          scheduledPosts,
         }
       : null,
+    deletion,
   };
 }
 
@@ -57,83 +82,6 @@ function Group({ title, children }: { readonly title: string; readonly children:
       <h3 className="set-h">{title}</h3>
       <ul className="set-list">{children}</ul>
     </section>
-  );
-}
-
-/** Действие с ожиданием и ошибкой на месте. */
-function useAction(onDone: () => void) {
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
-  async function run(action: () => Promise<unknown>) {
-    setBusy(true);
-    setFailed(false);
-    try {
-      await action();
-      onDone();
-    } catch {
-      setFailed(true);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return { busy, failed, run: (action: () => Promise<unknown>) => void run(action) };
-}
-
-interface ConsentDialogProps {
-  readonly capability: CandidateCapability;
-  readonly open: boolean;
-  readonly busy: boolean;
-  readonly failed: boolean;
-  readonly onGrant: () => void;
-  readonly onClose: () => void;
-}
-
-/** Текст согласия перед выдачей: согласие даётся только после него. */
-function ConsentDialog({ capability, open, busy, failed, onGrant, onClose }: ConsentDialogProps) {
-  const document = CAPABILITY_CONSENT_DOCUMENTS[capability];
-  return (
-    <Dialog open={open} title={document.title} onClose={onClose}>
-      <ul className="c5-list">
-        {document.items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
-      {failed ? <ErrorLine text="Согласие не сохранилось" /> : null}
-      <div className="actions">
-        <button className="btn is-primary" type="button" disabled={busy} aria-busy={busy || undefined} onClick={onGrant}>
-          <Icon name="check" />
-          Дать согласие
-        </button>
-        <button className="btn" type="button" onClick={onClose}>
-          Отмена
-        </button>
-      </div>
-    </Dialog>
-  );
-}
-
-interface ConsentSwitchProps {
-  readonly label: string;
-  readonly checked: boolean;
-  readonly disabled: boolean;
-  readonly onChange: (checked: boolean) => void;
-}
-
-function ConsentSwitch({ label, checked, disabled, onChange }: ConsentSwitchProps) {
-  return (
-    <div className="set-r">
-      <span className="sw-cell">
-        <input
-          className="sw"
-          type="checkbox"
-          role="switch"
-          aria-label={label}
-          checked={checked}
-          disabled={disabled}
-          onChange={(event) => onChange(event.currentTarget.checked)}
-        />
-      </span>
-    </div>
   );
 }
 
@@ -167,12 +115,14 @@ function RevokeDialog({ row, open, busy, failed, onRevoke, onClose }: RevokeDial
 
 interface ConsentProps {
   readonly row: ConsentRow;
-  readonly granted: boolean;
+  /** Принятая версия; нет — согласие не дано. */
+  readonly grantedVersion: string | undefined;
   readonly onChanged: () => void;
 }
 
 /** Согласие: отзыв — переключателем, выдача — после текста согласия в окне. */
-function Consent({ row, granted, onChanged }: ConsentProps) {
+function Consent({ row, grantedVersion, onChanged }: ConsentProps) {
+  const granted = grantedVersion !== undefined;
   const [asking, setAsking] = useState(false);
   const { busy, failed, run } = useAction(() => {
     setAsking(false);
@@ -193,6 +143,11 @@ function Consent({ row, granted, onChanged }: ConsentProps) {
       <div className="set-l">
         <span className="set-t">{row.title}</span>
         <span className="set-v">{row.line}</span>
+        {granted ? (
+          <ConsentTextLink title={capabilityConsentDocument(row.capability, grantedVersion).title}>
+            <ConsentItems capability={row.capability} versionId={grantedVersion} />
+          </ConsentTextLink>
+        ) : null}
         {failed && !asking && !revoking ? <ErrorLine text="Не сохранилось" /> : null}
       </div>
       <ConsentSwitch label={row.title} checked={granted} disabled={busy} onChange={toggle} />
@@ -216,6 +171,50 @@ function Consent({ row, granted, onChanged }: ConsentProps) {
   );
 }
 
+interface StopDialogProps {
+  readonly open: boolean;
+  readonly busy: boolean;
+  readonly failed: boolean;
+  readonly onStop: () => void;
+  readonly onClose: () => void;
+}
+
+/** N5c: подтверждение «Остановить всё». */
+function StopDialog({ open, busy, failed, onStop, onClose }: StopDialogProps) {
+  return (
+    <Dialog open={open} title="Остановить всё?" onClose={onClose}>
+      <p className="c5-lead">Остановятся автоотклики на hh.ru и публикации в LinkedIn.</p>
+      {failed ? <ErrorLine text="Остановить не получилось" /> : null}
+      <div className="actions">
+        <button
+          className="btn is-primary"
+          type="button"
+          disabled={busy}
+          aria-busy={busy || undefined}
+          onClick={onStop}
+        >
+          <Icon name="pause" />
+          Остановить всё
+        </button>
+        <button className="btn" type="button" onClick={onClose}>
+          Отмена
+        </button>
+      </div>
+    </Dialog>
+  );
+}
+
+/** Выключенные действия включают над списком откликов — туда и ведёт строка (B774). */
+function SetUpAutomation() {
+  return (
+    <div className="set-r">
+      <Link className="btn is-sm" to={buildNodePath('o01')} aria-label="Настроить автоотклики">
+        Настроить
+      </Link>
+    </div>
+  );
+}
+
 /** «Действия от вашего имени»: остановить всё с подтверждением (N5c) и возобновить. */
 function Automation({ state, onChanged }: { readonly state: AutomationState; readonly onChanged: () => void }) {
   const [asking, setAsking] = useState(false);
@@ -228,7 +227,7 @@ function Automation({ state, onChanged }: { readonly state: AutomationState; rea
     <Group title="Действия от вашего имени">
       <li className="set-row">
         <div className="set-l">
-          <span className="set-t">Автоотклики</span>
+          <span className="set-t">Автоотклики, комментарии в LinkedIn</span>
           <span className="set-v">{line.text}</span>
           {failed && !asking ? <ErrorLine text="Не получилось" /> : null}
         </div>
@@ -244,26 +243,15 @@ function Automation({ state, onChanged }: { readonly state: AutomationState; rea
             </button>
           </div>
         ) : null}
+        {line.text === 'выключены' ? <SetUpAutomation /> : null}
       </li>
-      <Dialog open={asking} title="Остановить всё?" onClose={() => setAsking(false)}>
-        <p className="c5-lead">Остановятся автоотклики на hh.ru.</p>
-        {failed ? <ErrorLine text="Остановить не получилось" /> : null}
-        <div className="actions">
-          <button
-            className="btn is-primary"
-            type="button"
-            disabled={busy}
-            aria-busy={busy || undefined}
-            onClick={() => run(() => pauseCandidateAutomation(STOP_DAYS))}
-          >
-            <Icon name="pause" />
-            Остановить всё
-          </button>
-          <button className="btn" type="button" onClick={() => setAsking(false)}>
-            Отмена
-          </button>
-        </div>
-      </Dialog>
+      <StopDialog
+        open={asking}
+        busy={busy}
+        failed={failed}
+        onStop={() => run(() => pauseCandidateAutomation(STOP_DAYS))}
+        onClose={() => setAsking(false)}
+      />
     </Group>
   );
 }
@@ -310,22 +298,24 @@ function Sections({ data, load }: { readonly data: AccountData; readonly load: L
   return (
     <>
       <Group title="На что вы дали согласие">
+        <SearchConsentRow granted={data.searchConsent} onChanged={load.retry} />
         {CONSENT_ROWS.map((row) => (
           <Consent
             key={row.capability}
             row={row}
-            granted={data.granted.includes(row.capability)}
+            grantedVersion={data.granted[row.capability]}
             onChanged={load.retry}
           />
         ))}
       </Group>
       {data.automation ? <Automation state={data.automation} onChanged={load.retry} /> : null}
       <Export />
+      {data.deletion !== undefined ? <AccountDeletionGroup initial={data.deletion} /> : null}
     </>
   );
 }
 
-/** n05 «Согласия и данные»: согласия, «Остановить всё», выгрузка данных. */
+/** n05 «Согласия и данные»: согласия, «Остановить всё», выгрузка данных, удаление аккаунта. */
 export function DataScreen({ node }: { readonly node: B640Node }) {
   const load = useLoad(loadData);
   return (

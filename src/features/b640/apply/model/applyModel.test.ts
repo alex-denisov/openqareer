@@ -2,13 +2,15 @@ import { describe, expect, it } from 'vitest';
 import type { ConnectionCircleResult } from '../../../vacancies/vacancyLetterApi';
 import { application } from '../../responses/model/testApplication';
 import {
+  applyRoute,
   buildHead,
   paragraphs,
   parseStep,
   recipientOptions,
   resolveTarget,
-  resumeLines,
+  stepOpening,
   stepsFor,
+  type ApplyStep,
 } from './applyModel';
 
 describe('B657: шаг отклика из адреса', () => {
@@ -31,11 +33,17 @@ describe('B657: что открыто — отклик или вакансия',
   });
 
   it('id вакансии находит уже существующий отклик', () => {
-    expect(resolveTarget('cluster-9', [card])).toEqual({ vacancyId: 'cluster-9', application: card });
+    expect(resolveTarget('cluster-9', [card])).toEqual({
+      vacancyId: 'cluster-9',
+      application: card,
+    });
   });
 
   it('id вакансии без карточки отклика тоже принимается', () => {
-    expect(resolveTarget('cluster-new', [card])).toEqual({ vacancyId: 'cluster-new', application: null });
+    expect(resolveTarget('cluster-new', [card])).toEqual({
+      vacancyId: 'cluster-new',
+      application: null,
+    });
   });
 
   it('отклик без вакансии из подбора письма не получает', () => {
@@ -45,7 +53,7 @@ describe('B657: что открыто — отклик или вакансия',
 
 describe('B657: шапка отклика', () => {
   it('берёт данные карточки отклика', () => {
-    expect(buildHead({ application: application() })).toEqual({
+    expect(buildHead({ application: application({ stage: 'saved' }) })).toEqual({
       title: 'Руководитель платформы',
       company: 'Арка Холдинг',
       url: 'https://hh.ru/vacancy/1',
@@ -63,7 +71,7 @@ describe('B657: шапка отклика', () => {
           canonicalTitle: 'x',
           canonicalCompany: 'y',
           primaryUrl: 'javascript:alert(1)',
-          sources: [{ sourceName: 'hh.ru (страница поиска)' }],
+          sources: [{ sourceName: 'hh.ru (страница поиска)', sourceUrl: '' }],
         },
       }),
     ).toEqual({
@@ -75,16 +83,92 @@ describe('B657: шапка отклика', () => {
     });
   });
 
+  it('B678: отправленный отклик несёт свой id, черновик — нет', () => {
+    const sent = application({ id: 'sent-1', stage: 'applied' });
+    expect(buildHead({ application: sent }).sentId).toBe('sent-1');
+    expect(buildHead({ application: application({ stage: 'saved' }) }).sentId).toBeUndefined();
+  });
+
+  const twoSources = {
+    canonicalTitle: 'Руководитель IT-инфраструктуры',
+    canonicalCompany: 'ЭР-Телеком Холдинг',
+    primaryUrl: 'https://getmatch.ru/vacancies/7',
+    sources: [
+      {
+        sourceType: 'json_api',
+        sourceName: 'Getmatch',
+        sourceUrl: 'https://getmatch.ru/vacancies/7',
+      },
+      {
+        sourceType: 'json_api',
+        sourceId: 'hh',
+        sourceName: 'hh.ru',
+        sourceUrl: 'https://hh.ru/vacancy/139180469',
+      },
+    ],
+  };
+  const getmatchCard = {
+    title: 'Руководитель IT-инфраструктуры',
+    company: 'ЭР-Телеком Холдинг',
+    url: 'https://getmatch.ru/vacancies/7',
+    source: 'Getmatch',
+  };
+
+  it('B678: из двух источников отклик идёт на hh.ru, адрес — вакансии hh.ru', () => {
+    const head = buildHead({ application: null, cluster: twoSources });
+    expect(head).toMatchObject({ source: 'hh.ru', url: 'https://hh.ru/vacancy/139180469' });
+    expect(applyRoute({ application: null, cluster: twoSources }).source).toBe('hh.ru');
+  });
+
+  it('B678: неотправленный отклик со снимком Getmatch переходит на hh.ru, отправленный — нет', () => {
+    const saved = application({ stage: 'saved', appliedAt: null, vacancy: getmatchCard });
+    expect(buildHead({ application: saved, cluster: twoSources })).toMatchObject({
+      source: 'hh.ru',
+      url: 'https://hh.ru/vacancy/139180469',
+    });
+    const sent = application({ stage: 'applied', vacancy: getmatchCard });
+    expect(buildHead({ application: sent, cluster: twoSources })).toMatchObject({
+      source: 'Getmatch',
+      url: 'https://getmatch.ru/vacancies/7',
+    });
+  });
+
+  it('B787: неотправленный снимок чужой записи hh.ru уступает площадке карточки', () => {
+    const saved = application({ stage: 'saved', appliedAt: null });
+    expect(buildHead({ application: saved, cluster: twoSources }).url).toBe(
+      'https://hh.ru/vacancy/139180469',
+    );
+    const own = { ...twoSources, sources: twoSources.sources.slice(0, 1) };
+    expect(buildHead({ application: saved, cluster: own })).toMatchObject({
+      source: 'Getmatch',
+      url: 'https://getmatch.ru/vacancies/7',
+    });
+    expect(buildHead({ application: saved, cluster: null }).url).toBe('https://hh.ru/vacancy/1');
+    const sent = application({ stage: 'applied' });
+    expect(buildHead({ application: sent, cluster: own }).url).toBe('https://hh.ru/vacancy/1');
+  });
+
   it('скрытая компания не подставляется', () => {
     const hidden = application({
-      vacancy: { title: 'Аналитик', company: 'Тайна', url: '', source: 'manual', companyHidden: true },
+      vacancy: {
+        title: 'Аналитик',
+        company: 'Тайна',
+        url: '',
+        source: 'manual',
+        companyHidden: true,
+      },
     });
     expect(buildHead({ application: hidden }).company).toBe('');
   });
 });
 
 describe('B657: «Кому»', () => {
-  const person = (id: string, fullName: string) => ({ id, fullName, roleTitle: null, companyName: null });
+  const person = (id: string, fullName: string) => ({
+    id,
+    fullName,
+    roleTitle: null,
+    companyName: null,
+  });
   const circles: ConnectionCircleResult[] = [
     {
       circle: 1,
@@ -92,8 +176,14 @@ describe('B657: «Кому»', () => {
       message: '',
       paths: [
         {
-          id: 'p1', circle: 1, path: [person('me', 'Марина Соколова'), person('a', 'Анна Ветрова')], recipient: person('a', 'Анна Ветрова'),
-          evidence: [], strength: 'direct', source: 'manual', nextStep: 'write' as never,
+          id: 'p1',
+          circle: 1,
+          path: [person('me', 'Марина Соколова'), person('a', 'Анна Ветрова')],
+          recipient: person('a', 'Анна Ветрова'),
+          evidence: [],
+          strength: 'direct',
+          source: 'manual',
+          nextStep: 'write' as never,
         },
       ],
     },
@@ -103,8 +193,17 @@ describe('B657: «Кому»', () => {
       message: '',
       paths: [
         {
-          id: 'p2', circle: 2, path: [person('me', 'Марина Соколова'), person('i', 'Игорь Шаталов'), person('a', 'Анна Ветрова')],
-          recipient: person('a', 'Анна Ветрова'), evidence: [], strength: 'weak', source: 'linkedin_import',
+          id: 'p2',
+          circle: 2,
+          path: [
+            person('me', 'Марина Соколова'),
+            person('i', 'Игорь Шаталов'),
+            person('a', 'Анна Ветрова'),
+          ],
+          recipient: person('a', 'Анна Ветрова'),
+          evidence: [],
+          strength: 'weak',
+          source: 'linkedin_import',
           nextStep: 'ask' as never,
         },
       ],
@@ -116,7 +215,12 @@ describe('B657: «Кому»', () => {
     expect(recipientOptions(circles, 'hh.ru')).toEqual([
       { value: 'cold', label: 'Работодателю · через hh.ru', circle: 3, pathId: null },
       { value: 'p1', label: 'Анна Ветрова · знакомый', circle: 1, pathId: 'p1' },
-      { value: 'p2', label: 'Игорь Шаталов — попросить познакомить: Анна Ветрова', circle: 2, pathId: 'p2' },
+      {
+        value: 'p2',
+        label: 'Игорь Шаталов — попросить познакомить: Анна Ветрова',
+        circle: 2,
+        pathId: 'p2',
+      },
     ]);
   });
 
@@ -137,35 +241,47 @@ describe('B657: текст абзацами', () => {
   });
 });
 
-describe('резюме без служебной разметки', () => {
-  it('маркеры разделов из исходного файла становятся заголовками', () => {
-    expect(
-      resumeLines('=== SUMMARY ===\nРуковожу разработкой.\n\n--- Опыт работы ---\nФинтех Лаб\n## Skills\nGo, Kotlin'),
-    ).toEqual([
-      { kind: 'heading', text: 'О себе' },
-      { kind: 'line', text: 'Руковожу разработкой.' },
-      { kind: 'heading', text: 'Опыт работы' },
-      { kind: 'line', text: 'Финтех Лаб' },
-      { kind: 'heading', text: 'Навыки' },
-      { kind: 'line', text: 'Go, Kotlin' },
-    ]);
-  });
+describe('B787: цель отклика называет канал и адрес', () => {
+  const target = {
+    channel: 'ashby',
+    url: 'https://jobs.ashbyhq.com/a/1',
+    formUrl: 'x',
+    origin: 'cluster',
+  } as const;
+  const cluster = {
+    primaryUrl: 'https://www.indeed.com/1',
+    sources: [{ sourceName: 'Indeed' }],
+    canonicalTitle: 'Т',
+    canonicalCompany: 'К',
+  };
+  const head = (applyTarget: object) =>
+    buildHead({ application: null, cluster: { ...cluster, applyTarget: applyTarget as never } });
 
-  it('линия из одних знаков пропадает, обычный текст не трогается', () => {
-    expect(resumeLines('=====\n----\nKubernetes — 3 года\nC# и .NET')).toEqual([
-      { kind: 'line', text: 'Kubernetes — 3 года' },
-      { kind: 'line', text: 'C# и .NET' },
-    ]);
-    expect(resumeLines('=== constructor ===')).toEqual([{ kind: 'heading', text: 'constructor' }]);
+  it('ATS работодателя вместо агрегатора, сайт — «сайт компании», почта не меняет площадку', () => {
+    expect(head(target)).toMatchObject({ url: target.url, source: 'Ashby' });
+    expect(head({ ...target, channel: 'site' })).toMatchObject({ source: 'сайт компании' });
+    expect(head({ ...target, channel: 'email', url: cluster.primaryUrl })).toMatchObject({
+      source: 'Indeed',
+      url: cluster.primaryUrl,
+    });
   });
+  it('нераскрытый трекер и чужая схема адреса — прежняя площадка', () => {
+    expect(head({ ...target, needsRedirect: true })).toMatchObject({
+      source: 'Indeed',
+      url: cluster.primaryUrl,
+    });
+    expect(head({ ...target, url: 'javascript:1' })).toMatchObject({ url: cluster.primaryUrl });
+  });
+});
 
-  it('пункты списка и обычные строки со знаками не становятся заголовками', () => {
-    const lines = ['- Руководил командой -', '-- Вёл релизы', '# 1 в рейтинге', 'C# разработчик', '=== SUMMARY === и текст'];
-    expect(resumeLines(lines.join('\n'))).toEqual(lines.map((text) => ({ kind: 'line', text })));
-    expect(resumeLines('**Опыт**\n__Skills__')).toEqual([
-      { kind: 'heading', text: 'Опыт' },
-      { kind: 'heading', text: 'Навыки' },
-    ]);
-    expect(resumeLines(`== a${' '.repeat(5000)}b`)).toHaveLength(1);
+describe('stepOpening (B678)', () => {
+  it('шаг ждёт одобрение и анкету, а не показывает чужой кадр', () => {
+    const opening = (step: ApplyStep, approvalPending: boolean, formLoading: boolean) =>
+      stepOpening({ step, approvalPending, formLoading });
+    expect(opening('letter', true, false)).toBe(true);
+    expect(opening('send', true, false)).toBe(true);
+    expect(opening('form', false, true)).toBe(true);
+    expect(opening('letter', false, true)).toBe(false);
+    expect(opening('resume', true, true)).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import type {
   QuestionnaireQuestion,
   QuestionnaireSuggestion,
 } from '../../shared/applicationQuestionnaire';
+import { nameFact, splitName } from '../../shared/candidateName';
 
 /**
  * B641: ответы анкеты из того, что точно есть в профиле кандидата. Каждое правило берёт одно
@@ -42,6 +43,22 @@ function isLinkedin(link: string): boolean {
   return /linkedin\.com/iu.test(link);
 }
 
+const LINKEDIN_PROFILE = /^(?:linkedin\s*:\s*)?(?:https?:\/\/)?((?:[a-z]{2,3}\.)?linkedin\.com\/in\/[^\s?#]+)/iu;
+
+/** Ссылка на профиль LinkedIn полной: в резюме её часто пишут без https. */
+export function linkedinProfileLink(link: string): string | undefined {
+  const address = LINKEDIN_PROFILE.exec(link.trim())?.[1];
+  return address ? `https://${address}` : undefined;
+}
+
+function linkedinFromLinks(links: readonly string[] | undefined): string | undefined {
+  for (const link of links ?? []) {
+    const profile = linkedinProfileLink(link);
+    if (profile) return profile;
+  }
+  return undefined;
+}
+
 function isGithub(link: string): boolean {
   return /github\.com/iu.test(link);
 }
@@ -73,7 +90,7 @@ const RULES: readonly Rule[] = [
   {
     matches: /linkedin/iu,
     source: SOURCE_CONTACTS,
-    value: (facts) => clean(facts.linkedinUrl) ?? facts.links?.find(isLinkedin),
+    value: (facts) => clean(facts.linkedinUrl) ?? linkedinFromLinks(facts.links),
   },
   { matches: /github/iu, source: SOURCE_CONTACTS, value: (facts) => facts.links?.find(isGithub) },
   {
@@ -125,6 +142,22 @@ function forQuestion(question: QuestionnaireQuestion, value: string): string | u
   return question.options?.find((option) => option.trim().toLocaleLowerCase() === wanted);
 }
 
+const labelOf = (question: QuestionnaireQuestion): string =>
+  question.text.trim().replace(/\s*[:*✱]+$/u, '');
+
+/** Имя, фамилия или полное имя — тем же правилом, что в форме приложения. */
+function nameAnswer(
+  question: QuestionnaireQuestion,
+  questions: readonly QuestionnaireQuestion[],
+  facts: QuestionnaireProfileFacts,
+): string | null | undefined {
+  const fact = nameFact(labelOf(question), questions.map(labelOf));
+  if (!fact) return null;
+  const fullName = clean(facts.fullName);
+  if (!fullName) return undefined;
+  return fact === 'fullName' ? fullName : splitName(fullName)[fact];
+}
+
 /** Ответы из профиля: по одному на вопрос, первый подошедший по правилам. */
 export function profileAnswers(
   questions: readonly QuestionnaireQuestion[],
@@ -132,6 +165,11 @@ export function profileAnswers(
 ): readonly QuestionnaireSuggestion[] {
   if (!facts) return [];
   return questions.flatMap((question) => {
+    const name = nameAnswer(question, questions, facts);
+    if (name !== null) {
+      const text = name ? forQuestion(question, name) : undefined;
+      return text ? [{ questionId: question.id, text, source: SOURCE_CONTACTS }] : [];
+    }
     for (const rule of RULES) {
       if (!rule.matches.test(question.text) || rule.except?.test(question.text)) continue;
       if (NOT_ABOUT_CANDIDATE.test(question.text)) return [];

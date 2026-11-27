@@ -4,6 +4,8 @@
  * Отправляет анкету кандидат сам — на странице работодателя.
  */
 
+import type { NumberLimits } from './questionnaireNumber';
+
 export const QUESTIONNAIRE_MAX_QUESTIONS = 40;
 export const QUESTIONNAIRE_ANSWER_MAX_LENGTH = 4000;
 
@@ -16,6 +18,14 @@ export interface QuestionnaireQuestion {
   readonly kind: QuestionnaireQuestionKind;
   /** Варианты ответа у вопроса с выбором. */
   readonly options?: readonly string[];
+  /** B703: у вопроса с выбором можно отметить несколько вариантов; ответ — по варианту на строку. */
+  readonly multiple?: boolean;
+  /** Поле формы в одну строку: имя, почта, телефон. */
+  readonly singleLine?: boolean;
+  /** Поле формы принимает только число. */
+  readonly numeric?: boolean;
+  /** Границы числового поля. */
+  readonly limits?: NumberLimits;
 }
 
 export interface QuestionnaireAnswer {
@@ -29,6 +39,8 @@ export interface QuestionnaireSuggestion {
   readonly text: string;
   /** Откуда взято, словами кандидата: «Ожидания из вашего профиля». */
   readonly source: string;
+  /** Рыночная цифра: обновляется вместе с данными, пока кандидат не написал своё (B788). */
+  readonly live?: true;
 }
 
 export interface ApplicationQuestionnaire {
@@ -54,4 +66,13 @@ export interface ApplicationQuestionnaire {
   readonly readAt: string | null;
   /** Кандидат отметил, что отправил анкету на сайте работодателя. */
   readonly submittedAt: string | null;
+}
+
+/** B787: вопросы формы работодателя, прочитанные приложением. */
+export interface AtsFormInput {
+  readonly url: string;
+  readonly questions: readonly (QuestionnaireQuestion & {
+    /** Ответ из профиля: ставится, пока кандидат не ответил и не стёр его сам. */
+    readonly known?: string;
+  })[];
 }

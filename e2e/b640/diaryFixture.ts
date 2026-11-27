@@ -9,6 +9,9 @@ export interface DiaryCalls {
   measurements: unknown[];
   goals: unknown[];
   archived: unknown[];
+  kpi: unknown[];
+  /** B743 · 2: ответы кандидата на подсказку задачи: `skip` или `accept` и id подсказки. */
+  suggestion: Array<{ action: string; id: string }>;
 }
 
 function isoDay(offsetDays: number): string {
@@ -133,6 +136,49 @@ const HISTORY = [7, 9, 11, 14].map((value, index) => ({
   createdAt: '',
 }));
 
+const kpiRow = (id: string, title: string, target: string, horizon: string, weight: number) => ({
+  id,
+  title,
+  target,
+  targetValue: null,
+  unit: '',
+  dueDate: null,
+  horizon,
+  weight,
+  setBy: 'manager',
+  quote: '',
+});
+const KPI_DRAFT = {
+  id: 'kpi-1',
+  sourceKind: 'text',
+  sourceName: null,
+  createdAt: `${TODAY}T09:00:00.000Z`,
+  rows: [
+    kpiRow('r1', 'Срок релиза', '7 дней', 'quarter', 30),
+    kpiRow('r2', 'Закрыто вакансий', '2 шт.', 'quarter', 30),
+    kpiRow('r3', 'Инциденты после релиза', '2 в месяц', 'quarter', 20),
+    kpiRow('r4', 'Релизы без отката', '95 %', 'year', 20),
+  ],
+  weightSum: 100,
+  acceptedGoalIds: [],
+  sourceStored: true,
+};
+
+function handleKpi(route: Route, calls: DiaryCalls, path: string, method: string) {
+  const body = method === 'GET' ? null : (route.request().postDataJSON() as unknown);
+  if (path === '/kpi-imports' && method === 'POST') {
+    calls.kpi.push(body);
+    return route.fulfill({ status: 201, json: { data: KPI_DRAFT } });
+  }
+  if (path.endsWith('/accept')) {
+    calls.kpi.push(body);
+    return route.fulfill({ status: 201, json: { data: { goalIds: ['goal-1', 'goal-2'] } } });
+  }
+  if (path.endsWith('/source'))
+    return route.fulfill({ json: { data: { ...KPI_DRAFT, sourceStored: false } } });
+  return route.fulfill({ json: { data: KPI_DRAFT } });
+}
+
 function weekDraft(weekStart: string, items: ReturnType<typeof entries>) {
   const week = items.filter((item) => item.weekStart === weekStart);
   return {
@@ -165,10 +211,27 @@ async function handle(
   if (path === '' || path === '/') {
     return route.fulfill({
       json: {
-        data: { asOf: TODAY, platformStartedAt: isoDay(-30), primaryWorkplace: null, summary: {} },
+        // Понедельник за 4 недели до текущей: лента начинается с «Недели 5» в любой день недели
+        // (с «−30 дней» в понедельник и вторник выходила «Неделя 6»).
+        data: {
+          asOf: TODAY,
+          platformStartedAt: monday(isoDay(-28)),
+          primaryWorkplace: null,
+          summary: {},
+        },
       },
     });
   }
+  if (path.startsWith('/kpi-imports')) return handleKpi(route, calls, path, method);
+  // B743 · 2: подсказки задачи по умолчанию нет; спек, которому она нужна, ставит свой маршрут.
+  const suggestion = /^\/goal-cards\/[^/]+\/task-suggestion(?:\/([^/]+)\/(skip|accept))?$/u.exec(
+    path,
+  );
+  if (suggestion?.[1]) {
+    calls.suggestion.push({ action: suggestion[2]!, id: suggestion[1] });
+    return route.fulfill({ status: 204 });
+  }
+  if (suggestion) return route.fulfill({ json: { data: null } });
   if (path === '/goal-cards' && method === 'GET')
     return route.fulfill({ json: { data: { items: CARDS, archived: ARCHIVED } } });
   if (path === '/goal-cards' && method === 'POST') {
@@ -242,6 +305,8 @@ export async function mockDiary(page: Page): Promise<DiaryCalls> {
     measurements: [],
     goals: [],
     archived: [],
+    kpi: [],
+    suggestion: [],
   };
   const state = { items: entries() };
   await page.route('**/api/v1/candidate/career-diary**', (route) => handle(route, calls, state));

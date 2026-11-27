@@ -35,11 +35,10 @@ import type {
   NativeSourceReceiptInput,
 } from './candidateStore';
 import { insertPlanRequest, selectPlanRequests } from './store/planRequestStore';
-import {
-  exportExecutiveRequests,
-} from './store/executiveRequestStore';
+import { exportExecutiveRequests } from './store/executiveRequestStore';
 import { createSqliteCandidateStoreExecutiveRequestMethods } from './sqliteCandidateStoreExecutiveRequestMethods';
 import { createSqliteCandidateStoreExportMethods } from './sqliteCandidateStoreExportMethods';
+import { purgeCandidateRows } from './candidateRowPurge';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import { SealedMatchedListStore } from './sealedMatchedListStore';
 import { SealedText } from './sealedText';
@@ -47,10 +46,7 @@ import type { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
 import type { SqliteMarketRepository } from './sqliteMarketRepository';
 import type { SqliteResumeRepository } from './sqliteResumeRepository';
 import type { SqliteResumeVersionRepository } from './sqliteResumeVersionRepository';
-import type {
-  SqliteCandidateMediaRepository,
-  StoredCandidateMedia,
-} from './sqliteCandidateMediaRepository';
+import type { SqliteCandidateMediaRepository, StoredCandidateMedia } from './sqliteCandidateMediaRepository';
 import type { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
 import type { SqliteProfileChangeLogRepository } from './sqliteProfileChangeLogRepository';
 import { createProfileRepositories } from './sqliteCandidateStoreProfileRepositories';
@@ -221,7 +217,7 @@ export class SqliteCandidateStore implements CandidateStore {
       this.transaction(operation),
     ));
     this.installLinkedInMethods();
-    this.installExportMethods();
+    this.installExportMethods(options.encryptionKey);
     this.careerCommandRepository.recoverInterruptedProcessing(new Date().toISOString());
   }
 
@@ -236,7 +232,7 @@ export class SqliteCandidateStore implements CandidateStore {
     );
   }
 
-  private installExportMethods(): void {
+  private installExportMethods(encryptionKey: Buffer): void {
     Object.assign(
       this,
       createMemoryMethods({
@@ -250,6 +246,7 @@ export class SqliteCandidateStore implements CandidateStore {
       }),
       createSqliteCandidateStoreExportMethods({
         getSnapshot: (candidateId) => this.getSnapshot(candidateId),
+        readDeliverySettings: (candidateId) => this.notificationRepository.getDeliverySettings(candidateId),
         sourceConnections: this.sourceConnections,
         careerStrategyRepository: this.careerStrategyRepository,
         workPreferenceRepository: this.workPreferenceRepository,
@@ -259,14 +256,13 @@ export class SqliteCandidateStore implements CandidateStore {
           getProfile: (candidateId) => this.relocationQuestionnaireRepo.getProfile(candidateId),
           getConsent: (candidateId) => this.relocationQuestionnaireRepo.getConsent(candidateId),
         },
-        exportConsultantConversations: (candidateId) =>
-          this.exportConsultantConversations(candidateId),
+        exportConsultantConversations: (candidateId) => this.exportConsultantConversations(candidateId),
         exportExecutiveRequests: (candidateId) =>
           exportExecutiveRequests(this.database, this.sealedText, candidateId),
         roleSkillAssessments: this.roleSkillAssessments,
         starStoriesRepo: this.starStoriesRepo,
         interviewSimulatorRepo: this.interviewSimulatorRepo,
-        careerDiaryRepo: this.careerDiaryRepo, diaryEntryRepo: this.diaryEntryRepo,
+        careerDiaryRepo: this.careerDiaryRepo, diaryEntryRepo: this.diaryEntryRepo, ownStorage: { store: this as unknown as import('./sqliteCandidateStoreExportMethods').OwnStorageStore, database: this.database, encryptionKey },
       }),
     );
   }
@@ -647,12 +643,14 @@ export class SqliteCandidateStore implements CandidateStore {
   declare recordVacancyApplication: ApplicationTrackerMethods['recordVacancyApplication'];
   declare listApplications: ApplicationTrackerMethods['listApplications'];
   declare getApplication: ApplicationTrackerMethods['getApplication'];
+  declare findSentApplication: ApplicationTrackerMethods['findSentApplication'];
   declare createApplication: ApplicationTrackerMethods['createApplication'];
   declare patchApplication: ApplicationTrackerMethods['patchApplication'];
   declare restoreApplication: ApplicationTrackerMethods['restoreApplication'];
   declare recordApplicationEvent: ApplicationTrackerMethods['recordApplicationEvent'];
   declare applicationFunnel: ApplicationTrackerMethods['applicationFunnel'];
   declare linkApplicationMaterial: ApplicationTrackerMethods['linkApplicationMaterial'];
+  declare linkedMaterialId: ApplicationTrackerMethods['linkedMaterialId'];
   declare createApplicationInterview: ApplicationTrackerMethods['createApplicationInterview'];
   declare patchApplicationInterview: ApplicationTrackerMethods['patchApplicationInterview'];
   declare getInterviewSubject: ApplicationTrackerMethods['getInterviewSubject'];
@@ -674,6 +672,8 @@ export class SqliteCandidateStore implements CandidateStore {
   declare setDocumentRetention: SqliteCandidateStoreDocumentMethods['setDocumentRetention'];
   declare purgeExpiredDocuments: SqliteCandidateStoreDocumentMethods['purgeExpiredDocuments'];
   declare exportCandidate: CandidateStore['exportCandidate'];
+  /** B738: что последний шаг выгрузки убрал как служебное (см. `withoutForbiddenKeys`). */
+  declare exportCandidateStripReport: (candidateId: string) => string[];
   declare createExecutiveRequest: NonNullable<CandidateStore['createExecutiveRequest']>;
   declare listExecutiveRequests: NonNullable<CandidateStore['listExecutiveRequests']>;
   declare getExecutiveRequest: NonNullable<CandidateStore['getExecutiveRequest']>;
@@ -806,15 +806,15 @@ export class SqliteCandidateStore implements CandidateStore {
   }
 
   declare addManualExperienceFact: MemoryMethods['addManualExperienceFact'];
-  declare answerEmployerName: MemoryMethods['answerEmployerName'];
-  declare reviewMemories: MemoryMethods['reviewMemories'];
+  declare correctFact: MemoryMethods['correctFact']; declare revertFactCorrection: MemoryMethods['revertFactCorrection'];
+  declare answerEmployerName: MemoryMethods['answerEmployerName']; declare reviewMemories: MemoryMethods['reviewMemories'];
   declare applyExperienceFactRewrite: MemoryMethods['applyExperienceFactRewrite'];
   declare revertExperienceFactRewrite: MemoryMethods['revertExperienceFactRewrite'];
   declare saveFactRewriteProposal: MemoryMethods['saveFactRewriteProposal'];
 
   deleteCandidate(candidateId: string): boolean {
     const result = this.transaction(() => {
-      this.consultantHistory.deleteAllIndexes(candidateId);
+      purgeCandidateRows(this.database, candidateId);
       return this.database.prepare('DELETE FROM candidates WHERE id = ?').run(candidateId);
     });
     if (result.changes === 1) this.database.exec('PRAGMA wal_checkpoint(TRUNCATE)');

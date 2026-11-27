@@ -1,6 +1,7 @@
-export { ActionDock, type ActionDockProps } from './ActionDock';
+export { ActionDock, useDockHeight, type ActionDockProps } from './ActionDock';
 export { Button, type ButtonProps, type ButtonVariant } from './Button';
 export { Composer, type ComposerProps } from './Composer';
+export { DateInput, type DateInputProps } from './DateInput';
 export { Dialog, type DialogProps } from './Dialog';
 export { Icon, type IconName, type IconProps } from './Icon';
 export { InfoTip, type InfoTipProps } from './InfoTip';

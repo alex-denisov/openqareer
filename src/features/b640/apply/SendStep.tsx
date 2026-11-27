@@ -5,22 +5,21 @@ import { apiErrorMessage } from '../../coach/apiClient';
 import type { ApprovedVacancyLetterResult } from '../../vacancies/vacancyLetterApi';
 import { Button, Icon, Link, ResultLine, StatusLine, useToast } from '../kit';
 import { buildNodePath } from '../routes';
-import { sendFrom } from '../responses/model/platform';
+import { sendFrom, viaPlatform } from '../responses/model/platform';
 import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { hhVacancyIdFromUrl } from '../../../../shared/hhCandidateSession';
 import type { ApplyHead } from './model/applyModel';
-import { HhSendStep } from './hh/HhSendStep';
+import { HhSendStep, type HhSendStepProps } from './hh/HhSendStep';
 
 type Sent =
-  | { readonly kind: 'idle' | 'busy' | 'done' }
-  | { readonly kind: 'error'; readonly text: string };
+  { readonly kind: 'idle' | 'busy' | 'done' } | { readonly kind: 'error'; readonly text: string };
 
 interface CopyItemProps {
   readonly label: string;
   readonly text: string;
 }
 
-function CopyItem({ label, text }: CopyItemProps) {
+export function CopyItem({ label, text }: CopyItemProps) {
   const toast = useToast();
   const labelId = useId();
   const copy = () => {
@@ -66,7 +65,12 @@ interface MarkInput {
  * «Я откликнулся». Со ссылкой на вакансию — прежняя отметка отклика; без ссылки (её требует
  * тот маршрут) стадия меняется у самой карточки, которую создало одобрение письма.
  */
-export async function markApplied({ vacancyId, head, sourceType, applicationId }: MarkInput): Promise<void> {
+export async function markApplied({
+  vacancyId,
+  head,
+  sourceType,
+  applicationId,
+}: MarkInput): Promise<void> {
   if (head.url) {
     await recordVacancyApplication({
       clusterId: vacancyId,
@@ -82,14 +86,14 @@ export async function markApplied({ vacancyId, head, sourceType, applicationId }
 }
 
 /** «одобрено 18.11» — дата одобрения письма. */
-function approvedLabel(approvedAt: string): string {
+export function approvedLabel(approvedAt: string): string {
   const date = new Date(approvedAt);
   if (Number.isNaN(date.getTime())) return 'одобрено';
   const pad = (value: number) => String(value).padStart(2, '0');
   return `одобрено ${pad(date.getDate())}.${pad(date.getMonth() + 1)}`;
 }
 
-function NeedsLetter({ onLetter }: { readonly onLetter: () => void }) {
+export function NeedsLetter({ onLetter }: { readonly onLetter: () => void }) {
   return (
     <section className="lead" aria-labelledby="w-title">
       <h2 className="lead-title is-long" id="w-title">
@@ -98,6 +102,22 @@ function NeedsLetter({ onLetter }: { readonly onLetter: () => void }) {
       <div className="actions">
         <Button variant="primary" icon="file" onClick={onLetter}>
           К письму
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+/** Версия резюме собрана заново: сначала её одобряют. */
+export function NeedsResume({ onResume }: { readonly onResume: () => void }) {
+  return (
+    <section className="lead" aria-labelledby="w-title">
+      <h2 className="lead-title is-long" id="w-title">
+        Сначала одобрите резюме
+      </h2>
+      <div className="actions">
+        <Button variant="primary" icon="file" onClick={onResume}>
+          К резюме
         </Button>
       </div>
     </section>
@@ -125,11 +145,29 @@ function SentActions({ sent, responsePath, onConfirm }: SentActionsProps) {
       <ResultLine text="Отклик отмечен как отправленный" />
       <div className="actions">
         <Link className="btn is-primary" to={responsePath}>
-          <Icon name="right" />
-          К отклику
+          <Icon name="right" />К отклику
         </Link>
       </div>
     </>
+  );
+}
+
+interface AlreadySentProps {
+  readonly platform: ApplyHead['platform'];
+  readonly responseId: string;
+}
+
+/** Отклик уже ушёл: площадка отправки и переход к нему. */
+function AlreadySent({ platform, responseId }: AlreadySentProps) {
+  return (
+    <section className="lead" aria-label="Отправка">
+      <ResultLine text={platform ? `Отправлен ${viaPlatform(platform)}` : 'Отклик отправлен'} />
+      <div className="actions">
+        <Link className="btn is-primary" to={buildNodePath('o01c', { responseId })}>
+          <Icon name="right" />К отклику
+        </Link>
+      </div>
+    </section>
   );
 }
 
@@ -142,13 +180,24 @@ export interface SendStepProps {
   readonly letterText: string;
   /** Ответы анкеты работодателя для вставки; пусто — анкеты нет. */
   readonly answersText?: string;
+  /** Анкета hh.ru в приложении (B641). */
+  readonly form: HhSendStepProps['form'];
+  readonly onForm: HhSendStepProps['onForm'];
+  readonly askNow?: boolean;
+  readonly onAsked?: () => void;
   readonly onLetter: () => void;
 }
 
 /** Шаг «Отправка»: в приложении вакансия hh.ru уходит откликом из входа кандидата (B704), иначе — веб (O4d). */
 export function SendStep(props: SendStepProps) {
   const { vacancyId, head, sourceType, approved, letterText } = props;
-  const hhVacancyId = approved && isTauriEnvironment() && head.url ? hhVacancyIdFromUrl(head.url) : null;
+  // Отклик, ушедший с этого шага, показывает его итог; «Отправлен» — только ушедший до открытия.
+  const [opened] = useState({ vacancyId, sentId: head.sentId });
+  if (opened.sentId && opened.vacancyId === vacancyId) {
+    return <AlreadySent platform={head.platform} responseId={opened.sentId} />;
+  }
+  const hhVacancyId =
+    approved && isTauriEnvironment() && head.url ? hhVacancyIdFromUrl(head.url) : null;
   if (!approved || !hhVacancyId) return <WebSendStep {...props} />;
   const applicationId = approved.applicationId;
   return (
@@ -160,6 +209,11 @@ export function SendStep(props: SendStepProps) {
       approvedLabel={approvedLabel(approved.approvedAt)}
       letterText={letterText}
       onSent={() => markApplied({ vacancyId, head, sourceType, applicationId })}
+      onLetter={props.onLetter}
+      form={props.form}
+      onForm={props.onForm}
+      askNow={props.askNow}
+      onAsked={props.onAsked}
     />
   );
 }
@@ -175,7 +229,10 @@ function WebSendStep(props: SendStepProps) {
     markApplied({ vacancyId, head, sourceType, applicationId })
       .then(() => setSent({ kind: 'done' }))
       .catch((reason: unknown) =>
-        setSent({ kind: 'error', text: apiErrorMessage(reason, 'Отметка не сохранилась. Повторите.') }),
+        setSent({
+          kind: 'error',
+          text: apiErrorMessage(reason, 'Отметка не сохранилась. Повторите.'),
+        }),
       );
   }
 
@@ -190,6 +247,12 @@ function WebSendStep(props: SendStepProps) {
             <Icon name="out" />
             Открыть вакансию на сайте
           </a>
+          {isTauriEnvironment() ? null : (
+            <Link className="row-act" to={buildNodePath('n06')}>
+              Отправлять из приложения
+              <Icon name="right" />
+            </Link>
+          )}
         </div>
       ) : null}
       <ul className="cb-list" aria-label="Письмо для отклика">

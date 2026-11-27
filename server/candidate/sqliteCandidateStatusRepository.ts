@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS candidate_status_changes (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS candidate_status_changes_by_candidate
   ON candidate_status_changes (candidate_id, created_at);
+CREATE TABLE IF NOT EXISTS candidate_weekly_selection (
+  candidate_id TEXT PRIMARY KEY REFERENCES candidates(id) ON DELETE CASCADE,
+  enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+  updated_at TEXT NOT NULL
+) STRICT;
 `;
 
 /** Что было у автооткликов до паузы, поставленной при смене статуса. */
@@ -98,6 +103,31 @@ export class SqliteCandidateStatusRepository {
 
   close(): void {
     if (this.ownsDatabase) this.database.close();
+  }
+
+  /** B779: «Подборку в своей роли — раз в неделю»; без строки — выключена. */
+  weeklySelectionEnabled(candidateId: string): boolean {
+    const row = this.database
+      .prepare('SELECT enabled FROM candidate_weekly_selection WHERE candidate_id = ?')
+      .get(candidateId) as { enabled: number } | undefined;
+    return row?.enabled === 1;
+  }
+
+  setWeeklySelection(candidateId: string, enabled: boolean, at: Date): void {
+    this.database
+      .prepare(
+        `INSERT INTO candidate_weekly_selection (candidate_id, enabled, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(candidate_id) DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at`,
+      )
+      .run(candidateId, enabled ? 1 : 0, at.toISOString());
+  }
+
+  /** Кандидаты, которым подборка включена. */
+  weeklySelectionCandidates(): string[] {
+    const rows = this.database
+      .prepare('SELECT candidate_id FROM candidate_weekly_selection WHERE enabled = 1 ORDER BY candidate_id')
+      .all() as { candidate_id: string }[];
+    return rows.map((row) => row.candidate_id);
   }
 
   current(candidateId: string): CandidateStatusChange | null {

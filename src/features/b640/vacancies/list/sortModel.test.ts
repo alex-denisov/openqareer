@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { makeItem } from './fixtures';
-import { footOf, serverFoot, nextSort, sortItems, visibleSlice } from './sortModel';
+import {
+  DEFAULT_LIST_SORT,
+  footOf,
+  nextSort,
+  serverFoot,
+  serverSortApplies,
+  sortItems,
+  visibleSlice,
+} from './sortModel';
 
 const items = [
   makeItem({ id: 'a', title: 'Бета', percent: 50 }),
@@ -68,5 +76,51 @@ describe('подвал серверного режима', () => {
       shown: 31,
       countKnown: true,
     });
+  });
+});
+
+describe('порядок подборки по умолчанию (s07)', () => {
+  it('«Совпадение», сначала высокий процент; «Дата» открывается новыми сверху', () => {
+    expect(DEFAULT_LIST_SORT).toEqual({ key: 'fit', dir: 'desc' });
+    expect(nextSort(DEFAULT_LIST_SORT, 'fit')).toEqual({ key: 'fit', dir: 'asc' });
+    expect(nextSort(DEFAULT_LIST_SORT, 'date')).toEqual({ key: 'date', dir: 'desc' });
+  });
+
+  it('сервер сортирует только непрочитанную до конца подборку, и не раньше первой порции пула', () => {
+    expect(serverSortApplies({ complete: false, loading: false, failed: false })).toBe(true);
+    expect(serverSortApplies({ complete: false, loading: true, failed: false })).toBe(false);
+    expect(serverSortApplies({ complete: true, loading: false, failed: false })).toBe(false);
+    expect(serverSortApplies({ complete: false, loading: false, failed: true })).toBe(false);
+  });
+});
+
+describe('сортировка по деньгам с оценкой (B803)', () => {
+  it('строка без зарплаты, но с оценкой, встаёт по оценке', () => {
+    const stated = makeItem({ id: 's' });
+    const withSalary = {
+      ...stated,
+      cluster: { ...stated.cluster, salary: { from: 300_000, currency: 'RUR', period: 'month' } },
+    };
+    const base = makeItem({ id: 'e' });
+    const estimated = {
+      ...base,
+      explanation: {
+        ...base.explanation,
+        marketSalary: {
+          low: 500_000,
+          high: 600_000,
+          currency: 'RUR',
+          period: 'month',
+          tax: 'unknown',
+          computedAt: '2026-11-20T03:00:00.000Z',
+        },
+      },
+    };
+    const none = makeItem({ id: 'n' });
+    const sorted = sortItems([none, withSalary, estimated] as typeof items, {
+      key: 'money',
+      dir: 'desc',
+    });
+    expect(ids(sorted)).toEqual(['e', 's', 'n']);
   });
 });

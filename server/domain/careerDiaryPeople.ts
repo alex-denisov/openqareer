@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { CareerDiaryAdaptationStageId } from '../../shared/careerDiaryCards';
 import {
+  MEETING_TOPIC_MAX,
   PEOPLE_CADENCES,
   PEOPLE_GROUP_MAX,
   PERSON_HEADCOUNT_MAX,
@@ -43,7 +44,17 @@ export const personPatchSchema = personFields
   .partial()
   .strict()
   .refine((patch) => Object.keys(patch).length > 0);
-export const meetingSchema = z.object({ date: calendarDate }).strict();
+export const meetingSchema = z
+  .object({
+    date: calendarDate,
+    topic: z
+      .string()
+      .trim()
+      .max(MEETING_TOPIC_MAX)
+      .nullish()
+      .transform((topic) => topic || null),
+  })
+  .strict();
 
 export { named as personIsNamed };
 
@@ -96,9 +107,9 @@ function personView(person: CareerDiaryPerson, tasks: ReadonlyMap<string, PlanTa
   }
   if (task.completed) {
     const lastMetOn = person.lastMetOn && person.lastMetOn > task.dueDate ? person.lastMetOn : task.dueDate;
-    return { ...person, lastMetOn, meeting: { taskId: task.id, date: task.dueDate }, status: 'met' };
+    return { ...person, lastMetOn, meeting: { ...person.meeting, taskId: task.id, date: task.dueDate }, status: 'met' };
   }
-  return { ...person, meeting: { taskId: task.id, date: task.dueDate }, status: 'scheduled' };
+  return { ...person, meeting: { ...person.meeting, taskId: task.id, date: task.dueDate }, status: 'scheduled' };
 }
 
 function groupsOf(people: readonly CareerDiaryPersonView[]): CareerDiaryPeopleGroup[] {
@@ -119,7 +130,11 @@ export function buildPeopleMap(
   const views = people.map((person) => personView(person, byId));
   const scheduled = views
     .filter((person) => person.status === 'scheduled' && person.meeting)
-    .map((person) => ({ personId: person.id, date: person.meeting!.date }))
+    .map((person) => ({
+      personId: person.id,
+      date: person.meeting!.date,
+      topic: person.meeting!.topic ?? null,
+    }))
     .sort((a, b) => a.date.localeCompare(b.date));
   return {
     workplaceId,

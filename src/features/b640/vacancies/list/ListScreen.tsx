@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { poolFilterQuery } from '../b640Api';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import { vacanciesWord } from '../format';
@@ -7,6 +7,7 @@ import { FilterSheet } from './FilterSheet';
 import { HiddenRows } from './HiddenRows';
 import { FiltersBar } from './FiltersBar';
 import { withoutKind, type FilterKind } from './filterModel';
+import { withRoleLabels } from './filterOptions';
 import {
   CountTitle,
   EmptyByFilters,
@@ -16,11 +17,12 @@ import {
   MoreFoot,
   SortError,
 } from './ListParts';
+import { SkillLine } from './SkillLine';
 import { TableBlock } from './TableBlock';
 import { OwnAddButton, OwnVacancyPanel } from './OwnVacancyPanel';
 import { OwnRows } from './OwnRows';
 import { TriagePanel } from './TriagePanel';
-import { ReviewButton } from './TriageParts';
+import { ReviewButton, useReviewDeepLink } from './TriageParts';
 import type { RowEnv, RowPick } from './VacancyRow';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { useHiddenSection, type HiddenSection } from './useHiddenSection';
@@ -47,7 +49,8 @@ function filterProps(list: VacancyList, section: HiddenSection) {
     showHidden: section.show,
     onShowHidden: section.setShow,
     filters: list.filters,
-    options: list.options,
+    options: withRoleLabels(list.options, list.pool.campaign?.titlesRu),
+    roleTitlesRu: list.pool.campaign?.titlesRu,
     currency: list.currency,
     onChange: list.setFilters,
     onCurrency: list.setCurrency,
@@ -114,20 +117,39 @@ function ListTable({ list, rows, section, env, links, triage, own }: ListTablePr
         rows={rows}
         rates={list.rates}
         hidden={hidden}
-        own={<OwnRows items={own.items} onRemove={own.removeWithToast} />}
+        own={<OwnRows items={own.items} money={env} onRemove={own.removeWithToast} />}
         pickFor={(item) => pickOf(triage, item)}
       />
-      {status === 'loading' ? <LoadingLine text="Сортируем подборку…" /> : null}
+      {status === 'loading' || (list.hunting && status !== 'failed') ? (
+        <LoadingLine text={list.hunting ? undefined : 'Сортируем подборку…'} />
+      ) : null}
       {status === 'failed' ? <SortError onRetry={retry} /> : null}
-      {status === 'loading' || status === 'failed' ? null : (
+      {status === 'loading' || status === 'failed' || list.hunting ? null : (
         <MoreFoot total={list.more.total} shown={list.more.shown} onMore={list.showMore} />
       )}
     </>
   );
 }
 
+/** v06p: по фильтрам пусто — «Помочь выбрать» снимает их и разбирает подборку, как только она есть. */
+function useReviewStart(list: VacancyList, start: () => void): () => void {
+  const [pending, setPending] = useState(false);
+  const filled = list.all.length > 0;
+  useEffect(() => {
+    if (!pending || !filled) return;
+    setPending(false);
+    start();
+  }, [pending, filled, start]);
+  return () => {
+    if (filled) return start();
+    setPending(true);
+    list.resetFilters();
+  };
+}
+
 /** Строка счётчика: число вакансий слева, «Проверить свою вакансию» и «Помочь выбрать» справа. */
 function CountBar({ list, hideCount, triage, own }: { list: VacancyList; hideCount: boolean; triage: Triage; own: OwnSection }) {
+  const start = useReviewStart(list, triage.start);
   return (
     <>
       <div className="vl-top vl-countbar">
@@ -136,8 +158,8 @@ function CountBar({ list, hideCount, triage, own }: { list: VacancyList; hideCou
         )}
         <div className="va-lact vl-acts">
           <OwnAddButton open={own.panelOpen} onClick={own.togglePanel} />
-          {list.all.length > 0 || triage.active ? (
-            <ReviewButton active={triage.active} onClick={triage.active ? triage.cancel : triage.start} />
+          {list.all.length > 0 || triage.active || list.blockers.length > 0 ? (
+            <ReviewButton active={triage.active} onClick={triage.active ? triage.cancel : start} />
           ) : null}
         </div>
       </div>
@@ -148,6 +170,25 @@ function CountBar({ list, hideCount, triage, own }: { list: VacancyList; hideCou
   );
 }
 
+/** Разбор «Помочь выбрать» по той же выборке, что число в шапке. */
+function useListTriage(list: VacancyList, rows: RowInteractions): Triage {
+  // Всю подборку по фильтрам сервер разбирает сам; с фильтрами, которых он не знает, — показанные строки.
+  const triageQuery = isNarrowed(list.filters) ? null : poolFilterQuery(list.filters.roles);
+  const triage = useTriage(list.all, rows.hideMany, {
+    query: triageQuery,
+    expected: list.count,
+    ready: list.rolesReady,
+    failed: list.pool.failed,
+    retry: list.pool.refresh,
+  });
+  // Итог «скрывать нечего» живёт до следующего действия со списком: фильтры, сортировка, скрытие.
+  const { clearResult, start } = triage;
+  const listAction = `${JSON.stringify(list.filters)}|${JSON.stringify(list.sort)}|${rows.hiddenIds.size}`;
+  useEffect(() => clearResult(), [listAction, clearResult]);
+  useReviewDeepLink(list.all.length, start);
+  return triage;
+}
+
 /** Узел s07: подборка вакансий с фильтрами, сортировкой и порциями по 20. */
 export function ListScreen() {
   const links = useVacancyLinks();
@@ -155,18 +196,11 @@ export function ListScreen() {
   const list = useVacancyList(links, rows.hiddenIds);
   const { pool } = list;
   const section = useHiddenSection(rows, pool.refresh);
-  // Всю подборку по фильтрам сервер разбирает сам; с фильтрами, которых он не знает, — показанные строки.
-  const triageQuery = isNarrowed(list.filters) ? null : poolFilterQuery(list.filters.roles);
-  const triage = useTriage(list.all, rows.hideMany, { query: triageQuery, expected: list.count });
-  // Итог «скрывать нечего» живёт до следующего действия со списком: фильтры, сортировка, скрытие.
-  const { clearResult } = triage;
-  const listAction = `${JSON.stringify(list.filters)}|${JSON.stringify(list.sort)}|${rows.hiddenIds.size}`;
-  useEffect(() => clearResult(), [listAction, clearResult]);
-  const env = { currency: list.currency, rates: list.rates, noRole: list.noRole };
+  const triage = useListTriage(list, rows);
   const retrying = usePoolRetry(pool);
   const serverBusy = list.server.active && list.server.status !== 'ready';
+  const searching = serverBusy || (list.hunting && list.server.status !== 'failed');
   const empty = pool.matched.length === 0;
-  const waiting = empty && (pool.loading || retrying);
   // Числа и список появляются с первой прочитанной порцией: «0 вакансий» на время чтения не пишем.
   const unread = empty && (pool.loading || retrying || pool.failed);
   const strip = list.noRole ? 'role' : profileIsEmpty(list) ? 'profile' : null;
@@ -174,26 +208,27 @@ export function ListScreen() {
   return (
     <div className="page" data-b640-node="s07" data-b640-section="vacancies">
       {strip ? <GapStrip kind={strip} /> : null}
-      <section className={`col vl vt-wrap${strip ? ' is-v6' : ''}${triage.active ? ' is-triage' : ''}`} aria-labelledby="list-title">
+      <section className={`col vl vt-wrap${strip || triage.active ? ' is-v6' : ''}${triage.active ? ' is-triage' : ''}`} aria-labelledby="list-title">
         <CountBar list={list} hideCount={unread} triage={triage} own={own} />
         <FiltersBar
           {...filterProps(list, section)}
           openKind={list.openKind}
-          shown={list.count}
+          shown={list.countKnown ? list.count : null}
           onOpenKind={list.setOpenKind}
           onOpenSheet={() => list.setSheetOpen(true)}
           onReset={list.resetFilters}
         />
+        <SkillLine roles={pool.campaign?.roles.value ?? []} ready={!pool.loading} />
         <TriagePanel triage={triage} />
         <LoadErrors pool={pool} links={links} poolFailed={pool.failed && !retrying} />
-        {waiting ? <LoadingLine /> : null}
-        {!unread && list.all.length === 0 && !serverBusy ? <EmptyList list={list} /> : null}
-        <ListTable list={list} rows={rows} section={section} env={env} links={links} triage={triage} own={own} />
+        {empty && (pool.loading || retrying) ? <LoadingLine /> : null}
+        {!unread && list.all.length === 0 && !searching ? <EmptyList list={list} /> : null}
+        <ListTable list={list} rows={rows} section={section} env={{ currency: list.currency, rates: list.rates, noRole: list.noRole }} links={links} triage={triage} own={own} />
       </section>
       <FilterSheet
         {...filterProps(list, section)}
         open={list.sheetOpen}
-        shown={list.count}
+        shown={list.countKnown ? list.count : null}
         sort={list.sort}
         onSort={list.toggleSort}
         onClose={() => list.setSheetOpen(false)}

@@ -26,6 +26,7 @@ function skillCase(id: string, skillName: string, prompt: string) {
     answer: null as string | null,
     evaluation: null as unknown,
     evaluationHistory: [],
+    decision: undefined as 'pending' | 'accepted' | 'declined' | undefined,
     appealReason: null,
     pendingDiscussionQuestion: null,
     discussion: [],
@@ -137,6 +138,8 @@ export interface SkillOptions {
   readonly searchRoles?: readonly string[];
   /** Роли, требований которых мало: `insufficient_requirements`, сбор не идёт. */
   readonly insufficient?: readonly string[];
+  /** B767: русские названия ролей поиска в ответе кампании. */
+  readonly titlesRu?: Readonly<Record<string, string>>;
 }
 
 function answered(run: SkillRun, caseId: string, answer: string): SkillRun {
@@ -147,18 +150,31 @@ function answered(run: SkillRun, caseId: string, answer: string): SkillRun {
           status: 'answered' as const,
           answer,
           evaluation: evaluation(answer, ['confirmed', 'confirmed', 'confirmed']),
+          decision: 'pending' as const,
         }
       : record,
-  );
-  const skills = run.skills.map((skill) =>
-    skill.caseId === caseId ? { ...skill, grade: 'confirmed' } : skill,
   );
   return {
     ...run,
     revision: run.revision + 1,
     cases,
-    skills,
     currentCaseIndex: run.currentCaseIndex + 1,
+  };
+}
+
+/** B734: навык меняет только «Верно» на итоге. */
+function decided(run: SkillRun, caseId: string, accepted: boolean): SkillRun {
+  return {
+    ...run,
+    revision: run.revision + 1,
+    cases: run.cases.map((record) =>
+      record.assessmentCase.id === caseId
+        ? { ...record, decision: accepted ? ('accepted' as const) : ('declined' as const) }
+        : record,
+    ),
+    skills: run.skills.map((skill) =>
+      accepted && skill.caseId === caseId ? { ...skill, grade: 'confirmed' } : skill,
+    ),
   };
 }
 
@@ -216,6 +232,7 @@ export async function openSkillCheck(
         data: {
           roles: { value: searchRoles, origin: 'explicit' },
           regions: { value: [], origin: 'default' },
+          ...(options.titlesRu ? { titlesRu: options.titlesRu } : {}),
         },
       },
     }),
@@ -252,6 +269,8 @@ export async function openSkillCheck(
         });
       }
       run = answered(run, path.split('/')[2] ?? '', String(body.answer));
+    } else if (path.endsWith('/decision')) {
+      run = decided(run, path.split('/')[2] ?? '', body.accepted === true);
     } else if (path.endsWith('/dialogue')) {
       run = afterDialogue(run);
     } else if (path.endsWith('/suggestions')) {

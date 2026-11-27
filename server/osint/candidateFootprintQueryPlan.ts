@@ -4,6 +4,7 @@ import { isNamedEmployer, partitionEmployers } from '../../shared/employerLabel'
 import type { FootprintAdapterId } from '../../shared/candidateFootprint';
 import type { ResumeDraft } from '../domain/resumeDraft';
 import { MAIGRET_SITES } from './adapters/maigretSiteCatalogue';
+import { isYoutubeUrl } from './adapters/youtubeAdapter';
 
 export type { FootprintAdapterId } from '../../shared/candidateFootprint';
 export type FootprintQueryKind = 'username' | 'email' | 'profile_url' | 'name' | 'work_context';
@@ -37,6 +38,8 @@ export interface PublicFootprintQueryPlanItem {
   readonly preview: string;
   readonly selectedByDefault: boolean;
   readonly available: boolean;
+  /** B668: ссылка из контактов профиля — её можно убрать в «Данных для поиска». */
+  readonly profileLink?: string;
 }
 
 function itemId(adapterId: FootprintAdapterId, kind: FootprintQueryKind, identity: string): string {
@@ -288,8 +291,26 @@ function extractUsernamesAndLinks(draft: ResumeDraft): {
   return { usernames: [...usernames], links: allLinks };
 }
 
+/** Адрес в плане → ссылка, как она записана в контактах профиля. */
+export function profileLinksOf(draft: ResumeDraft): ReadonlyMap<string, string> {
+  return new Map(
+    (draft.candidate.contact?.links ?? []).flatMap((link) => {
+      const url = profileUrl(link);
+      return url ? [[url, link] as const] : [];
+    }),
+  );
+}
+
+const MAX_YOUTUBE_LINKS = 3;
+
+function linkPreview(link: string): string {
+  return `Проверить архив публичной страницы ${link}`;
+}
+
 export interface BuildFootprintQueryPlanOptions {
   readonly manualEmployers?: readonly string[];
+  /** B668: проверка канала YouTube через Data API — только кандидатам с флагом B640. */
+  readonly youtube?: boolean;
 }
 
 export function buildCandidateFootprintQueryPlan(
@@ -301,9 +322,18 @@ export function buildCandidateFootprintQueryPlan(
   addUsernameItems(plan, usernames);
   addIdentityItems(plan, draft, usernames.length > 0, options?.manualEmployers);
   for (const link of links) {
-    addItem(plan, 'wayback', 'profile_url', `Проверить архив публичной страницы ${link}`, link, {
+    addItem(plan, 'wayback', 'profile_url', linkPreview(link), link, {
       profileUrl: link,
     });
+  }
+  if (options?.youtube) {
+    // Квота API общая на всех кандидатов: не больше трёх каналов за проверку.
+    for (const link of links.filter(isYoutubeUrl).slice(0, MAX_YOUTUBE_LINKS)) {
+      // Та же строка, что у ссылки: в «Данных для поиска» это одна строка на ссылку.
+      addItem(plan, 'youtube', 'profile_url', linkPreview(link), link, {
+        profileUrl: link,
+      });
+    }
   }
   return plan;
 }
@@ -326,12 +356,14 @@ function usernameFromTelegram(value: string | undefined): string | null {
 export function toPublicFootprintQueryPlan(
   plan: readonly FootprintQueryPlanItem[],
   availability: Partial<Record<FootprintAdapterId, boolean>> = {},
+  profileLinks: ReadonlyMap<string, string> = new Map(),
 ): readonly PublicFootprintQueryPlanItem[] {
   return plan.map(({ id, adapterId, kind, preview, selectedByDefault, input }) => {
     let available = availability[adapterId] ?? true;
     if (adapterId === 'hibp' && 'email' in input && !input.email) {
       available = false;
     }
+    const profileLink = 'profileUrl' in input ? profileLinks.get(input.profileUrl) : undefined;
     return {
       id,
       adapterId,
@@ -339,6 +371,7 @@ export function toPublicFootprintQueryPlan(
       preview,
       selectedByDefault: selectedByDefault && available,
       available,
+      ...(profileLink ? { profileLink } : {}),
     };
   });
 }

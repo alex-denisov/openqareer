@@ -8,6 +8,8 @@ import { buildApp } from '../app';
 import { config as baseConfig, noSessions } from '../appTestHarness';
 import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
+import { SqliteCapabilityConsentStore } from '../auth/capabilityConsentStore';
+import { APPLY_MANDATE_VERSION } from '../candidate/applyMandate';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
@@ -63,7 +65,14 @@ async function setup() {
     () => candidateStore.close(),
     () => app.close(),
   );
-  return { app, databasePath: config.databasePath };
+  const consents = new SqliteCapabilityConsentStore({ databasePath: config.databasePath });
+  const grant = (userId: string) =>
+    consents.recordConsent({ userId, capability: 'actions_on_behalf', versionId: APPLY_MANDATE_VERSION });
+  const flaggedId = sessions.get(flagged)!.candidate!.id;
+  for (const token of [flagged, other]) grant(sessions.get(token)!.candidate!.id);
+  const revokeMandate = () => consents.revokeConsent(flaggedId, 'actions_on_behalf');
+  cleanups.push(() => consents.close());
+  return { app, databasePath: config.databasePath, revokeMandate };
 }
 
 function call(app: App, method: 'GET' | 'PUT' | 'POST', path: string, token?: string, payload?: unknown) {
@@ -114,6 +123,18 @@ describe('B704: hh.ru session routes without the B640 flag', () => {
   });
 });
 
+describe('B787: поручение перед откликом hh.ru', () => {
+  it('без поручения отклик не начинается и попытка не тратится', async () => {
+    const { app, databasePath, revokeMandate } = await setup();
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    revokeMandate();
+    const refused = await call(app, 'POST', APPLY, flagged, attempt());
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().error.code).toBe('apply_mandate_required');
+    expect(tableRows(databasePath, 'hh_apply_attempts')).toEqual([]);
+  });
+});
+
 describe('B704: resumes read in the candidate hh.ru session', () => {
   it('are stored sealed and returned only to their candidate', async () => {
     const { app, databasePath } = await setup();
@@ -128,6 +149,17 @@ describe('B704: resumes read in the candidate hh.ru session', () => {
     const stored = JSON.stringify(tableRows(databasePath, 'hh_resume_snapshots'));
     expect(stored).not.toContain('Марина');
     expect(stored).not.toContain('Руководитель');
+  });
+
+  it('B704: keep the read date when nothing was read from hh.ru', async () => {
+    const { app } = await setup();
+    const first = (await call(app, 'PUT', RESUMES, flagged, SNAPSHOT)).json().data.readAt;
+    await new Promise((done) => setTimeout(done, 5));
+    for (const extra of [{ contentRead: false }, { contents: [] }]) {
+      const saved = await call(app, 'PUT', RESUMES, flagged, { ...SNAPSHOT, ...extra });
+      expect(saved.json().data.readAt).toBe(first);
+    }
+    expect((await call(app, 'PUT', RESUMES, flagged, SNAPSHOT)).json().data.readAt).not.toBe(first);
   });
 
   it('reject a selected resume that is not in the list and malformed input', async () => {
@@ -192,6 +224,48 @@ describe('B704: an hh.ru application on the candidate behalf', () => {
     expect(paused.json().error.code).toBe('hh_cooldown');
   });
 
+  it('B708: a response finished in the hh.ru window turns the failed attempt into a sent one', async () => {
+    const { app, databasePath } = await setup();
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    const { attemptId } = (await call(app, 'POST', APPLY, flagged, attempt())).json().data;
+    const result = `${APPLY}/${attemptId}/result`;
+    await call(app, 'POST', result, flagged, { outcome: 'failed', failureCode: 'captcha' });
+    const late = { outcome: 'sent', vacancyId: '123456' };
+
+    expect((await call(app, 'POST', result, other, late)).statusCode).toBe(404);
+    expect((await call(app, 'POST', result, flagged, { ...late, vacancyId: '777' })).statusCode).toBe(409);
+    expect((await call(app, 'POST', result, flagged, { outcome: 'sent' })).statusCode).toBe(409);
+    expect((await call(app, 'POST', result, flagged, { ...late, outcome: 'questionnaire' })).statusCode).toBe(409);
+    expect((await call(app, 'POST', result, flagged, late)).statusCode).toBe(200);
+    expect((await call(app, 'POST', result, flagged, late)).statusCode).toBe(409);
+
+    expect((await call(app, 'POST', APPLY, flagged, attempt())).json().error.code).toBe('hh_already_applied');
+    // Пауза после проверки hh.ru остаётся: код сбоя не стирается.
+    expect((await call(app, 'POST', APPLY, flagged, attempt({ vacancyId: '777' }))).json().error.code).toBe(
+      'hh_cooldown',
+    );
+    expect(tableRows(databasePath, 'hh_apply_attempts')).toMatchObject([{ outcome: 'sent', failure_code: 'captcha' }]);
+  });
+
+  it('B708: a late response is refused after the deadline and for failures that leave no vacancy window', async () => {
+    const { app, databasePath } = await setup();
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    const failedWith = async (vacancyId: string, failureCode: string) => {
+      const { attemptId } = (await call(app, 'POST', APPLY, flagged, attempt({ vacancyId }))).json().data;
+      await call(app, 'POST', `${APPLY}/${attemptId}/result`, flagged, { outcome: 'failed', failureCode });
+      return () => call(app, 'POST', `${APPLY}/${attemptId}/result`, flagged, { outcome: 'sent', vacancyId });
+    };
+    const noWindow = await failedWith('111', 'no_response_button');
+    expect((await noWindow()).statusCode).toBe(409);
+    const stale = await failedWith('222', 'popup_missing');
+    const database = new DatabaseSync(databasePath);
+    database
+      .prepare('UPDATE hh_apply_attempts SET finished_at = ?')
+      .run(new Date(Date.now() - 16 * 60_000).toISOString());
+    database.close();
+    expect((await stale()).statusCode).toBe(409);
+  });
+
   it('keeps to the daily limit of hh.ru applications', async () => {
     const { app } = await setup();
     await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
@@ -214,5 +288,102 @@ describe('B704: hh.ru vacancy number from its address', () => {
     expect(hhVacancyIdFromUrl('https://hh.ru/employer/1')).toBeNull();
     expect(hhVacancyIdFromUrl('not a url')).toBeNull();
     expect(hhVacancyIdFromUrl(null)).toBeNull();
+  });
+});
+
+describe('B787: согласие по поручению', () => {
+  const CONSENT = { text: 'Согласен на обработку персональных данных', url: 'https://hh.ru/policy' };
+  const JOURNAL = '/api/v1/candidate/apply-consents';
+
+  async function start() {
+    const { app, databasePath } = await setup();
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    const { attemptId, consent } = (await call(app, 'POST', APPLY, flagged, attempt())).json().data;
+    expect(consent).toBe(true);
+    const finish = (result: Record<string, unknown>) =>
+      call(app, 'POST', `${APPLY}/${attemptId}/result`, flagged, result);
+    const entries = async () => (await call(app, 'GET', JOURNAL, flagged)).json().data.entries;
+    return { app, databasePath, finish, entries };
+  }
+
+  it('галочка пишется в запечатанный журнал с действующим поручением', async () => {
+    const { finish, entries, databasePath } = await start();
+    const sent = { outcome: 'sent', consents: [CONSENT], employer: 'Ромашка', applicationId: 'foreign' };
+    expect((await finish(sent)).statusCode).toBe(200);
+    expect((await finish(sent)).statusCode).toBe(409);
+    expect(await entries()).toMatchObject([
+      {
+        host: 'hh.ru',
+        employer: 'Ромашка',
+        applicationId: null,
+        checkboxText: CONSENT.text,
+        policyUrl: CONSENT.url,
+        mandateVersion: APPLY_MANDATE_VERSION,
+        results: [{ result: 'sent' }],
+      },
+    ]);
+    expect(JSON.stringify(tableRows(databasePath, 'apply_consent_journal'))).not.toContain(CONSENT.text);
+  });
+
+  it('неподтверждённая отправка записана, поздний отклик дописывает результат', async () => {
+    const { finish, entries } = await start();
+    await finish({ outcome: 'failed', failureCode: 'no_confirmation', consents: [CONSENT] });
+    expect((await entries())[0].results).toMatchObject([{ result: 'unconfirmed' }]);
+    expect((await finish({ outcome: 'sent', vacancyId: '123456' })).statusCode).toBe(200);
+    expect((await entries())[0].results).toMatchObject([{ result: 'unconfirmed' }, { result: 'sent' }]);
+  });
+
+  it.each(['http://hh.ru/policy', 'javascript:alert(1)'])('ссылка на политику только https: %s', async (url) => {
+    const { finish, entries } = await start();
+    expect((await finish({ outcome: 'sent', consents: [{ ...CONSENT, url }] })).statusCode).toBe(400);
+    expect(await entries()).toEqual([]);
+  });
+
+  it('отклик не ушёл — согласие не записано; already_applied закрывает повтор', async () => {
+    const { app, finish, entries } = await start();
+    await finish({ outcome: 'failed', failureCode: 'already_applied', consents: [CONSENT] });
+    expect(await entries()).toEqual([]);
+    const again = await call(app, 'POST', APPLY, flagged, attempt());
+    expect(again.json().error.code).toBe('hh_already_applied');
+  });
+});
+
+describe('B787: копия резюме hh.ru под вакансию', () => {
+  const COPY = { sourceId: 'abc123', knownIds: ['abc123'], copyId: 'copy1', stage: 'hidden' };
+  const put = (app: App, copy: unknown) => call(app, 'PUT', `${RESUMES}/copy`, flagged, { vacancyId: 'v-1', copy });
+
+  it('хранится за вакансией, переживает новое чтение резюме и снимается', async () => {
+    const { app } = await setup();
+    expect((await put(app, COPY)).statusCode).toBe(409);
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    expect((await put(app, COPY)).json().data.copy).toEqual(COPY);
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    const read = async (query: string) => (await call(app, 'GET', `${RESUMES}${query}`, flagged)).json().data;
+    expect((await read('?vacancyId=v-1')).copy).toEqual(COPY);
+    expect((await read('?vacancyId=v-2')).copy).toBeUndefined();
+    expect((await read('')).copies).toBeUndefined();
+    expect((await put(app, null)).json().data.copy).toBeUndefined();
+  });
+
+  it.each([
+    { ...COPY, copyId: 'abc123' },
+    { ...COPY, copyId: undefined },
+    { ...COPY, knownIds: ['zzz'] },
+    { ...COPY, stage: 'x' },
+  ])('не принимает чужое или неполное: %j', async (copy) => {
+    const { app } = await setup();
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    expect((await put(app, copy)).statusCode).toBe(400);
+  });
+
+  it('незаполненной копией отклик не начинается', async () => {
+    const { app } = await setup();
+    const resumes = [...SNAPSHOT.resumes, { id: 'copy1', title: 'Копия' }];
+    await call(app, 'PUT', RESUMES, flagged, { ...SNAPSHOT, resumes });
+    await put(app, COPY);
+    const refused = await call(app, 'POST', APPLY, flagged, attempt({ resumeId: 'copy1' }));
+    expect([refused.statusCode, refused.json().error.code]).toEqual([409, 'hh_copy_not_ready']);
+    await put(app, { ...COPY, stage: 'ready' });
+    expect((await call(app, 'POST', APPLY, flagged, attempt({ resumeId: 'copy1' }))).json().error?.code).not.toBe('hh_copy_not_ready');
   });
 });

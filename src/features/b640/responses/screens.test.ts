@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { CandidateCompanyOpportunity } from '../../../../shared/candidateCompany';
 import { validateAutomationDraft, type AutomationDraft } from './AutomationSheet';
-import { companyWantFace } from './CompanyWantsScreen';
+import { companyDraftId, companyWantFace, pendingRefreshDelay } from './CompanyWantsScreen';
+import { buildNodePath } from '../routes';
+import { companyNodePath } from '../vacancies/companyPath';
 import { meterStep } from './ReviewScreen';
 import { marksFor } from './useResponseActions';
 
@@ -27,6 +29,7 @@ function company(overrides: Partial<CandidateCompanyOpportunity>): CandidateComp
 }
 
 const DRAFT: AutomationDraft = {
+  consent: false,
   roles: ['Руководитель разработки'],
   platforms: ['hh', 'linkedin'],
   dayLimit: '30',
@@ -34,11 +37,71 @@ const DRAFT: AutomationDraft = {
   pauseUntil: '',
 };
 
+const CARD = companyNodePath('Гринкод');
+
 describe('B656: «Хочу в компанию»', () => {
   it('новые вакансии важнее стадии', () => {
-    const face = companyWantFace(company({ hasNewVacancies: true, vacancyCount: 2, contactsCount: 1, wantStage: 'waiting' }));
+    const face = companyWantFace(
+      company({ hasNewVacancies: true, vacancyCount: 2, contactsCount: 1, wantStage: 'waiting' }),
+    );
     expect(face.tag).toEqual({ tone: 'ok', label: 'новые вакансии' });
     expect(face.brief).toBe('2 вакансии · 1 знакомый');
+  });
+
+  it('у каждой компании следующий шаг ведёт в карточку этой компании (B801 О5)', () => {
+    expect(
+      companyWantFace(company({ wantStage: 'waiting', contactsCount: 1, nextStep: { text: 'написать Igor Siusiukov', dueAt: null } })),
+    ).toMatchObject({ actionLabel: 'Написать Igor Siusiukov', actionPath: CARD });
+    expect(companyWantFace(company({ hasNewVacancies: true, vacancyCount: 2 }))).toMatchObject({
+      actionLabel: 'Смотреть вакансии',
+      actionPath: CARD,
+    });
+    expect(companyWantFace(company({ wantStage: 'want' }))).toMatchObject({
+      actionLabel: 'Найти путь',
+      actionPath: CARD,
+    });
+  });
+
+  it('вакансии есть, но не новые — всё равно список вакансий этой компании (B801 О6)', () => {
+    expect(companyWantFace(company({ vacancyCount: 1 }))).toMatchObject({
+      actionLabel: 'Смотреть вакансии',
+      actionPath: CARD,
+    });
+  });
+
+  it('черновик письма по компании — «Проверить письмо» этого отклика (B801 О6)', () => {
+    const draft = (overrides: object) =>
+      ({
+        id: 'a1',
+        stage: 'saved',
+        clusterId: 'c1',
+        materials: { coverLetter: false, resume: false },
+        vacancy: { title: 'CTO', company: 'Гринкод', url: '', source: '' },
+        ...overrides,
+      }) as never;
+    const none = new Set<string>();
+    expect(companyDraftId(company({}), [draft({})], none)).toBe('a1');
+    expect(companyDraftId(company({ name: 'Другая' }), [draft({})], none)).toBeNull();
+    expect(companyDraftId(company({}), [draft({ stage: 'applied' })], none)).toBeNull();
+    expect(companyDraftId(company({}), [draft({})], new Set(['a1']))).toBeNull();
+    const approved = draft({ materials: { coverLetter: true, resume: false } });
+    expect(companyDraftId(company({}), [approved], none)).toBeNull();
+    expect(companyWantFace(company({ hasNewVacancies: true }), false, 'a1')).toMatchObject({
+      actionLabel: 'Проверить письмо',
+      actionPath: buildNodePath('o02', { responseId: 'a1' }),
+    });
+  });
+
+  it('пока подборка догружается, «нет вакансий» не пишется (B645)', () => {
+    expect(companyWantFace(company({ contactsCount: 1 }), true).brief).toBe('1 знакомый');
+    expect(companyWantFace(company({}), true).brief).toBe('');
+  });
+
+  it('счётчики перезапрашиваются с нарастающей паузой и не дольше минуты (B645)', () => {
+    const delays = [0, 1, 2, 3, 4, 5].map(pendingRefreshDelay);
+    expect(delays.slice(0, 5)).toEqual([2_000, 4_000, 8_000, 16_000, 30_000]);
+    expect(delays[5]).toBeNull();
+    expect(delays.slice(0, 5).reduce<number>((sum, ms) => sum + (ms ?? 0), 0)).toBeLessThanOrEqual(60_000);
   });
 
   it('без списка знакомых число знакомых не выдумывается', () => {
@@ -54,10 +117,22 @@ describe('B656: «Хочу в компанию»', () => {
 
 describe('B656: отметка ответа', () => {
   it('предлагает только стадии после текущей', () => {
-    expect(marksFor('applied').map((mark) => mark.stage)).toEqual(['responded', 'interview', 'offer', 'rejected', 'archived']);
-    expect(marksFor('interview').map((mark) => mark.stage)).toEqual(['offer', 'rejected', 'archived']);
+    expect(marksFor('applied').map((mark) => mark.stage)).toEqual([
+      'responded',
+      'interview',
+      'offer',
+      'rejected',
+      'archived',
+    ]);
+    expect(marksFor('interview').map((mark) => mark.stage)).toEqual([
+      'offer',
+      'rejected',
+      'archived',
+    ]);
     expect(marksFor('saved').map((mark) => mark.stage)).toEqual(['archived']);
-    expect(marksFor('rejected')).toEqual([]);
+    // B645: отказ убирается в архив из раскрытого отклика.
+    expect(marksFor('rejected').map((mark) => mark.stage)).toEqual(['archived']);
+    expect(marksFor('archived')).toEqual([]);
   });
 });
 
@@ -73,6 +148,8 @@ describe('B656: настройки автооткликов', () => {
     expect(validateAutomationDraft({ ...DRAFT, dayLimit: '51' }, true)).toMatch(/Лимит/u);
     expect(validateAutomationDraft({ ...DRAFT, dayLimit: '1' }, true)).toMatch(/Лимит/u);
     expect(validateAutomationDraft({ ...DRAFT, pauseUntil: '2000-01-01' }, true)).toMatch(/паузы/u);
+    expect(validateAutomationDraft(DRAFT, true, true)).toMatch(/согласие/u);
+    expect(validateAutomationDraft({ ...DRAFT, consent: true }, true, true)).toBeNull();
   });
 });
 

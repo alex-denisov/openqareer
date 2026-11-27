@@ -35,6 +35,7 @@
     .b640 .vt-sheet-head { display: flex; align-items: center; justify-content: space-between; min-block-size: var(--career-sheet-bar-height); padding-inline: var(--career-space-4) var(--career-space-2); }
     .b640 .vt-sheet-head h2 { font-size: var(--career-text-md); font-weight: 600; }
     .b640 .vt-sheet-body { overflow-y: auto; padding-inline: var(--career-space-4); }
+    .b640 .vt-sheet .vt-pop-list { display: contents; }
     .b640 .vt-sec > summary { display: flex; align-items: center; justify-content: space-between; min-block-size: var(--career-target-min); list-style: none; cursor: pointer; font-size: var(--career-text-sm); font-weight: 600; border-block-end: var(--career-border-width) solid var(--career-line); }
     .b640 .vt-sec > summary::-webkit-details-marker { display: none; }
     .b640 .vt-sec > summary:focus-visible { outline: 2px solid var(--career-accent); outline-offset: var(--career-focus-offset); }
@@ -226,6 +227,7 @@
   .b640 .pf .lead { padding: var(--career-space-6); }
   .b640 .pf .lead-title { font-size: var(--career-text-xl); }
   .b640 .pf-sub { font-size: var(--career-text-sm); font-weight: 600; color: var(--career-text-soft); }
+  .b640 .pf-state { margin-block: var(--career-space-2); }
   .b640 .pf-prog { appearance: none; display: block; inline-size: 100%; block-size: var(--career-space-2); border: 0; border-radius: var(--career-radius-pill); background: var(--career-line); overflow: hidden; }
   .b640 .pf-prog::-webkit-progress-bar { background: var(--career-line); }
   .b640 .pf-prog::-webkit-progress-value { background: var(--career-accent); border-radius: var(--career-radius-pill); }
@@ -278,6 +280,12 @@
   .b640 .pf-f select,
   .b640 .pf-f textarea { inline-size: 100%; min-inline-size: 0; min-block-size: var(--career-target-min); padding-inline: var(--career-space-3); border-radius: var(--career-radius-ctl); border: var(--career-border-width) solid color-mix(in srgb, var(--career-text-dim) 70%, var(--career-bg-elevated)); background: var(--career-bg); color: var(--career-text); font: inherit; font-size: var(--career-text-sm); }
   .b640 .pf-f textarea { min-block-size: calc(var(--career-space-12) * 2); padding-block: var(--career-space-3); resize: vertical; }
+  .b640 .pf-res { border: 0; margin: 0; padding: 0; }
+  .b640 .pf-res-list { display: grid; gap: var(--career-space-2); margin: 0; padding: 0; list-style: none; }
+  .b640 .pf-res-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--career-space-2); }
+  .b640 .pf-res-row .icon-btn { inline-size: var(--career-target-min); block-size: var(--career-target-min); }
+  .b640 .pf-res-add { justify-self: start; }
+  .b640 .pf-form .pf-f textarea { min-block-size: 0; }
   .b640 .pf-f input:focus-visible,
   .b640 .pf-f select:focus-visible,
   .b640 .pf-f textarea:focus-visible { outline: 2px solid var(--career-accent); outline-offset: var(--career-focus-offset); }
@@ -574,6 +582,9 @@
   .b640 .lead .actions .btn { max-inline-size: 100%; white-space: normal; }
   .b640 .crumbs { max-inline-size: var(--career-page-max); margin-inline: auto; padding: var(--career-space-4) var(--career-space-10) 0;
     font-size: var(--career-text-xs); color: var(--career-text-dim); }
+  .b640 .kept-slot,
+  .b640 .kept { display: contents; }
+  .b640 .crumbs + :where(.kept-slot) > :where(.kept) > .page,
   .b640 .crumbs + .page { padding-block-start: var(--career-space-2); }
   .b640 .crumbs ol { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--career-space-1); margin: 0; padding: 0; list-style: none; }
   .b640 .crumbs li { display: inline-flex; align-items: center; gap: var(--career-space-1); }
@@ -692,6 +703,9 @@
   .b640 .ec-diff .was dd { color: var(--career-text-soft); text-decoration: line-through; text-decoration-color: var(--career-text-dim); }
   .b640 .ec-was > summary { display: inline-flex; align-items: center; min-block-size: var(--career-target-min); color: var(--career-text-soft); font-size: var(--career-text-xs); font-weight: 600; cursor: pointer; }
   .b640 .ec-was > p { margin: 0; color: var(--career-text-soft); font-size: var(--career-text-sm); text-decoration: line-through; text-decoration-color: var(--career-text-dim); }
+  /* B786, k06: «Было» блоком на 1440, свёрнутым «Показать, что было» на 390. */
+  .b640 .ec .ec-was { display: none; }
+  @media (max-width: 767px) { .b640 .ec .ec-diff .was { display: none; } .b640 .ec .ec-was { display: block; } }
   .b640 .ec-diff .now { background: var(--career-accent-soft); }
   .b640 .ec-why { display: flex; gap: var(--career-space-2); margin: 0; color: var(--career-text-soft); font-size: var(--career-text-xs); }
   .b640 .ec-why .ico { flex: none; color: var(--career-text-dim); transform: translateY(2px); }

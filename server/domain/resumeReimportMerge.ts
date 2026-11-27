@@ -28,13 +28,14 @@ export interface RevisionProvenance {
 
 export type ImportPlatform = ResumeProfileUpdateInput['platform'];
 
-/** B639: the candidate's answer about a masked employer survives a re-import of the same place. */
-function employerNameAnswer(entry: ResumeExperienceInput): Partial<ResumeExperienceInput> {
-  const { employerRealName, employerNameMemoryId, employerMaskKept } = entry;
+/** B639, B801: the candidate's answers about a place survive a re-import of it. */
+function placeAnswers(entry: ResumeExperienceInput): Partial<ResumeExperienceInput> {
+  const { employerRealName, employerNameMemoryId, employerMaskKept, teamSizeDeclined } = entry;
   return {
     ...(employerRealName ? { employerRealName } : {}),
     ...(employerNameMemoryId ? { employerNameMemoryId } : {}),
     ...(employerMaskKept ? { employerMaskKept } : {}),
+    ...(teamSizeDeclined ? { teamSizeDeclined } : {}),
   };
 }
 
@@ -94,7 +95,7 @@ function mergeExperience(
     const match = findMatch(role);
     if (!match) return role;
     used.add(match.id);
-    if (!edits.experienceIds.has(match.id)) return { ...role, ...employerNameAnswer(match), id: match.id };
+    if (!edits.experienceIds.has(match.id)) return { ...role, ...placeAnswers(match), id: match.id };
     if (role.title && norm(role.title) !== norm(match.title)) {
       proposals.push({ platform, section: 'experience', entryId: match.id, field: 'title', proposedText: role.title });
     }
@@ -198,6 +199,7 @@ export function mergeReimportedDraft(
     ...(existing.factRewrites ? { factRewrites: existing.factRewrites } : {}),
     ...(existing.declinedFactIds ? { declinedFactIds: existing.declinedFactIds } : {}),
     ...(existing.factRewriteProposal ? { factRewriteProposal: existing.factRewriteProposal } : {}),
+    ...(existing.factRewordProposal ? { factRewordProposal: existing.factRewordProposal } : {}),
   };
   const profileUpdates = survivingProposals(
     existing.sourceSuggestions?.profileUpdates ?? [],
