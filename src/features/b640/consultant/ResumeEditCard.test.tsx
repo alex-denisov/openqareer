@@ -211,6 +211,42 @@ describe('o07 → k06: правка резюме у консультанта', (
     expect(root.querySelector('.ec')).toBeNull();
   });
 
+  it('B786: строка места уже переписана — «Применено» и «Отменить», новой правки не просит', async () => {
+    api.getResumeStudio.mockResolvedValue({
+      draft: {
+        experience: [{ id: 'e1', employer: 'Сфера Платежи', bulletMemoryIds: ['new-1', 'x'] }],
+        factRewrites: [
+          {
+            id: 'rw1',
+            appliedAt: '2026-11-26T20:15:00Z',
+            bullets: [{ memoryId: 'new-1', experienceId: 'e1', sourceFactIds: [], replacedMemoryId: 'line' }],
+            declinedFactIds: [],
+          },
+        ],
+      },
+    });
+    const root = await open('m1', { kind: 'reword', experienceId: 'e1' });
+    expect(api.requestFactReword).not.toHaveBeenCalled();
+    expect(root.textContent).toContain('Применено');
+    await press(root, 'Отменить');
+    expect(api.revertFactRewrite).toHaveBeenCalledWith('rw1');
+  });
+
+  it('B786: реплика к новой формулировке строки — только место, без перечня записей', () => {
+    const edit = {
+      proposalId: 'r1',
+      key: 'e1#0',
+      place: 'Сфера Платежи',
+      text: NOW,
+      sourceFactIds: ['line', 'm1'],
+      replaces: 'line',
+    };
+    const memory = [
+      { id: 'm1', statement: 'Место работы. Должность: VP', sourceMessageIds: [], status: 'confirmed' },
+    ] as unknown as CandidateMemory[];
+    expect(editReply(edit, memory, [])).toBe('Новая формулировка первой строки: «Сфера Платежи».');
+  });
+
   it('правка не подготовилась — понятная строка, «Попробовать ещё раз» спрашивает снова', async () => {
     api.requestFactRewrite.mockRejectedValueOnce(new Error('503'));
     const root = await open();
