@@ -1,8 +1,9 @@
+import { isPublicHost } from '../connectors/publicHost';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import { buildJsonVacancy, fromIso, fromLooseDate } from './jsonVacancyRecord';
 import { parseDouCompanyVacanciesHtml } from './douVacanciesAdapter';
 import { withRequestTimeout } from './requestTimeout';
-import { fetchWithStealthFallback } from './jobspyAdapters';
+import { fetchWithStealthFallback, isCloudflareChallenge } from './jobspyAdapters';
 import {
   IGNORE_TITLE_REGEX,
   cleanDescription,
@@ -253,11 +254,14 @@ async function fetchWorkdayAts(
   source: VacancySourceConfig,
   observedAt: string,
 ): Promise<UnifiedVacancy[]> {
-  const wdRes = await fetch(ats.endpointUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ appliedFacets: {}, limit: 20, offset: 0, searchText: '' }),
-  });
+  const wdRes = await withRequestTimeout(CORPORATE_FETCH_TIMEOUT_MS, (signal) =>
+    fetch(ats.endpointUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appliedFacets: {}, limit: 20, offset: 0, searchText: '' }),
+      signal,
+    }),
+  );
   if (!wdRes.ok) return [];
   const json = await wdRes.json();
   const postings = json.jobPostings || [];
@@ -294,7 +298,9 @@ async function fetchGreenhouseAts(
   observedAt: string,
 ): Promise<UnifiedVacancy[]> {
   const ghUrl = ats.endpointUrl.includes('?') ? ats.endpointUrl : `${ats.endpointUrl}?content=true`;
-  const ghRes = await fetch(ghUrl);
+  const ghRes = await withRequestTimeout(CORPORATE_FETCH_TIMEOUT_MS, (signal) =>
+    fetch(ghUrl, { signal }),
+  );
   if (!ghRes.ok) return [];
   const json = await ghRes.json();
   const jobs = json.jobs || [];
@@ -330,7 +336,9 @@ async function fetchAshbyAts(
   source: VacancySourceConfig,
   observedAt: string,
 ): Promise<UnifiedVacancy[]> {
-  const ashbyRes = await fetch(ats.endpointUrl);
+  const ashbyRes = await withRequestTimeout(CORPORATE_FETCH_TIMEOUT_MS, (signal) =>
+    fetch(ats.endpointUrl, { signal }),
+  );
   if (!ashbyRes.ok) return [];
   const json = await ashbyRes.json();
   const jobs = json.jobs || [];
@@ -364,7 +372,9 @@ async function fetchLeverAts(
   source: VacancySourceConfig,
   observedAt: string,
 ): Promise<UnifiedVacancy[]> {
-  const leverRes = await fetch(ats.endpointUrl);
+  const leverRes = await withRequestTimeout(CORPORATE_FETCH_TIMEOUT_MS, (signal) =>
+    fetch(ats.endpointUrl, { signal }),
+  );
   if (!leverRes.ok) return [];
   const jobs = await leverRes.json();
   if (!Array.isArray(jobs) || jobs.length === 0) return [];
@@ -411,7 +421,9 @@ async function fetchWorkableAts(
   source: VacancySourceConfig,
   observedAt: string,
 ): Promise<UnifiedVacancy[]> {
-  const workableRes = await fetch(ats.endpointUrl);
+  const workableRes = await withRequestTimeout(CORPORATE_FETCH_TIMEOUT_MS, (signal) =>
+    fetch(ats.endpointUrl, { signal }),
+  );
   if (!workableRes.ok) return [];
   const json = await workableRes.json();
   const jobs = json.jobs || [];
@@ -446,7 +458,9 @@ async function fetchRecruiteeAts(
   source: VacancySourceConfig,
   observedAt: string,
 ): Promise<UnifiedVacancy[]> {
-  const res = await fetch(ats.endpointUrl);
+  const res = await withRequestTimeout(CORPORATE_FETCH_TIMEOUT_MS, (signal) =>
+    fetch(ats.endpointUrl, { signal }),
+  );
   if (!res.ok) return [];
   const json = await res.json();
   const offers = json.offers || [];
@@ -480,8 +494,10 @@ async function fetchRecruiteeAts(
 
 async function fetchSmartRecruitersDetail(orgId: string, extId: string): Promise<string> {
   try {
-    const res = await fetch(
-      `https://api.smartrecruiters.com/v1/companies/${orgId}/postings/${extId}`,
+    const res = await withRequestTimeout(CORPORATE_FETCH_TIMEOUT_MS, (signal) =>
+      fetch(`https://api.smartrecruiters.com/v1/companies/${orgId}/postings/${extId}`, {
+        signal,
+      }),
     );
     if (!res.ok) return '';
     const json = await res.json();
@@ -509,7 +525,9 @@ async function fetchSmartRecruitersAts(
   source: VacancySourceConfig,
   observedAt: string,
 ): Promise<UnifiedVacancy[]> {
-  const srRes = await fetch(ats.endpointUrl);
+  const srRes = await withRequestTimeout(CORPORATE_FETCH_TIMEOUT_MS, (signal) =>
+    fetch(ats.endpointUrl, { signal }),
+  );
   if (!srRes.ok) return [];
   const json = await srRes.json();
   const content = json.content || [];
@@ -574,6 +592,10 @@ async function fetchFromAtsProvider(
     case 'teamtailor':
     case 'personio':
     case 'pinpoint':
+    case 'comeet':
+    case 'phenom':
+    case 'successfactors':
+    case 'workstream':
       return ats.orgId ? fetchEmbeddedAtsBoard(ats.provider, ats.orgId, source, observedAt) : [];
     case 'dou':
       if (html) {
@@ -590,30 +612,68 @@ async function fetchFromAtsProvider(
   }
 }
 
+function corporateUnreachableError(status: number, headers?: Headers): Error {
+  return Object.assign(new Error(`vacancy_source_unreachable: ${status}`), {
+    statusCode: status,
+    ...(headers ? { headers } : {}),
+  });
+}
+
+function assertPublicHttpUrl(targetUrl: string): void {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(targetUrl);
+  } catch {
+    throw new Error('vacancy_source_unreachable: invalid_url');
+  }
+  if ((parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') || !isPublicHost(parsedUrl)) {
+    throw new Error('vacancy_source_unreachable: non_public_host');
+  }
+}
+
 async function fetchCorporateHtml(
   targetUrl: string,
   fetchStealth?: typeof fetchWithStealthFallback,
 ): Promise<string> {
+  assertPublicHttpUrl(targetUrl);
   try {
-    const res = await withRequestTimeout(CORPORATE_FETCH_TIMEOUT_MS, async (signal) => {
-      return fetch(targetUrl, { headers: BROWSER_HEADERS, signal });
-    });
+    const res = await withRequestTimeout(CORPORATE_FETCH_TIMEOUT_MS, (signal) =>
+      fetch(targetUrl, { headers: BROWSER_HEADERS, signal }),
+    );
     if (res.ok) return await res.text();
     if (fetchStealth) {
-      const stealthRes = await fetchStealth(targetUrl, { headers: BROWSER_HEADERS });
-      if (stealthRes.status >= 200 && stealthRes.status < 300) return stealthRes.body;
-    }
-  } catch {
-    if (fetchStealth) {
-      try {
+      const errorBody = await res.text().catch(() => '');
+      if (
+        isCloudflareChallenge(res.status, errorBody) ||
+        res.status === 403 ||
+        res.status === 429 ||
+        res.status === 503
+      ) {
         const stealthRes = await fetchStealth(targetUrl, { headers: BROWSER_HEADERS });
         if (stealthRes.status >= 200 && stealthRes.status < 300) return stealthRes.body;
-      } catch {
-        return '';
+        throw corporateUnreachableError(stealthRes.status);
       }
     }
+    throw corporateUnreachableError(res.status, res.headers);
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      err.message.startsWith('vacancy_source_unreachable:')
+    ) {
+      throw err;
+    }
+    if (fetchStealth) {
+      let stealthRes: Awaited<ReturnType<typeof fetchStealth>> | undefined;
+      try {
+        stealthRes = await fetchStealth(targetUrl, { headers: BROWSER_HEADERS });
+      } catch {
+        throw err;
+      }
+      if (stealthRes.status >= 200 && stealthRes.status < 300) return stealthRes.body;
+      throw corporateUnreachableError(stealthRes.status);
+    }
+    throw err;
   }
-  return '';
 }
 
 function mapRawJobsToUnified(
@@ -657,6 +717,44 @@ export async function fetchGenericCorporateVacancies(
   return [...verdict.kept];
 }
 
+function parseSitemapJobsXml(xml: string, targetUrl: string): ExtractedRawJob[] {
+  if (!/<urlset\b/i.test(xml)) return [];
+  const results: ExtractedRawJob[] = [];
+  for (const match of xml.matchAll(/<url\b[^>]*>([\s\S]*?)<\/url>/gi)) {
+    const block = match[1] ?? '';
+    const loc = /<loc\b[^>]*>([^<]+)<\/loc>/i.exec(block)?.[1]?.trim() ?? '';
+    if (!/^https?:\/\//i.test(loc)) continue;
+    if (!/\/(?:jobs?|careers?|openings?|positions?|vacanc(?:y|ies)|role)\/[^/?#]+/i.test(loc)) continue;
+    const slug = new URL(loc).pathname.split('/').filter(Boolean).pop() ?? '';
+    const title = slug
+      .replace(/[-_]+/g, ' ')
+      .replace(/\b\w/g, (ch) => ch.toUpperCase())
+      .trim();
+    if (title.length < 3 || IGNORE_TITLE_REGEX.test(title)) continue;
+    const lastmod = /<lastmod\b[^>]*>([^<]+)<\/lastmod>/i.exec(block)?.[1]?.trim();
+    results.push({ externalId: slug || loc, title, url: resolveUrl(loc, targetUrl), publishedAt: lastmod });
+  }
+  return results;
+}
+
+async function fetchSitemapJobs(
+  targetUrl: string,
+  source: VacancySourceConfig,
+  observedAt: string,
+): Promise<UnifiedVacancy[]> {
+  try {
+    const origin = new URL(targetUrl).origin;
+    const res = await withRequestTimeout(CORPORATE_FETCH_TIMEOUT_MS, (signal) =>
+      fetch(`${origin}/sitemap.xml`, { headers: BROWSER_HEADERS, signal }),
+    );
+    if (!res.ok) return [];
+    const raw = parseSitemapJobsXml(await res.text(), targetUrl);
+    return raw.length > 0 ? mapRawJobsToUnified(raw, source, observedAt) : [];
+  } catch {
+    return [];
+  }
+}
+
 async function readGenericCorporateVacancies(
   source: VacancySourceConfig,
   fetchStealth?: typeof fetchWithStealthFallback,
@@ -679,10 +777,15 @@ async function readGenericCorporateVacancies(
   if (!html) return [];
 
   const fromHtml = await readVacanciesFromHtml(html, source, observedAt);
-  if (fromHtml.length > 0 || !renderPage || !hasScriptPageSigns(html)) return fromHtml;
-  // B643: список рисует скрипт — один рендер в браузере и тот же каскад по его HTML.
-  const rendered = await renderPage(targetUrl);
-  return rendered ? readVacanciesFromHtml(rendered, source, observedAt) : [];
+  if (fromHtml.length > 0) return fromHtml;
+  if (renderPage && hasScriptPageSigns(html)) {
+    const rendered = await renderPage(targetUrl);
+    if (rendered) {
+      const fromRendered = await readVacanciesFromHtml(rendered, source, observedAt);
+      if (fromRendered.length > 0) return fromRendered;
+    }
+  }
+  return fetchSitemapJobs(targetUrl, source, observedAt);
 }
 
 async function readVacanciesFromHtml(

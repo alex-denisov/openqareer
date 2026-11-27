@@ -11,7 +11,7 @@ import { resolveCompany } from './deterministicResolver';
 import { politeFetch } from './hostLimiter';
 import { publicApiCounter } from '../freehire/freehireRepoCheck';
 import { DirectAtsDiscovery, DIRECT_ATS_FRESH_MS } from './directAtsDiscovery';
-import { orderByVacancies, readPendingPage, vacancyCounts, writeDiscovery, type HostCheck, type PendingCompany } from './siteDiscovery';
+import { readPendingPage, writeDiscovery, type HostCheck, type PendingCompany } from './siteDiscovery';
 
 interface Log {
   info(details: Record<string, unknown>, message: string): void;
@@ -40,9 +40,40 @@ export interface TickResult {
  * of PAGE rows with the event loop free between pages; the list is reread when
  * empty or older than QUEUE_TTL_MS.
  */
+const MAX_QUEUE_BUFFER = 500;
+const DEMAND_PREFETCH_LIMIT = 100;
+
+function loadDemandPriorityRows(
+  database: DatabaseSync,
+  demandSince: number | undefined,
+): PendingCompany[] {
+  const hasVc = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'vacancy_company'")
+    .get();
+  if (!hasVc) return [];
+  const rows = database
+    .prepare(
+      `SELECT d.company_key AS companyKey, d.company_name AS companyName,
+              d.website_url AS websiteUrl, d.linkedin_url AS linkedinUrl,
+              json_extract(d.evidence, '$.careersUrlDropped.value') AS droppedCareersUrl,
+              CASE WHEN d.evidence IS NOT NULL AND instr(d.evidence, 'B643-9') > 0 THEN 1 ELSE 0 END AS siteSearched
+         FROM (SELECT company_key, count(*) AS cnt FROM vacancy_company GROUP BY company_key ORDER BY cnt DESC LIMIT ?) v
+         JOIN company_directory d ON d.company_key = v.company_key
+        WHERE d.status = 'active' AND d.ats_provider IS NULL
+          AND NOT EXISTS (SELECT 1 FROM company_placement p WHERE p.company_key = d.company_key AND p.type = 'ats')
+        ORDER BY v.cnt DESC`,
+    )
+    .all(DEMAND_PREFETCH_LIMIT) as unknown as Array<
+    Omit<PendingCompany, 'siteSearched'> & { siteSearched: number }
+  >;
+  void demandSince;
+  return rows.map(({ siteSearched, ...rest }) => ({ ...rest, ...(siteSearched ? { siteSearched: true } : {}) }));
+}
+
 export class PendingQueue {
   private items: PendingCompany[] = [];
   private readAt = -Infinity;
+  private cursor = '';
 
   constructor(
     private readonly database: DatabaseSync,
@@ -51,32 +82,35 @@ export class PendingQueue {
   ) {}
 
   async next(count: number): Promise<readonly PendingCompany[]> {
-    if (this.items.length === 0 || this.now() - this.readAt > QUEUE_TTL_MS) await this.refresh();
+    if (this.items.length === 0 || this.now() - this.readAt > QUEUE_TTL_MS) await this.refresh(count);
     return this.items.splice(0, count);
   }
 
-  private async refresh(): Promise<void> {
-    const all: PendingCompany[] = [];
-    let after = '';
-    for (;;) {
-      const page = readPendingPage(this.database, after, PAGE, this.direct ? this.now() - DIRECT_ATS_FRESH_MS : undefined);
-      all.push(...page);
-      if (page.length < PAGE) break;
-      after = page.at(-1)!.companyKey;
+  private async refresh(requestedCount: number): Promise<void> {
+    const demandSince = this.direct ? this.now() - DIRECT_ATS_FRESH_MS : undefined;
+    const buffered = loadDemandPriorityRows(this.database, demandSince);
+    const seen = new Set(buffered.map((c) => c.companyKey));
+    const cap = Math.max(requestedCount, MAX_QUEUE_BUFFER);
+
+    while (buffered.length < cap) {
+      const chunkCap = Math.min(PAGE, cap - buffered.length);
+      const page = readPendingPage(this.database, this.cursor, chunkCap, demandSince);
+      for (const c of page) {
+        if (!seen.has(c.companyKey)) {
+          seen.add(c.companyKey);
+          buffered.push(c);
+        }
+      }
+      this.cursor = page.length === chunkCap ? page.at(-1)!.companyKey : '';
+      if (this.cursor === '') break;
       await new Promise((resolve) => setImmediate(resolve));
     }
-    const ordered = orderByVacancies(all, vacancyCounts(this.database));
-    if (this.direct) {
-      const priority: PendingCompany[] = [];
-      const fallback: PendingCompany[] = [];
-      for (const company of ordered) {
-        if (this.direct.prioritized(company)) priority.push(company);
-        else if (!company.siteSearched) fallback.push(company);
-      }
-      this.items = [...priority, ...fallback];
-    } else {
-      this.items = ordered;
-    }
+    this.items = this.direct
+      ? [
+          ...buffered.filter((c) => this.direct!.prioritized(c)),
+          ...buffered.filter((c) => !this.direct!.prioritized(c) && !c.siteSearched),
+        ]
+      : buffered;
     this.readAt = this.now();
   }
 }
@@ -118,6 +152,7 @@ export async function runSiteDiscoveryTick(
         {
           companyKey: found.companyKey,
           evidence: found.evidence,
+          ...(found.websiteUrl ? { websiteUrl: found.websiteUrl } : {}),
           ...(found.evidence.careersUrl ? { careersUrl: found.careersUrl } : {}),
           ...(found.hhEmployerIds && found.hhEmployerIds.length > 0 ? { hhEmployerIds: found.hhEmployerIds } : {}),
         },

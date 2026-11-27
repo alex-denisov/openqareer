@@ -801,8 +801,8 @@ describe('Glassdoor & Bayt registry & wiring integration', () => {
     expect(bayt).toBeDefined();
     expect(bayt?.type).toBe('career_site');
     expect(bayt?.accessClass).toBe('open_web');
-    expect(bayt?.addressStatus).toBe('robots_forbidden');
-    expect(bayt?.enabled).toBe(false); // 05.11
+    expect(bayt?.addressStatus).toBe('live');
+    expect(bayt?.enabled).toBe(true);
   });
 
   it('wires adapters into hasJsonAdapter and normalizeJsonSource', () => {

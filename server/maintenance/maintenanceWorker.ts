@@ -2,11 +2,13 @@ import type { RoleLinkStep } from '../vacancies/titleParse/roleLinkStep';
 import type { PlacementBackfillTicker } from '../companyDirectory/placement/placementBackfill';
 import type { CareersPruneTicker } from '../companyDirectory/siteDiscovery/careersPrune';
 import type { AggregatorCompanyTicker } from '../companyDirectory/placement/aggregatorBackfill';
+import type { FreehireCandidatesPromoteTicker } from '../companyDirectory/freehire/freehireCandidatesPromote';
 import { CATALOG_TOTALS_REFRESH_MS } from '../vacancies/matchedCatalogSummary';
 import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 import { mapWithConcurrency } from '../vacancies/boundedConcurrency';
 import type { LinkCheckCensus } from '../vacancies/linkLivenessProbe';
 import { MemoryGuard, readProcessHeap, type HeapReading } from '../vacancies/memoryGuard';
+import { collectDiskTelemetry } from '../vacancies/diskCapacity';
 import type { LinkedinPoolExecutorReport } from '../linkedinPool/companyPageExecutor';
 import type { WorkdayDescriptionReport } from '../vacancies/workdayDescriptions';
 import type { HhCatalogTextReport } from '../vacancies/hhCatalogText';
@@ -27,6 +29,7 @@ export interface MaintenanceLog {
 /** Ровно то, что обслуживатель просит у движка — остальное ему не нужно. */
 export interface MaintenanceEngine {
   getSources(): VacancySourceConfig[];
+  replanCompany?(companyKey: string): boolean;
   restoreAsync(
     nowMs?: number,
     chunkSize?: number,
@@ -216,11 +219,14 @@ export class MaintenanceWorker {
   private readonly placements?: PlacementBackfillTicker;
   private readonly aggregatorCompanies?: AggregatorCompanyTicker;
   private readonly careersPrune?: CareersPruneTicker;
+  private readonly freehirePromote?: FreehireCandidatesPromoteTicker;
   private readonly linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
   /** B626: последний статус пропуска — пишем в журнал только смену причины. */
   private linkedinPoolSkipStatus: string | undefined;
   private readonly purgeRecruiters?: () => number;
+  private readonly databasePath?: string;
   private readonly now: () => number;
+  private diskLowLogged = false;
   private orphanRestUntil = 0;
   /** Время последнего расчёта итогов; `undefined`, пока не прочитано из базы. */
   private catalogTotalsAt: number | undefined;
@@ -251,8 +257,10 @@ export class MaintenanceWorker {
     placements?: PlacementBackfillTicker;
     aggregatorCompanies?: AggregatorCompanyTicker;
     careersPrune?: CareersPruneTicker;
+    freehirePromote?: FreehireCandidatesPromoteTicker;
     linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
     purgeRecruiters?: () => number;
+    databasePath?: string;
     now?: () => number;
   }) {
     this.now = options.now ?? Date.now;
@@ -263,8 +271,10 @@ export class MaintenanceWorker {
     this.placements = options.placements;
     this.aggregatorCompanies = options.aggregatorCompanies;
     this.careersPrune = options.careersPrune;
+    this.freehirePromote = options.freehirePromote;
     this.linkedinPoolExecutor = options.linkedinPoolExecutor;
     this.purgeRecruiters = options.purgeRecruiters;
+    this.databasePath = options.databasePath;
     this.log = options.log;
     this.intervals = { ...DEFAULT_MAINTENANCE_INTERVALS, ...options.intervals };
     this.readHeap = options.readHeap ?? readProcessHeap;
@@ -653,7 +663,7 @@ export class MaintenanceWorker {
 
   /** B643-3: порции размещений в бюджете такта; итог прохода — в журнал. */
   runPlacementStep(): void {
-    if (this.stopped || (!this.placements && !this.careersPrune)) return;
+    if (this.stopped || (!this.placements && !this.careersPrune && !this.freehirePromote)) return;
     try {
       const report = this.placements?.tick();
       if (report) this.log.info({ ...report }, 'company-placement-pass');
@@ -662,7 +672,17 @@ export class MaintenanceWorker {
       if (aggregator) this.log.info({ ...aggregator }, 'aggregator-company-pass');
       // B643: wrong or closed careers pages leave the directory, same tick budget.
       const pruned = this.careersPrune?.tick();
-      if (pruned) this.log.info({ ...pruned }, 'careers-prune-pass');
+      if (pruned) {
+        if (pruned.droppedCompanies?.length && this.engine.replanCompany) {
+          for (const dropped of pruned.droppedCompanies) {
+            this.engine.replanCompany(dropped.companyKey);
+          }
+        }
+        this.log.info({ ...pruned }, 'careers-prune-pass');
+      }
+      // Phase 2 F7: перенос кандидатов freehire_company_source_candidates -> company_directory порциями.
+      const promoted = this.freehirePromote?.tick();
+      if (promoted) this.log.info({ ...promoted }, 'freehire-candidates-promote-pass');
     } catch (error: unknown) {
       this.log.error(
         { errorName: errorName(error), errorMessage: errorMessage(error) },
@@ -727,6 +747,8 @@ export class MaintenanceWorker {
     }
     const heap = this.readHeap();
     const rss = process.memoryUsage().rss;
+    const disk = collectDiskTelemetry(this.databasePath, this.log, this.diskLowLogged);
+    this.diskLowLogged = disk.diskLow;
     this.log.info(
       {
         heapUsedMb: Math.round(heap.heapUsedBytes / (1024 * 1024)),
@@ -734,6 +756,7 @@ export class MaintenanceWorker {
         rssMb: Math.round(rss / (1024 * 1024)),
         poolSize,
         ingestPaused: this.memoryGuard.isPaused,
+        ...disk.fields,
       },
       'maintenance-memory',
     );
@@ -795,7 +818,7 @@ export class MaintenanceWorker {
     every(ROLE_LINK_INTERVAL_MS, () =>
       this.track(this.runRoleLinkStep(), 'role-link-step-failed', undefined),
     );
-    if (this.placements || this.careersPrune)
+    if (this.placements || this.careersPrune || this.freehirePromote)
       every(PLACEMENT_INTERVAL_MS, () => this.runPlacementStep());
     if (this.linkedinPoolExecutor) {
       every(this.intervals.linkedinPoolExecutorMs, () => this.runLinkedinPoolExecutorStep());

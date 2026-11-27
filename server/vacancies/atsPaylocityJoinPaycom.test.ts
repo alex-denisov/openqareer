@@ -8,7 +8,7 @@ import {
   normalizeAtsBoard,
   parseAtsBoardSourceId,
 } from './atsBoardAdapters';
-import { extractPaylocityJobs } from './atsListingReaders';
+import { extractPaylocityJobs, readJoin } from './atsListingReaders';
 import { fetchPaycomBoard } from './paycomBoardFetch';
 import { pagingPlanFor } from './pagedJsonSources';
 import { sourceKind } from './poolLiveness';
@@ -63,10 +63,9 @@ describe('B646-5 контракты Paylocity, Join, Paycom', () => {
     });
   });
 
-  it('Paycom запрещает в robots.txt поиск вакансий — контракт честно запрещён', () => {
+  it('Paycom разрешён к сбору (запрет robots снят директивой владельца)', () => {
     const paycom = ATS_PROVIDERS.find((p) => p.provider === 'paycom');
-    expect(paycom?.crawlPermission).toBe('robots_forbidden');
-    expect(paycom?.robotsNote).toContain('job-posting-previews');
+    expect(paycom?.crawlPermission).toBe('allowed');
     expect(atsBoardContract('paylocity').crawlPermission).toBe('allowed');
     expect(atsBoardContract('join').crawlPermission).toBe('allowed');
   });
@@ -371,5 +370,48 @@ describe('B646-5 сборщик: доски через multiSourceFetcher', () =
     );
     expect(reading).toMatchObject({ partial: true });
     expect('vacancies' in reading && reading.vacancies).toHaveLength(50);
+  });
+
+  it('Join: readJoin falls back to job.url/slug/id, company.name, job.location and remoteType', () => {
+    const items = readJoin(
+      {
+        items: [
+          {
+            id: 901,
+            slug: 'senior-ts-engineer',
+            title: 'Senior TS Engineer',
+            company: { name: 'Acme GmbH' },
+            location: 'Berlin, Germany',
+            remoteType: 'ANYWHERE',
+            createdAt: '2026-11-20T10:00:00Z',
+          },
+          {
+            id: 902,
+            title: 'Staff Go Engineer',
+            companyName: 'Beta AG',
+            url: 'https://careers.beta.de/jobs/902',
+            workplaceType: 'HYBRID',
+            city: { cityName: 'Munich', countryName: 'Germany' },
+            createdAt: '2026-11-21T10:00:00Z',
+          },
+        ],
+      },
+      { observedAt: '2026-11-22T00:00:00Z', sourceName: 'Fallback' },
+      'ats-join-167291',
+      '167291',
+    );
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({
+      company: 'Acme GmbH',
+      url: 'https://join.com/companies/167291/senior-ts-engineer',
+      location: 'Berlin, Germany',
+      isRemote: true,
+    });
+    expect(items[1]).toMatchObject({
+      company: 'Beta AG',
+      url: 'https://careers.beta.de/jobs/902',
+      location: 'Munich, Germany',
+      isRemote: false,
+    });
   });
 });

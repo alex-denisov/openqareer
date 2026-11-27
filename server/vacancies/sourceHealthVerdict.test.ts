@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   censusOfReading,
+  classifySourceFailure,
   describeSourceHealth,
   emptySourceObservations,
+  isDeadSource,
   recordLinkCheck,
   recordReading,
   type SourceObservations,
@@ -311,5 +313,67 @@ describe('B200 · живая ссылка как доказательство', 
     const health = describeSourceHealth(alive, { addressStatus: 'live' }, NOW);
     expect(health.liveness.linkCheck.checked).toBe(0);
     expect(health.liveness.linkCheck.checkedAt).toBeNull();
+  });
+});
+
+describe('Phase 1 F6 — transient vs terminal error classification', () => {
+  it('classifies transient vs terminal failures cleanly', () => {
+    expect(classifySourceFailure('vacancy_source_unreachable: 429', 429).kind).toBe('transient');
+    expect(classifySourceFailure('vacancy_source_unreachable: 503', 503).kind).toBe('transient');
+    expect(classifySourceFailure('The operation was aborted due to timeout').kind).toBe('transient');
+    expect(classifySourceFailure('vacancy_source_unreachable: 404', 404)).toMatchObject({
+      kind: 'terminal',
+      threshold: 3,
+    });
+    expect(classifySourceFailure('fetch failed (ENOTFOUND)').kind).toBe('terminal');
+    expect(classifySourceFailure('corporate_source_quality_failed: kept 0').kind).toBe('terminal');
+    expect(classifySourceFailure('vacancy_source_board_gone')).toMatchObject({
+      kind: 'terminal',
+      threshold: 1,
+    });
+    expect(classifySourceFailure('vacancy_source_unreachable: 403', 403)).toMatchObject({
+      kind: 'terminal',
+      threshold: 5,
+    });
+  });
+
+  it('marks source dead with pausedBecause terminal_failure only after terminal threshold, keeping single failures unreachable', () => {
+    let obs = emptySourceObservations();
+    obs = recordReading(obs, {
+      succeeded: false,
+      atMs: NOW - 30_000,
+      notFound: true,
+      terminal: true,
+      terminalReason: 'http_gone',
+      terminalThreshold: 3,
+    });
+    expect(describeSourceHealth(obs, { addressStatus: 'live' }, NOW).liveness.verdict).toBe('unreachable');
+
+    obs = recordReading(obs, {
+      succeeded: false,
+      atMs: NOW - 20_000,
+      notFound: true,
+      terminal: true,
+      terminalReason: 'http_gone',
+      terminalThreshold: 3,
+    });
+    expect(describeSourceHealth(obs, { addressStatus: 'live' }, NOW).liveness.verdict).toBe('unreachable');
+
+    // A transient 503 between terminal failures does not reset the terminal streak.
+    obs = recordReading(obs, { succeeded: false, atMs: NOW - 10_000, terminal: false });
+    expect(describeSourceHealth(obs, { addressStatus: 'live' }, NOW).liveness.verdict).toBe('unreachable');
+
+    obs = recordReading(obs, {
+      succeeded: false,
+      atMs: NOW,
+      notFound: true,
+      terminal: true,
+      terminalReason: 'http_gone',
+      terminalThreshold: 3,
+    });
+    const health = describeSourceHealth(obs, { addressStatus: 'live' }, NOW);
+    expect(health.liveness.verdict).toBe('dead');
+    expect(health.liveness.pausedBecause).toBe('terminal_failure');
+    expect(isDeadSource(health)).toBe(true);
   });
 });

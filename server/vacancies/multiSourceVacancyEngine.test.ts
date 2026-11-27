@@ -1,10 +1,11 @@
+import { rmSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
 import type { VacancyPoolStore } from './vacancyPoolStore';
 import { clusterVacancies } from './vacancyDeduplicator';
 import type { CandidateMatchProfile } from './vacancyMatcher';
-import type { VacancyCluster } from '../domain/unifiedVacancy';
+import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 
 describe('MultiSourceVacancyEngine', () => {
   it('aggregates vacancies from multiple simulated sources, deduplicates them and matches candidate profile', async () => {
@@ -645,5 +646,76 @@ describe('MultiSourceVacancyEngine public catalog totals', () => {
     vi.setSystemTime(1_000_000 + 5 * 60_000 + 1);
     engine.getPublicCatalogEntriesPage({ limit: 10, place: 'berlin' });
     expect(queries.map((q) => q.knownTotal)).toEqual([90, 90]);
+  });
+});
+
+describe('Phase 1 F3+F5+F6 — intake freshness, terminal auto-disable, LinkedIn hold & dynamic replan', () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    while (dirs.length > 0) rmSync(dirs.pop()!, { recursive: true, force: true });
+  });
+
+  const makeVacancy = (id: string, sourceId: string, publishedAt: string): UnifiedVacancy => ({
+    id,
+    fingerprint: `fp-${id}`,
+    title: 'Senior Backend Engineer',
+    company: 'Acme',
+    isRemote: true,
+    description: 'TypeScript and Node.js backend systems.',
+    url: `https://example.test/jobs/${id}`,
+    publishedAt,
+    status: 'active',
+    requiredSkills: ['TypeScript'],
+    provenance: {
+      sourceId,
+      sourceType: 'json_api',
+      sourceUrl: `https://example.test/jobs/${id}`,
+      observedAt: new Date().toISOString(),
+    },
+  });
+
+  it('F5: partial ATS reads keep open jobs older than 30 days while aggregators still drop >30d items', async () => {
+    const now = Date.now();
+    const oldPublished = new Date(now - 60 * 86_400_000).toISOString();
+    const freshPublished = new Date(now - 2 * 86_400_000).toISOString();
+    const pool = new MemoryVacancyPoolStore();
+
+    const engine = new MultiSourceVacancyEngine({
+      sources: [
+        {
+          id: 'ats-join-167291',
+          name: 'Join Co',
+          type: 'json_api',
+          enabled: true,
+          targetUrl: 'https://join.com/api/public/companies/167291/jobs',
+          refreshIntervalMinutes: 180,
+          itemsFoundTotal: 0,
+          itemsActiveTotal: 0,
+        },
+        {
+          id: 'src-himalayas-api',
+          name: 'Himalayas',
+          type: 'json_api',
+          enabled: true,
+          targetUrl: 'https://himalayas.app/jobs/api',
+          refreshIntervalMinutes: 180,
+          itemsFoundTotal: 0,
+          itemsActiveTotal: 0,
+        },
+      ],
+      pool,
+      fetcher: async (src) => ({
+        vacancies: [
+          makeVacancy(`${src.id}-old`, src.id, oldPublished),
+          makeVacancy(`${src.id}-fresh`, src.id, freshPublished),
+        ],
+        partial: true,
+      }),
+    });
+
+    const joinOut = await engine.syncSource('ats-join-167291', undefined, now);
+    const aggOut = await engine.syncSource('src-himalayas-api', undefined, now);
+    expect(joinOut.kept).toBe(2);
+    expect(aggOut.kept).toBe(1);
   });
 });

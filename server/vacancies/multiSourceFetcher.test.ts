@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildMultiSourceFetcher,
+  createRobotsFetcher,
   jsonSourceTimeoutMs,
   paceTelegramRequest,
   TELEGRAM_REQUEST_DELAY_MS,
   TELEGRAM_SOURCE_TIMEOUT_MS,
 } from './multiSourceFetcher';
+import { createHostRequestPacer } from './hostRequestPacer';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 
 const refuse = () => {
@@ -529,4 +531,91 @@ describe('multi-source fetcher: Telegram pacing (B646)', () => {
     expect(sleepCalls).toContain(500);
   });
 });
+
+describe('Phase 1 F5+F6 — host pacing, retries & robots fetcher', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const greenhouse: VacancySourceConfig = {
+    id: 'ats-greenhouse-acme',
+    name: 'Acme',
+    type: 'json_api',
+    enabled: true,
+    targetUrl: 'https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true',
+    refreshIntervalMinutes: 180,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  };
+
+  it('retries 5xx and short 429 (<= 30s) and succeeds, while never retrying 404', async () => {
+    let clock = 1_000;
+    const sleeps: number[] = [];
+    let calls = 0;
+    vi.stubGlobal('fetch', async () => {
+      calls += 1;
+      if (calls === 1) {
+        return new Response('rate limited', { status: 429, headers: { 'retry-after': '2' } });
+      }
+      if (calls === 2) {
+        return new Response('upstream error', { status: 502 });
+      }
+      return Response.json({ jobs: [] });
+    });
+
+    const fetcher = buildMultiSourceFetcher(refuse, refuse, undefined, {
+      sleep: async (ms) => {
+        sleeps.push(ms);
+        clock += ms;
+      },
+      now: () => clock,
+    });
+
+    await expect(fetcher(greenhouse)).resolves.toEqual([]);
+    expect(calls).toBe(3);
+    expect(sleeps.length).toBeGreaterThan(0);
+
+    let notFoundCalls = 0;
+    vi.stubGlobal('fetch', async () => {
+      notFoundCalls += 1;
+      return new Response('not found', { status: 404 });
+    });
+    await expect(fetcher(greenhouse)).rejects.toThrow('vacancy_source_unreachable: 404');
+    expect(notFoundCalls).toBe(1);
+  });
+
+  it('rejects non-numeric ats-join slugs as vacancy_source_board_gone without calling fetch', async () => {
+    let fetchCalls = 0;
+    vi.stubGlobal('fetch', async () => {
+      fetchCalls += 1;
+      return Response.json({ items: [] });
+    });
+    const fetcher = buildMultiSourceFetcher(refuse, refuse);
+    await expect(
+      fetcher({
+        ...greenhouse,
+        id: 'ats-join-not-numeric',
+        targetUrl: 'https://join.com/api/public/companies/not-numeric/jobs',
+      }),
+    ).rejects.toThrow('vacancy_source_board_gone');
+    expect(fetchCalls).toBe(0);
+  });
+
+  it('createRobotsFetcher paces via shared HostRequestPacer and exposes retry-after on 429', async () => {
+    let clock = 5_000;
+    const pacer = createHostRequestPacer({
+      now: () => clock,
+      sleep: async (ms) => {
+        clock += ms;
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      async () => new Response('slow down', { status: 429, headers: { 'retry-after': '45' } }),
+    );
+    const robotsFetch = createRobotsFetcher(pacer);
+    const result = await robotsFetch('https://join.com/robots.txt');
+    expect(result).toEqual({ status: 429, body: null, retryAfterHeader: '45' });
+    expect(pacer.isLongPaused('join.com', clock)).toBe(true);
+  });
+});
+
 

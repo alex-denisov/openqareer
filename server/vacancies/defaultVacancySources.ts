@@ -646,10 +646,8 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     type: 'career_site',
     accessClass: 'open_web',
     market: 'Middle East / Gulf / International',
-    addressStatus: 'robots_forbidden',
-    enabled: false,
-    disabledReason:
-      'robots.txt закрывает страницы списков, сайт отвечает 403 честному агенту (замер 2026-11-05), 0 строк с 21.09. Подмена браузера запрещена; нужен договор с площадкой.',
+    addressStatus: 'live',
+    enabled: true,
     targetUrl: 'https://www.bayt.com/en/international/jobs/',
     refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,

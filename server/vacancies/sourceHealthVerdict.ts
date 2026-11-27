@@ -20,8 +20,73 @@ const CONSISTENCY_WINDOW_DAYS = 30;
 /** Столько пустых уловов подряд роняют живость. */
 const EMPTY_STREAK_LIMIT = 3;
 
+/** Порог постоянных (terminal) ошибок по умолчанию до отключения источника. */
+export const DEFAULT_TERMINAL_FAILURE_THRESHOLD = 3;
+export const ACCESS_DENIED_TERMINAL_THRESHOLD = 5;
+
 /** Старше этого площадка называется мёртвой. */
 const DEAD_AFTER_DAYS = 180;
+
+export type SourceFailureKind = 'transient' | 'terminal';
+
+export interface ClassifiedSourceFailure {
+  readonly kind: SourceFailureKind;
+  readonly reason: string;
+  readonly threshold: number;
+}
+
+const TRANSIENT_FAILURE_PATTERN =
+  /timeout|timed out|AbortError|TimeoutError|ECONNRESET|ETIMEDOUT|EPIPE|EAI_AGAIN|UND_ERR_|LinkedinPaused|HostPausedError|vacancy_source_transport_unavailable|source_not_configured/i;
+
+/**
+ * Классифицирует ошибку опроса: временная (429/5xx/таймаут/обрыв) остаётся на
+ * повторном расписании, постоянная (404/410/ENOTFOUND/закрытая доска/сломанное
+ * качество) после серии отказов переводит источник в `disabled`.
+ */
+export function classifySourceFailure(
+  message: string,
+  statusCode?: number,
+): ClassifiedSourceFailure {
+  if (/vacancy_source_board_gone/i.test(message)) {
+    return { kind: 'terminal', reason: 'board_gone', threshold: 1 };
+  }
+  if (/^board_closed:/i.test(message)) {
+    return { kind: 'terminal', reason: 'board_closed', threshold: DEFAULT_TERMINAL_FAILURE_THRESHOLD };
+  }
+  if (
+    statusCode === 429 ||
+    statusCode === 408 ||
+    (statusCode !== undefined && statusCode >= 500) ||
+    TRANSIENT_FAILURE_PATTERN.test(message)
+  ) {
+    return { kind: 'transient', reason: 'transient_error', threshold: 0 };
+  }
+  if (
+    statusCode === 404 ||
+    statusCode === 410 ||
+    /vacancy_source_unreachable:\s*(?:404|410)\b/i.test(message)
+  ) {
+    return { kind: 'terminal', reason: 'http_gone', threshold: DEFAULT_TERMINAL_FAILURE_THRESHOLD };
+  }
+  if (/ENOTFOUND/i.test(message)) {
+    return { kind: 'terminal', reason: 'dns_not_found', threshold: DEFAULT_TERMINAL_FAILURE_THRESHOLD };
+  }
+  if (/ERR_TLS_|CERT_HAS_EXPIRED|UNABLE_TO_VERIFY_LEAF_SIGNATURE/i.test(message)) {
+    return { kind: 'terminal', reason: 'tls_error', threshold: DEFAULT_TERMINAL_FAILURE_THRESHOLD };
+  }
+  if (/corporate_source_quality_failed/i.test(message)) {
+    return { kind: 'terminal', reason: 'quality_failed', threshold: DEFAULT_TERMINAL_FAILURE_THRESHOLD };
+  }
+  if (
+    statusCode === 403 ||
+    statusCode === 401 ||
+    statusCode === 422 ||
+    /vacancy_source_unreachable:\s*(?:401|403|422)\b|ECONNREFUSED/i.test(message)
+  ) {
+    return { kind: 'terminal', reason: 'access_denied', threshold: ACCESS_DENIED_TERMINAL_THRESHOLD };
+  }
+  return { kind: 'transient', reason: 'unknown_error', threshold: 0 };
+}
 
 /**
  * Меньше этого числа определившихся ссылок приговором не считается. Две
@@ -83,6 +148,11 @@ export interface SourceObservations {
   readonly census: ReadingCensus | null;
   /** Consecutive 404 answers; an employer board that keeps answering 404 is closed. */
   readonly consecutiveNotFound?: number;
+  /** Постоянные (terminal) ошибки подряд (404/410/ENOTFOUND/закрытая доска/качество). */
+  readonly consecutiveTerminalFailures?: number;
+  readonly lastFailureKind?: SourceFailureKind;
+  readonly lastTerminalReason?: string;
+  readonly terminalThreshold?: number;
   /** Подлинность: доля неперепечатанных объявлений из дедупликатора B205. */
   readonly authenticity?: {
     readonly originalShare: CountedShare;
@@ -179,6 +249,36 @@ export interface ReadingRecord {
   readonly atMs: number;
   /** The transport answered 404: the address itself is gone, not the catch empty. */
   readonly notFound?: boolean;
+  /** Ошибка постоянная (terminal) и не уйдёт простым повтором. */
+  readonly terminal?: boolean;
+  readonly terminalReason?: string;
+  readonly terminalThreshold?: number;
+}
+
+function computeFailureFields(
+  previous: SourceObservations,
+  reading: ReadingRecord,
+): Pick<
+  SourceObservations,
+  'consecutiveTerminalFailures' | 'lastFailureKind' | 'lastTerminalReason' | 'terminalThreshold'
+> {
+  if (reading.succeeded) return {};
+  const consecutiveTerminalFailures = reading.terminal
+    ? (previous.consecutiveTerminalFailures ?? 0) + 1
+    : (previous.consecutiveTerminalFailures ?? 0);
+  const lastFailureKind: SourceFailureKind = reading.terminal ? 'terminal' : 'transient';
+  const lastTerminalReason = reading.terminal
+    ? (reading.terminalReason ?? previous.lastTerminalReason)
+    : previous.lastTerminalReason;
+  const terminalThreshold = reading.terminal
+    ? (reading.terminalThreshold ?? previous.terminalThreshold)
+    : previous.terminalThreshold;
+  return {
+    ...(consecutiveTerminalFailures > 0 ? { consecutiveTerminalFailures } : {}),
+    lastFailureKind,
+    ...(lastTerminalReason ? { lastTerminalReason } : {}),
+    ...(terminalThreshold ? { terminalThreshold } : {}),
+  };
 }
 
 /**
@@ -191,11 +291,8 @@ export function recordReading(
 ): SourceObservations {
   const at = new Date(reading.atMs).toISOString();
   const windowStarted = previous.windowStartedAt ? Date.parse(previous.windowStartedAt) : NaN;
-  // Опрос старше окна ничего не говорит о сегодняшнем постоянстве: окно
-  // начинается заново, а не тянет вечное среднее.
   const windowExpired =
     Number.isNaN(windowStarted) || reading.atMs - windowStarted > CONSISTENCY_WINDOW_DAYS * DAY_MS;
-
   const caught = reading.succeeded && (reading.census?.total ?? 0) > 0;
 
   return {
@@ -203,8 +300,6 @@ export function recordReading(
     lastReadingAt: at,
     lastReadingSucceeded: reading.succeeded,
     lastNonEmptyReadingAt: caught ? at : previous.lastNonEmptyReadingAt,
-    // Провал транспорта — не пустой улов: серию пустых уловов он не удлиняет,
-    // потому что про содержимое площадки провал ничего не сообщает.
     consecutiveEmptyReadings: !reading.succeeded
       ? previous.consecutiveEmptyReadings
       : caught
@@ -214,13 +309,12 @@ export function recordReading(
     windowReadings: (windowExpired ? 0 : previous.windowReadings) + 1,
     windowSuccessful: (windowExpired ? 0 : previous.windowSuccessful) + (reading.succeeded ? 1 : 0),
     census: caught && reading.census ? reading.census : previous.census,
-    // Only a 404 extends the run; any other failure says nothing about the
-    // address, and a good reading proves it is alive.
     consecutiveNotFound: reading.notFound
       ? (previous.consecutiveNotFound ?? 0) + 1
       : reading.succeeded
         ? 0
         : (previous.consecutiveNotFound ?? 0),
+    ...computeFailureFields(previous, reading),
   };
 }
 
@@ -236,7 +330,7 @@ export function recordLinkCheck(
 }
 
 /** Почему плановый опрос приостановлен: у живой площадки причины нет. */
-export type SourcePauseReason = 'no_fresh_vacancies' | 'links_not_opening';
+export type SourcePauseReason = 'no_fresh_vacancies' | 'links_not_opening' | 'terminal_failure';
 
 export type SourceLivenessVerdict = 'never_read' | 'unreachable' | 'alive' | 'fading' | 'dead';
 
@@ -347,6 +441,20 @@ function callLivenessByLinks(link: LinkCheckCensus | null): LivenessCall | null 
   return null;
 }
 
+function callTerminalDead(observations: SourceObservations): LivenessCall | null {
+  const terminalThreshold = observations.terminalThreshold ?? DEFAULT_TERMINAL_FAILURE_THRESHOLD;
+  if (
+    observations.lastTerminalReason !== 'board_gone' &&
+    (observations.consecutiveTerminalFailures ?? 0) < terminalThreshold
+  ) {
+    return null;
+  }
+  return {
+    verdict: 'dead',
+    reason: `Постоянная ошибка источника (${observations.lastTerminalReason ?? 'terminal_failure'})`,
+  };
+}
+
 function callLiveness(observations: SourceObservations, nowMs: number): LivenessCall {
   const census = observations.census;
   const total = census?.total ?? 0;
@@ -354,52 +462,31 @@ function callLiveness(observations: SourceObservations, nowMs: number): Liveness
   if (observations.lastReadingAt === null) {
     return { verdict: 'never_read', reason: 'Площадку ещё ни разу не опрашивали' };
   }
-
   if (census && total > 0 && census.fresherThan180Days === 0) {
     return { verdict: 'dead', reason: `Ни одной вакансии свежее 180 дней: 0 из ${total}` };
   }
-
   if (olderThanDeadLine(observations.lastNonEmptyReadingAt, nowMs)) {
-    return {
-      verdict: 'dead',
-      reason: `Последний непустой улов старше 180 дней (${observations.lastNonEmptyReadingAt})`,
-    };
+    return { verdict: 'dead', reason: `Последний непустой улов старше 180 дней (${observations.lastNonEmptyReadingAt})` };
   }
-
-  if (
-    observations.lastNonEmptyReadingAt === null &&
-    olderThanDeadLine(observations.firstReadingAt, nowMs)
-  ) {
+  if (observations.lastNonEmptyReadingAt === null && olderThanDeadLine(observations.firstReadingAt, nowMs)) {
     return { verdict: 'dead', reason: 'За 180 дней опросов площадка не отдала ни одной вакансии' };
   }
 
   const byLinks = callLivenessByLinks(observations.linkCheck ?? null);
-
-  // Лента может исправно отдавать свежие даты у объявлений, которых на сайте
-  // уже нет. Ответ `404` — единственное доказательство, что их нет (срез 2).
   if (byLinks?.verdict === 'dead') return byLinks;
-
+  const terminalDead = callTerminalDead(observations);
+  if (terminalDead) return terminalDead;
   if (observations.lastReadingSucceeded === false) {
     return { verdict: 'unreachable', reason: 'Последний опрос завершился ошибкой' };
   }
-
   if (byLinks) return byLinks;
-
   if (observations.consecutiveEmptyReadings >= EMPTY_STREAK_LIMIT) {
-    return {
-      verdict: 'fading',
-      reason: `Улов пуст три опроса подряд (${observations.consecutiveEmptyReadings})`,
-    };
+    return { verdict: 'fading', reason: `Улов пуст три опроса подряд (${observations.consecutiveEmptyReadings})` };
   }
-
   if (census && total > 0 && census.fresherThan30Days === 0) {
     return { verdict: 'fading', reason: `Ни одной вакансии свежее 30 дней: 0 из ${total}` };
   }
-
-  return {
-    verdict: 'alive',
-    reason: `Свежее 30 дней: ${census?.fresherThan30Days ?? 0} из ${total}`,
-  };
+  return { verdict: 'alive', reason: `Свежее 30 дней: ${census?.fresherThan30Days ?? 0} из ${total}` };
 }
 
 function pauseReasonOf(
@@ -407,6 +494,13 @@ function pauseReasonOf(
   observations: SourceObservations,
 ): SourcePauseReason | null {
   if (call.verdict !== 'dead') return null;
+  const terminalThreshold = observations.terminalThreshold ?? DEFAULT_TERMINAL_FAILURE_THRESHOLD;
+  if (
+    observations.lastTerminalReason === 'board_gone' ||
+    (observations.consecutiveTerminalFailures ?? 0) >= terminalThreshold
+  ) {
+    return 'terminal_failure';
+  }
   const byLinks = callLivenessByLinks(observations.linkCheck ?? null);
   return byLinks?.reason === call.reason ? 'links_not_opening' : 'no_fresh_vacancies';
 }

@@ -1,9 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 import {
   extractJsonLdJobs,
   extractNextDataJobs,
   extractSemanticHtmlJobs,
   detectEmbeddedAts,
+  fetchGenericCorporateVacancies,
 } from './genericCorporateSiteAdapter';
 
 describe('genericCorporateSiteAdapter', () => {
@@ -205,5 +207,69 @@ describe('B628 — встроенные ATS на снятых с прода ст
     expect(detectEmbeddedAts('https://rapidapi.recruitee.com/')).toMatchObject({
       orgId: 'rapidapi',
     });
+  });
+});
+
+describe('Phase 1 F4 — fetchCorporateHtml error propagation', () => {
+  const corporateSource: VacancySourceConfig = {
+    id: 'src-company-site-acme',
+    name: 'Acme',
+    type: 'career_site',
+    enabled: true,
+    targetUrl: 'https://acme.test/careers',
+    refreshIntervalMinutes: 720,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([403, 404, 429, 500])(
+    'rejects HTTP %s with vacancy_source_unreachable instead of returning 0 healthy items',
+    async (status) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => new Response('blocked', { status, headers: { 'retry-after': '120' } })),
+      );
+      const err = await fetchGenericCorporateVacancies(corporateSource).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toBe(`vacancy_source_unreachable: ${status}`);
+      expect((err as { statusCode?: number }).statusCode).toBe(status);
+      if (status === 429) {
+        expect((err as { headers?: Headers }).headers?.get('retry-after')).toBe('120');
+      }
+    },
+  );
+
+  it('propagates ENOTFOUND and TimeoutError instead of swallowing to []', async () => {
+    const dnsErr = Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } });
+    vi.stubGlobal('fetch', vi.fn(async () => { throw dnsErr; }));
+    await expect(fetchGenericCorporateVacancies(corporateSource)).rejects.toBe(dnsErr);
+
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new DOMException('timeout', 'TimeoutError'); }));
+    await expect(fetchGenericCorporateVacancies(corporateSource)).rejects.toThrow(/timeout/);
+  });
+
+  it('uses fetchStealth when blocked and throws unreachable if stealth also returns 4xx', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('Just a moment...', { status: 403 })));
+    const okStealth = vi.fn(async () => ({
+      status: 200,
+      body: '<html><body><a href="/jobs/1">Senior Engineer</a></body></html>',
+      usedStealth: true,
+    }));
+    const jobs = await fetchGenericCorporateVacancies(corporateSource, okStealth);
+    expect(jobs).toHaveLength(1);
+
+    const badStealth = vi.fn(async () => ({ status: 404, body: 'not found', usedStealth: true }));
+    await expect(fetchGenericCorporateVacancies(corporateSource, badStealth)).rejects.toThrow(
+      'vacancy_source_unreachable: 404',
+    );
+  });
+
+  it('still resolves [] on genuine HTTP 200 empty HTML', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 200 })));
+    await expect(fetchGenericCorporateVacancies(corporateSource)).resolves.toEqual([]);
   });
 });

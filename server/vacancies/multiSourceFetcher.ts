@@ -42,6 +42,11 @@ import type { RenderScriptPage } from './scriptPageRenderer';
 import { fetchBamboohrBoard } from './bamboohrBoardFetch';
 import { fetchPaycomBoard } from './paycomBoardFetch';
 import { fetchFreehireFeed, freehireFeedFor } from './freehire/freehireFeeds';
+import {
+  createHostRequestPacer,
+  parseRetryAfterMs,
+  type HostRequestPacer,
+} from './hostRequestPacer';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
 type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
@@ -169,12 +174,64 @@ async function fetchTelegramChannel(
   }
 }
 
+const DEFAULT_HOST_RETRIES = 2;
+const HOST_RETRY_BASE_MS = 1_500;
+
+interface HostRetryContext {
+  readonly pacer: HostRequestPacer;
+  readonly sleep: (ms: number) => Promise<void>;
+  readonly now: () => number;
+  readonly retryNetworkErrors?: boolean;
+}
+
+function isRetryableStatus(status: number, headers: Headers, context: HostRetryContext): boolean {
+  if (status === 429) {
+    const waitMs = parseRetryAfterMs(headers, context.now());
+    return waitMs === undefined || waitMs <= context.pacer.maxInlineWaitMs;
+  }
+  return status === 408 || status >= 500;
+}
+
+async function fetchWithHostRetry<T>(
+  url: string,
+  timeoutMs: number,
+  context: HostRetryContext,
+  runAttempt: (signal: AbortSignal) => Promise<{ response: Response; parse: () => Promise<T> }>,
+): Promise<T> {
+  const retries = DEFAULT_HOST_RETRIES;
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    if (attempt > 0) await context.sleep(HOST_RETRY_BASE_MS * 2 ** (attempt - 1));
+    await context.pacer.acquire(url);
+    try {
+      return await withRequestTimeout(timeoutMs, async (signal) => {
+        const { response, parse } = await runAttempt(signal);
+        context.pacer.recordResponse(url, response.status, response.headers);
+        if (!response.ok) {
+          throw Object.assign(unreachableError(response), {
+            _retryable: isRetryableStatus(response.status, response.headers, context),
+          });
+        }
+        return parse();
+      });
+    } catch (err) {
+      lastError = err;
+      const markedRetryable = (err as { _retryable?: boolean } | null)?._retryable;
+      if (markedRetryable === false) throw err;
+      if (markedRetryable === true) continue;
+      if (!context.retryNetworkErrors || isTimeoutError(err)) throw err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('vacancy_source_unreachable');
+}
+
 /**
  * A board's own JSON endpoint. The observation time is taken before the record
  * objects are built, so `observedAt` names the moment of the request (B164).
  */
 async function fetchJsonApi(
   source: VacancySourceConfig,
+  context: HostRetryContext,
   options?: { query?: string },
 ): Promise<UnifiedVacancy[]> {
   const url = withQuery(source, options?.query);
@@ -188,26 +245,31 @@ async function fetchJsonApi(
   }
   const textProvider = board?.provider;
   if (textProvider === 'personio' || textProvider === 'teamtailor') {
-    return fetchTextAtsBoard(source, url, 'application/xml, text/xml');
+    return fetchTextAtsBoard(source, url, 'application/xml, text/xml', context);
   }
   // B646-5: список Paylocity — HTML с window.pageData.Jobs, разбор в atsListingReaders.
-  if (textProvider === 'paylocity') return fetchTextAtsBoard(source, url, 'text/html');
-  return readJsonPage(source, { url });
+  if (textProvider === 'paylocity') return fetchTextAtsBoard(source, url, 'text/html', context);
+  return readJsonPage(source, { url }, context);
 }
 
 async function fetchTextAtsBoard(
   source: VacancySourceConfig,
   url: string,
   accept: string,
+  context: HostRetryContext,
 ): Promise<UnifiedVacancy[]> {
-  const body = await withRequestTimeout(JSON_SOURCE_TIMEOUT_MS, async (signal) => {
-    const res = await fetch(url, {
-      headers: { ...FETCH_HEADERS, Accept: accept },
-      signal,
-    });
-    if (!res.ok) throw unreachableError(res);
-    return res.text();
-  });
+  const body = await fetchWithHostRetry(
+    url,
+    JSON_SOURCE_TIMEOUT_MS,
+    { ...context, retryNetworkErrors: true },
+    async (signal) => {
+      const response = await fetch(url, {
+        headers: { ...FETCH_HEADERS, Accept: accept },
+        signal,
+      });
+      return { response, parse: () => response.text() };
+    },
+  );
   const observedAt = new Date().toISOString();
   return normalizeJsonSource(source.id, body, {
     observedAt,
@@ -231,8 +293,12 @@ function unreachableError(res: Response): Error {
 async function readJsonPage(
   source: VacancySourceConfig,
   request: PagedRequest,
+  context: HostRetryContext,
 ): Promise<UnifiedVacancy[]> {
-  const { payload, observedAt } = await fetchJsonPayload(request);
+  const { payload, observedAt } = await fetchJsonPayload(request, undefined, {
+    ...context,
+    retryNetworkErrors: true,
+  });
   // Имя источника нужно разбору: доски Lever и Ashby не публикуют работодателя
   // в записи, и назвать его может только реестр (B202).
   return normalizeJsonSource(source.id, payload, {
@@ -245,6 +311,7 @@ async function readJsonPage(
 async function fetchJsonPayload(
   request: PagedRequest,
   fetchStealth: typeof fetchWithStealthFallback = fetchWithStealthFallback,
+  context?: HostRetryContext,
 ): Promise<{ payload: unknown; observedAt: string }> {
   const mergedHeaders = mergeHeaders(
     {
@@ -254,9 +321,29 @@ async function fetchJsonPayload(
     },
     request.headers,
   );
-  return withRequestTimeout(jsonSourceTimeoutMs(request.url), (signal) =>
-    readJsonPayload(request, mergedHeaders, signal, fetchStealth),
-  );
+  if (!context) {
+    return withRequestTimeout(jsonSourceTimeoutMs(request.url), (signal) =>
+      readJsonPayload(request, mergedHeaders, signal, fetchStealth),
+    );
+  }
+  const retries = DEFAULT_HOST_RETRIES;
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    if (attempt > 0) await context.sleep(HOST_RETRY_BASE_MS * 2 ** (attempt - 1));
+    await context.pacer.acquire(request.url);
+    try {
+      return await withRequestTimeout(jsonSourceTimeoutMs(request.url), (signal) =>
+        readJsonPayload(request, mergedHeaders, signal, fetchStealth, context),
+      );
+    } catch (err) {
+      lastError = err;
+      const markedRetryable = (err as { _retryable?: boolean } | null)?._retryable;
+      if (markedRetryable === false) throw err;
+      if (markedRetryable === true) continue;
+      if (!context.retryNetworkErrors || isTimeoutError(err)) throw err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('vacancy_source_unreachable');
 }
 
 async function readJsonPayload(
@@ -264,6 +351,7 @@ async function readJsonPayload(
   mergedHeaders: Record<string, string>,
   signal: AbortSignal,
   fetchStealth: typeof fetchWithStealthFallback,
+  context?: HostRetryContext,
 ): Promise<{ payload: unknown; observedAt: string }> {
   const res = await fetch(request.url, {
     method: request.method ?? 'GET',
@@ -271,6 +359,7 @@ async function readJsonPayload(
     ...(request.method === 'POST' ? { body: JSON.stringify(request.body ?? {}) } : {}),
     signal,
   });
+  context?.pacer.recordResponse(request.url, res.status, res.headers);
   if (!res.ok) {
     const errorBody = await res.text().catch(() => '');
     if (isCloudflareChallenge(res.status, errorBody)) {
@@ -286,11 +375,19 @@ async function readJsonPayload(
             observedAt: new Date().toISOString(),
           };
         } catch {
-          throw new Error('vacancy_source_payload_unreadable');
+          throw Object.assign(new Error('vacancy_source_payload_unreadable'), {
+            _retryable: false,
+          });
         }
       }
     }
-    throw unreachableError(res);
+    const err = unreachableError(res);
+    if (context) {
+      return Promise.reject(
+        Object.assign(err, { _retryable: isRetryableStatus(res.status, res.headers, context) }),
+      );
+    }
+    throw err;
   }
   const observedAt = new Date().toISOString();
   return { payload: await res.json(), observedAt };
@@ -309,14 +406,19 @@ async function fetchFirstPageOnce(
   request: PagedRequest,
   isFirst: boolean,
   pause: () => Promise<void>,
-  fetchStealth?: typeof fetchWithStealthFallback,
+  fetchStealth: typeof fetchWithStealthFallback | undefined,
+  context: HostRetryContext,
 ): Promise<Awaited<ReturnType<typeof fetchJsonPayload>>> {
+  const pageContext: HostRetryContext = {
+    ...context,
+    retryNetworkErrors: isFirst,
+  };
   try {
-    return await fetchJsonPayload(request, fetchStealth);
+    return await fetchJsonPayload(request, fetchStealth, pageContext);
   } catch (err) {
     if (!isFirst || !isTimeoutError(err)) throw err;
     await pause();
-    return fetchJsonPayload(request, fetchStealth);
+    return fetchJsonPayload(request, fetchStealth, pageContext);
   }
 }
 
@@ -330,7 +432,8 @@ async function fetchPagedJsonApi(
   source: VacancySourceConfig,
   sleep: (ms: number) => Promise<void>,
   now: () => number,
-  fetchStealth?: typeof fetchWithStealthFallback,
+  fetchStealth: typeof fetchWithStealthFallback | undefined,
+  context: HostRetryContext,
 ): Promise<SourceReading> {
   const plan = pagingPlanFor(source.id);
   if (!plan) throw new Error(`vacancy_source_paging_missing: ${source.id}`);
@@ -348,6 +451,7 @@ async function fetchPagedJsonApi(
         pagesRead === 0,
         () => sleep(plan.delayMs * 4),
         fetchStealth,
+        context,
       );
     } catch (err) {
       // Сбой на первой странице — ошибка источника. Дальше он обрывает только
@@ -539,17 +643,34 @@ async function fetchRssFeed(
  * нужно до самого обхода, и ждать его дольше нескольких секунд бессмысленно —
  * недоступное правило не запрещает и не разрешает (B204).
  */
-export const fetchRobotsTxt: RobotsFetcher = async (robotsUrl) => {
-  const res = await fetch(robotsUrl, {
-    headers: { ...FETCH_HEADERS, Accept: 'text/plain' },
-    signal: AbortSignal.timeout(8_000),
-  });
-  return { status: res.status, body: res.ok ? await res.text() : null };
-};
+export const ROBOTS_FETCH_TIMEOUT_MS = 8_000;
+
+export function createRobotsFetcher(pacer?: HostRequestPacer): RobotsFetcher {
+  return async (robotsUrl) => {
+    if (pacer) await pacer.acquire(robotsUrl);
+    return withRequestTimeout(ROBOTS_FETCH_TIMEOUT_MS, async (signal) => {
+      const res = await fetch(robotsUrl, {
+        headers: { ...FETCH_HEADERS, Accept: 'text/plain' },
+        signal,
+      });
+      pacer?.recordResponse(robotsUrl, res.status, res.headers);
+      const body = res.ok ? await res.text() : null;
+      const retryAfterHeader = res.headers.get('retry-after');
+      return {
+        status: res.status,
+        body,
+        ...(retryAfterHeader ? { retryAfterHeader } : {}),
+      };
+    });
+  };
+}
+
+export const fetchRobotsTxt: RobotsFetcher = createRobotsFetcher();
 
 export interface MultiSourceFetcherDeps {
   readonly sleep?: (ms: number) => Promise<void>;
   readonly now?: () => number;
+  readonly hostPacer?: HostRequestPacer;
   readonly fetchWithStealth?: typeof fetchWithStealthFallback;
   readonly linkedinCrawlerDeps?: LinkedinCrawlerDeps;
   readonly fetchLinkedinCrawler?: (deps?: LinkedinCrawlerDeps) => Promise<SourceReading>;
@@ -647,6 +768,51 @@ function fetchNamedCorporateEndpoint(
   return null;
 }
 
+function fetchLinkedinOrgChannel(
+  source: VacancySourceConfig,
+  deps: MultiSourceFetcherDeps,
+  linkedinBudget: LinkedinGuestBudget,
+): Promise<UnifiedVacancy[] | SourceReading> {
+  const target = {
+    slug: source.companyKey ?? source.linkedinOrgId!,
+    company: source.name.replace(/ \(LinkedIn\)$/, ''),
+    organizationId: source.linkedinOrgId!,
+  };
+  return fetchLinkedinCompanyVacancies(target, {
+    sourceId: source.id,
+    maxPages: 10,
+    customFetch: budgetedFetch(linkedinBudget, 'companies', deps.linkedinFetch ?? fetch),
+  });
+}
+
+async function fetchJsonApiChannel(
+  source: VacancySourceConfig,
+  options: { query?: string } | undefined,
+  deps: MultiSourceFetcherDeps,
+  sleep: (ms: number) => Promise<void>,
+  now: () => number,
+  linkedinBudget: LinkedinGuestBudget,
+  retryContext: HostRetryContext,
+): Promise<UnifiedVacancy[] | SourceReading> {
+  if (freehireFeedFor(source.id)) return fetchFreehireFeed(source.id, source.name);
+  if (source.id === CROSSOVER_SOURCE_ID) return fetchCrossoverSource(source);
+  if (source.id === LINKEDIN_SOURCE_ID) {
+    return fetchLinkedinGuestSource(sleep, linkedinBudget, deps.linkedinFetch ?? fetch);
+  }
+  if (source.id === BAYT_SOURCE_ID) {
+    return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
+  }
+  const board = parseAtsBoardSourceId(source.id);
+  if (board?.provider === 'join' && !/^\d+$/.test(board.board)) {
+    throw new Error('vacancy_source_board_gone: invalid_join_board_id');
+  }
+  if (board?.provider === 'paycom') return fetchPaycomSource(source, board.board, sleep);
+  if (pagingPlanFor(source.id)) {
+    return fetchPagedJsonApi(source, sleep, now, deps.fetchWithStealth, retryContext);
+  }
+  return fetchJsonApi(source, retryContext, options);
+}
+
 async function fetchJsonOrCareerSite(
   source: VacancySourceConfig,
   options: { query?: string } | undefined,
@@ -654,25 +820,14 @@ async function fetchJsonOrCareerSite(
   sleep: (ms: number) => Promise<void>,
   now: () => number,
   linkedinBudget: LinkedinGuestBudget,
+  retryContext: HostRetryContext,
 ): Promise<UnifiedVacancy[] | SourceReading> {
-  if (source.linkedinOrgId) {
-    const target = {
-      slug: source.companyKey ?? source.linkedinOrgId,
-      company: source.name.replace(/ \(LinkedIn\)$/, ''),
-      organizationId: source.linkedinOrgId,
-    };
-    return fetchLinkedinCompanyVacancies(target, {
-      sourceId: source.id,
-      maxPages: 10,
-      customFetch: budgetedFetch(linkedinBudget, 'companies', deps.linkedinFetch ?? fetch),
-    });
-  }
+  if (source.linkedinOrgId) return fetchLinkedinOrgChannel(source, deps, linkedinBudget);
   if (source.type === 'career_site' && source.id === YC_WORK_AT_STARTUP_SOURCE_ID) {
     return fetchYcWorkAtStartup(source);
   }
   const named = fetchNamedCorporateEndpoint(source);
   if (named) return named;
-
   if (source.type === 'career_site' && source.id === BAYT_SOURCE_ID) {
     return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
   }
@@ -680,19 +835,7 @@ async function fetchJsonOrCareerSite(
     return fetchGenericCorporateVacancies(source, deps.fetchWithStealth, deps.renderScriptPage);
   }
   if (source.type === 'json_api') {
-    if (freehireFeedFor(source.id)) return fetchFreehireFeed(source.id, source.name);
-    if (source.id === CROSSOVER_SOURCE_ID) return fetchCrossoverSource(source);
-    if (source.id === LINKEDIN_SOURCE_ID)
-      return fetchLinkedinGuestSource(sleep, linkedinBudget, deps.linkedinFetch ?? fetch);
-    if (source.id === BAYT_SOURCE_ID) {
-      return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
-    }
-    const board = parseAtsBoardSourceId(source.id);
-    if (board?.provider === 'paycom') return fetchPaycomSource(source, board.board, sleep);
-    if (pagingPlanFor(source.id)) {
-      return fetchPagedJsonApi(source, sleep, now, deps.fetchWithStealth);
-    }
-    return fetchJsonApi(source, options);
+    return fetchJsonApiChannel(source, options, deps, sleep, now, linkedinBudget, retryContext);
   }
   throw new Error(`vacancy_source_type_unsupported: ${source.type}`);
 }
@@ -706,6 +849,8 @@ export function buildMultiSourceFetcher(
   const sleep = deps.sleep ?? defaultSleep;
   const now = deps.now ?? Date.now;
   const linkedinBudget = deps.linkedinBudget ?? createLinkedinGuestBudget({ sleep, now });
+  const hostPacer = deps.hostPacer ?? createHostRequestPacer({ sleep, now });
+  const retryContext: HostRetryContext = { pacer: hostPacer, sleep, now };
   return async (source, options) => {
     if (source.type === 'hh') {
       const sample = await hh({ text: options?.query || 'Developer', perPage: 20 });
@@ -718,7 +863,15 @@ export function buildMultiSourceFetcher(
     if (source.type === 'telegram') return fetchTelegramChannel(source, sleep);
     if (source.type === 'rss') return fetchRssFeed(source, options);
     if (source.type === 'career_site' || source.type === 'json_api') {
-      return fetchJsonOrCareerSite(source, options, deps, sleep, now, linkedinBudget);
+      return fetchJsonOrCareerSite(
+        source,
+        options,
+        deps,
+        sleep,
+        now,
+        linkedinBudget,
+        retryContext,
+      );
     }
     if (source.type === 'hh_search') return fetchHhSearchBatch(crawlCoordinator);
     if (source.id === 'src-linkedin-crawler') {

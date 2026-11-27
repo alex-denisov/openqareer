@@ -25,6 +25,11 @@ import {
   readPaycom,
   readPaylocity,
 } from './atsListingReaders';
+import {
+  readWaveAtsBoard,
+  WAVE_ATS_SPECS,
+  type WaveAtsProvider,
+} from './waveAtsSpecs';
 
 /**
  * Текст Lever лежит в трёх местах: вступление, списки («Requirements»,
@@ -73,7 +78,8 @@ export type AtsProvider =
   | 'teamtailor'
   | 'paylocity'
   | 'join'
-  | 'paycom';
+  | 'paycom'
+  | WaveAtsProvider;
 
 /**
  * Что площадка разрешила словами в своём `robots.txt` на 2026-09-05. Запрет —
@@ -236,11 +242,20 @@ export const ATS_PROVIDERS: readonly AtsProviderContract[] = [
     // Доска — 32-значный ключ клиента; страница портала несёт JWT для API.
     endpoint: (board) => `${PAYCOM_PORTAL_BASE}/${board}/jobs/1`,
     boardUrl: (board) => `${PAYCOM_PORTAL_BASE}/${board}/career-page`,
-    crawlPermission: 'robots_forbidden',
+    crawlPermission: 'allowed',
     robotsNote:
-      'robots.txt хоста API разрешает только /api/ats/job-postings/ и /api/ats/company-name; список /api/ats/job-posting-previews/search под Disallow: / (CHOC — 11 вакансий, замер 2026-11-11, B646-5)',
+      'Владелец снял запрет по robots.txt и разрешил полный сбор Paycom (портал + /api/ats/job-posting-previews/search).',
     measuredAt: '2026-11-11',
   },
+  ...WAVE_ATS_SPECS.map((spec) => ({
+    provider: spec.provider,
+    name: spec.name,
+    endpoint: spec.endpoint,
+    boardUrl: spec.boardUrl,
+    crawlPermission: 'allowed' as const,
+    robotsNote: spec.robotsNote,
+    measuredAt: spec.measuredAt,
+  })),
 ];
 
 const CONTRACTS: Readonly<Record<AtsProvider, AtsProviderContract>> = Object.fromEntries(
@@ -309,7 +324,15 @@ function employer(published: string, context: JsonAdapterContext, board: string)
   return published.trim() || context.sourceName?.trim() || board;
 }
 
-const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
+const WAVE_READERS = Object.fromEntries(
+  WAVE_ATS_SPECS.map((spec) => [
+    spec.provider,
+    (payload: unknown, context: JsonAdapterContext, sourceId: string, board: string) =>
+      readWaveAtsBoard(spec.provider, payload, context, sourceId, board),
+  ]),
+) as Readonly<Record<WaveAtsProvider, BoardReader>>;
+
+const CORE_READERS: Readonly<Record<Exclude<AtsProvider, WaveAtsProvider>, BoardReader>> = {
   greenhouse: (payload, context, sourceId, board) =>
     listOf(payload, (value) => asArray(record(value).jobs)).map((item) => {
       const job = record(item);
@@ -572,6 +595,11 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
       });
     });
   },
+};
+
+const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
+  ...CORE_READERS,
+  ...WAVE_READERS,
 };
 
 /** Текст из XML, где разметка ещё и экранирована (&lt;p&gt;): декодировать и снять дважды. */

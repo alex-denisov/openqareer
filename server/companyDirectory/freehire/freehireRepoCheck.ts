@@ -5,6 +5,8 @@
  * keeps the polled set growing in portions.
  */
 import type { DatabaseSync } from 'node:sqlite';
+import { ATS_PROVIDERS, atsBoardContract, type AtsProvider } from '../../vacancies/atsBoardAdapters';
+import { countWaveAtsJobs, WAVE_ATS_SPECS } from '../../vacancies/waveAtsSpecs';
 import { boardJobs, PROVIDER_NAMES, type DiscoveredProvider } from '../siteDiscovery/atsBoards';
 
 const CHECK_TABLE = `CREATE TABLE IF NOT EXISTS freehire_repo_check (
@@ -15,8 +17,8 @@ const CHECK_TABLE = `CREATE TABLE IF NOT EXISTS freehire_repo_check (
 
 export type JobsCounter = (provider: string, slug: string) => Promise<number>;
 
-const EXTRA_PROVIDERS = ['workday', 'bamboohr'] as const;
-const CHECKED_PROVIDERS: readonly string[] = [...PROVIDER_NAMES, ...EXTRA_PROVIDERS];
+const EXTRA_PROVIDERS = ['workday', 'bamboohr', ...WAVE_ATS_SPECS.map((s) => s.provider)] as const;
+const CHECKED_PROVIDERS: readonly string[] = Array.from(new Set([...PROVIDER_NAMES, ...EXTRA_PROVIDERS]));
 const WORKDAY_SLUG = /^([a-z0-9-]+)\/(wd\d+)\/([A-Za-z0-9_-]+)$/i;
 
 async function jsonOf(response: Response): Promise<Record<string, unknown> | undefined> {
@@ -61,11 +63,27 @@ export async function bamboohrJobs(slug: string, fetchImpl: typeof fetch): Promi
   }
 }
 
+async function waveJobs(provider: string, slug: string, fetchImpl: typeof fetch): Promise<number> {
+  const contract = ATS_PROVIDERS.find((c) => c.provider === provider);
+  if (!contract) return -1;
+  try {
+    const res = await fetchImpl(atsBoardContract(provider as AtsProvider).endpoint(slug), {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (res.status !== 200) return -1;
+    return countWaveAtsJobs(provider, await res.text());
+  } catch {
+    return -1;
+  }
+}
+
 export function publicApiCounter(fetchImpl: typeof fetch): JobsCounter {
   return (provider, slug) => {
     if (provider === 'workday') return workdayJobs(slug, fetchImpl);
     if (provider === 'bamboohr') return bamboohrJobs(slug, fetchImpl);
-    return boardJobs({ provider: provider as DiscoveredProvider, slug }, fetchImpl);
+    if (PROVIDER_NAMES.has(provider)) return boardJobs({ provider: provider as DiscoveredProvider, slug }, fetchImpl);
+    return waveJobs(provider, slug, fetchImpl);
   };
 }
 

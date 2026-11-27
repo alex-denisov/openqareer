@@ -387,12 +387,14 @@ describe('JobSpy sources in default registry', () => {
     expect(source?.disabledReason).toContain('Анти-бот');
   });
 
-  it('keeps Bayt and BDJobs off with a named reason', () => {
-    for (const id of ['src-bayt', 'src-bdjobs']) {
-      const source = DEFAULT_VACANCY_SOURCES.find((s) => s.id === id);
-      expect(source?.enabled).toBe(false);
-      expect(source?.disabledReason).toBeTruthy();
-    }
+  it('enables Bayt (robots block lifted) and keeps BDJobs measurement after it was switched off', () => {
+    const bayt = DEFAULT_VACANCY_SOURCES.find((s) => s.id === 'src-bayt');
+    expect(bayt?.enabled).toBe(true);
+    expect(bayt?.addressStatus).toBe('live');
+
+    const bdjobs = DEFAULT_VACANCY_SOURCES.find((s) => s.id === 'src-bdjobs');
+    expect(bdjobs?.enabled).toBe(false);
+    expect(bdjobs?.disabledReason).toBeTruthy();
   });
 
   it('keeps the BDJobs measurement after it was switched off', () => {

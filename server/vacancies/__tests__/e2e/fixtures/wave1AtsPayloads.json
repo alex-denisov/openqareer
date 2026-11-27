@@ -1,0 +1,217 @@
+{
+  "phenom": {
+    "company": "Core42",
+    "board": "careers.g42.ai",
+    "payload": {
+      "refineSearch": {
+        "status": 200,
+        "data": {
+          "totalHits": 2,
+          "jobs": [
+            {
+              "jobId": "C42-1001",
+              "jobSeqNo": "COR4GB1001",
+              "title": "Senior Cloud Platform Engineer",
+              "companyName": "Core42",
+              "cityStateCountry": "Abu Dhabi, United Arab Emirates",
+              "location": "Abu Dhabi, UAE",
+              "postedDate": "2026-11-20T09:00:00Z",
+              "applyUrl": "https://careers.g42.ai/core42/global/en/job/COR4GB1001/Senior-Cloud-Platform-Engineer",
+              "descriptionTeaser": "Design and operate sovereign AI cloud Kubernetes clusters and distributed GPU infrastructure across Core42 regions.",
+              "type": "Full time",
+              "isRemote": false
+            },
+            {
+              "jobId": "C42-1002",
+              "jobSeqNo": "COR4GB1002",
+              "title": "Staff AI Systems Architect (Remote)",
+              "companyName": "Core42",
+              "cityStateCountry": "Remote, United Arab Emirates",
+              "location": "Remote",
+              "postedDate": "2026-11-22T12:30:00Z",
+              "applyUrl": "https://careers.g42.ai/core42/global/en/job/COR4GB1002/Staff-AI-Systems-Architect",
+              "descriptionTeaser": "Lead inference serving architecture and multi-tenant LLM orchestration pipelines.",
+              "type": "Full time",
+              "isRemote": true
+            }
+          ]
+        }
+      }
+    }
+  },
+  "successfactors": {
+    "company": "G42",
+    "board": "jobs.g42.ai",
+    "payload": {
+      "jobSearchResult": [
+        {
+          "response": {
+            "id": "SF-4201",
+            "unifiedStandardTitle": "Principal Data Infrastructure Engineer",
+            "jobLocation": "Abu Dhabi, AE",
+            "postedDate": "2026-11-21T08:00:00Z",
+            "url": "https://jobs.g42.ai/job/Abu-Dhabi-Principal-Data-Infrastructure-Engineer/104201/",
+            "description": "Build large-scale streaming and lakehouse data platforms for G42 group companies.",
+            "employmentType": "Full-time"
+          }
+        },
+        {
+          "response": {
+            "id": "SF-4202",
+            "unifiedStandardTitle": "Site Reliability Engineer",
+            "jobLocation": "Remote",
+            "postedDate": "2026-11-23T10:15:00Z",
+            "url": "https://jobs.g42.ai/job/Remote-Site-Reliability-Engineer/104202/",
+            "description": "Automate observability, incident response, and capacity engineering for mission-critical services.",
+            "employmentType": "Full-time"
+          }
+        }
+      ]
+    }
+  },
+  "jazzhr": {
+    "company": "Aramco Services",
+    "board": "aramcoservices",
+    "payload": [
+      {
+        "id": "job_20261120_001",
+        "title": "Backend TypeScript Engineer",
+        "city": "Houston",
+        "state": "TX",
+        "country_id": "United States",
+        "type": "Full Time",
+        "department": "Engineering",
+        "original_open_date": "2026-11-18",
+        "description": "Develop resilient APIs and event-driven services in TypeScript and PostgreSQL.",
+        "board_code": "aramcoservices"
+      },
+      {
+        "id": "job_20261121_002",
+        "title": "Remote DevOps Specialist",
+        "city": "Remote",
+        "state": "",
+        "country_id": "United States",
+        "type": "Full Time",
+        "department": "Infrastructure",
+        "original_open_date": "2026-11-21",
+        "description": "Manage Terraform modules, CI/CD pipelines, and cloud security posture.",
+        "board_code": "aramcoservices"
+      }
+    ]
+  },
+  "rippling": {
+    "company": "3MS Services LLC",
+    "board": "3msservicesllc",
+    "payload": [
+      {
+        "uuid": "rip-9001",
+        "name": "Senior Full Stack Engineer",
+        "workLocation": { "label": "San Francisco, CA", "isRemote": false },
+        "department": { "label": "Product Engineering" },
+        "employmentType": "FULL_TIME",
+        "createdAt": "2026-11-19T14:00:00Z",
+        "url": "https://ats.rippling.com/3msservicesllc/jobs/rip-9001",
+        "description": "Own end-to-end delivery of customer-facing React and Node.js workflows."
+      },
+      {
+        "uuid": "rip-9002",
+        "name": "Distributed Systems Engineer (Remote)",
+        "workLocation": { "label": "Remote - US", "isRemote": true },
+        "department": { "label": "Platform" },
+        "employmentType": "FULL_TIME",
+        "createdAt": "2026-11-23T09:30:00Z",
+        "url": "https://ats.rippling.com/3msservicesllc/jobs/rip-9002",
+        "description": "Scale high-throughput scheduling workers and storage layers."
+      }
+    ]
+  },
+  "comeet": {
+    "company": "Overwolf",
+    "board": "overwolf/B1.001",
+    "payload": [
+      {
+        "uid": "CM-41A",
+        "name": "Senior Gameplay Platform Engineer",
+        "department": "R&D",
+        "location": { "name": "Tel Aviv, Israel", "is_remote": false },
+        "employment_type": "Full-Time",
+        "position_url": "https://www.comeet.com/jobs/overwolf/B1.001/senior-gameplay-platform-engineer/CM-41A",
+        "time_updated": "2026-11-21T11:00:00Z",
+        "details": [{ "name": "Description", "value": "Build SDK integrations and desktop overlay services." }]
+      }
+    ]
+  },
+  "hibob": {
+    "company": "50 Sport",
+    "board": "50sport",
+    "payload": {
+      "postings": [
+        {
+          "id": "hb-301",
+          "title": "Product Data Analyst",
+          "site": "London, UK",
+          "remote": true,
+          "department": "Analytics",
+          "employmentType": "Full-time",
+          "publishedAt": "2026-11-20T10:00:00Z",
+          "applyUrl": "https://50sport.careers.hibob.com/jobs/hb-301",
+          "description": "Analyze funnel conversion, retention metrics, and experiment outcomes."
+        }
+      ]
+    }
+  },
+  "gem": {
+    "company": "11x",
+    "board": "11x-ai",
+    "payload": {
+      "jobs": [
+        {
+          "id": "gem-771",
+          "title": "Applied AI Engineer",
+          "location": { "name": "London / Remote", "is_remote": true },
+          "department": "AI",
+          "employment_type": "full_time",
+          "absolute_url": "https://jobs.gem.com/11x-ai/gem-771",
+          "updated_at": "2026-11-22T15:00:00Z",
+          "content": "Design multi-agent evaluation pipelines and low-latency inference services."
+        }
+      ]
+    }
+  },
+  "manatal": {
+    "company": "Syfe",
+    "board": "syfe",
+    "payload": {
+      "results": [
+        {
+          "id": 88412,
+          "title": "Staff Backend Engineer (Wealth)",
+          "location_display": "Singapore",
+          "is_remote": false,
+          "contract_type": "Full-time",
+          "created_at": "2026-11-18T06:00:00Z",
+          "apply_url": "https://careers.manatal.com/syfe/88412",
+          "description": "Architect ledger and brokerage execution services."
+        }
+      ]
+    }
+  },
+  "deel": {
+    "company": "Deel",
+    "board": "deel",
+    "payload": {
+      "data": [
+        {
+          "id": "dl-5510",
+          "title": "Senior Staff Security Engineer",
+          "location": "Remote, Global",
+          "isRemote": true,
+          "employmentType": "Full-time",
+          "publishedAt": "2026-11-24T07:00:00Z",
+          "url": "https://jobs.deel.com/deel/dl-5510",
+          "description": "Lead cloud security architecture across global payroll infrastructure."
+        }
+      ]
+    }
+  }
+}

@@ -4,7 +4,19 @@ import type { HhTextRateController } from './hhTextRate';
 /* eslint-disable max-lines -- source synchronization and membership lifecycle
    are intentionally kept together so replacement, expiry and reclustering share
    one transaction boundary. */
-import { parseAtsBoardSourceId } from './atsBoardAdapters';
+import { atsBoardSourceId, parseAtsBoardSourceId, type AtsProvider } from './atsBoardAdapters';
+import { atsBoardSource } from './atsBoardSources';
+import { isAtsBoardSourceId } from './atsSourceId';
+import {
+  COMPANY_SITE_SOURCE_PREFIX,
+  LINKEDIN_COMPANY_SOURCE_PREFIX,
+  isAtsUnavailable,
+  isSiteFallbackWarranted,
+  type DirectoryCompany,
+  type ResolvedCompanyChannel,
+  type SourceStateSummary,
+} from './companyDirectorySources';
+import { HostPausedError } from './hostRequestPacer';
 import type { ChipCounts } from './catalogChips';
 import type { CatalogChipQuery } from './vacancyPoolStore';
 import type { SalaryStats } from './catalogSalaryStats';
@@ -25,7 +37,7 @@ import {
   IncrementalClusterBuilder,
   memberKeysOf,
 } from './vacancyDeduplicator';
-import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
+import { DEFAULT_VACANCY_SOURCES, type RegisteredVacancySource } from './defaultVacancySources';
 import { mapWithConcurrency } from './boundedConcurrency';
 import {
   DEFAULT_LINK_SAMPLE,
@@ -36,6 +48,7 @@ import {
 import type { RobotsPolicyLoader } from './robotsPolicyLoader';
 import {
   censusOfReading,
+  classifySourceFailure,
   describeSourceHealth,
   emptySourceObservations,
   isDeadSource,
@@ -170,6 +183,7 @@ export interface SourceSyncOutcome {
     | 'error'
     | 'unknown_source'
     | 'disabled'
+    | 'held'
     | 'skipped_needs_query'
     /** B628: канал компании не ответил за отведённое полосе время; опрос идёт дальше в фоне. */
     | 'lane_timeout';
@@ -277,11 +291,12 @@ function logStaleIntake(
 }
 
 /**
- * B642: полное чтение доски работодателя подтверждает, что вакансия открыта, —
- * её дата публикации не важна. Остальным — 30 дней от публикации.
+ * B642 / F5: чтение доски работодателя подтверждает, что вакансия открыта
+ * (включая частичное чтение ATS-ленты — незамеченные снимаются по сроку в poolPruneBatches).
+ * Остальным источникам (агрегаторы, LinkedIn) — 30 дней от публикации.
  */
-function keptOnIntake(vacancy: UnifiedVacancy, sourceId: string, partial: boolean): boolean {
-  return isVacancyFresh(vacancy.publishedAt) || (!partial && confirmsLiveness(sourceId));
+function keptOnIntake(vacancy: UnifiedVacancy, sourceId: string): boolean {
+  return isVacancyFresh(vacancy.publishedAt) || confirmsLiveness(sourceId);
 }
 
 function vacancyMembershipFields(vacancy: UnifiedVacancy): string {
@@ -452,6 +467,36 @@ function extractErrorHttpDetails(err: unknown): { statusCode?: number; retryAfte
   return { statusCode: resolvedStatus, retryAfterHeader: retryAfterHeader ?? undefined };
 }
 
+function directoryChannelChanged(
+  current: VacancySourceConfig,
+  desired: VacancySourceConfig,
+): boolean {
+  return (
+    current.targetUrl !== desired.targetUrl ||
+    current.enabled !== desired.enabled ||
+    current.channelTier !== desired.channelTier ||
+    current.companyKey !== desired.companyKey ||
+    current.linkedinOrgId !== desired.linkedinOrgId
+  );
+}
+
+function mergeDirectoryChannel(
+  current: VacancySourceConfig,
+  desired: VacancySourceConfig,
+): VacancySourceConfig {
+  return {
+    ...current,
+    ...desired,
+    lastSyncAt: current.lastSyncAt,
+    lastStatus: current.lastStatus,
+    lastErrorMessage: desired.enabled ? current.lastErrorMessage : undefined,
+    itemsFoundTotal: current.itemsFoundTotal,
+    itemsActiveTotal: current.itemsActiveTotal,
+    syncRequestedAt: current.syncRequestedAt,
+    syncStartedAt: current.syncStartedAt,
+  };
+}
+
 export class MultiSourceVacancyEngine {
   private listingsCache: { at: number; value: CatalogListingSummary[] | undefined } | null = null;
   /** Whole-catalog total: the one count no listing summary covers. */
@@ -469,6 +514,9 @@ export class MultiSourceVacancyEngine {
   private fetcher?: SourceFetcher;
   private readonly holdSource: (source: VacancySourceConfig) => boolean;
   private readonly loadRequestedSource?: (sourceId: string) => VacancySourceConfig | undefined;
+  private readonly replanCompanyChannel?: (
+    companyKey: string,
+  ) => ResolvedCompanyChannel | undefined;
   private readonly companyLaneSourceTimeoutMs: number;
   /**
    * Где лежит пул. Движок не держит копию в куче: каждое чтение — вопрос к
@@ -532,11 +580,13 @@ export class MultiSourceVacancyEngine {
     /** Источник сейчас нельзя опрашивать (пауза бюджета LinkedIn): место в волне не занимает. */
     holdSource?: (source: VacancySourceConfig) => boolean;
     loadRequestedSource?: (sourceId: string) => VacancySourceConfig | undefined;
+    replanCompanyChannel?: (companyKey: string) => ResolvedCompanyChannel | undefined;
     /** B628: сколько полоса каналов компаний ждёт один источник, прежде чем освободить место. */
     companyLaneSourceTimeoutMs?: number;
   }) {
     this.holdSource = options?.holdSource ?? (() => false);
     this.loadRequestedSource = options?.loadRequestedSource;
+    this.replanCompanyChannel = options?.replanCompanyChannel;
     this.companyLaneSourceTimeoutMs =
       options?.companyLaneSourceTimeoutMs ?? COMPANY_LANE_SOURCE_TIMEOUT_MS;
     this.reclusterMode = options?.recluster ?? { mode: 'sync' };
@@ -559,12 +609,7 @@ export class MultiSourceVacancyEngine {
   }
 
   private configureSourcePoliteness(source: VacancySourceConfig): void {
-    const addressStatus = (source as { addressStatus?: string }).addressStatus;
-    if (addressStatus === 'robots_forbidden') {
-      this.scheduler.setRobotsPolicy(source.id, { verdict: 'disallowed' });
-    } else {
-      this.scheduler.setRobotsPolicy(source.id, { verdict: 'allowed' });
-    }
+    this.scheduler.setRobotsPolicy(source.id, { verdict: 'allowed' });
     if (source.lastSyncAt) {
       const parsed = Date.parse(source.lastSyncAt);
       if (!Number.isNaN(parsed)) {
@@ -603,9 +648,10 @@ export class MultiSourceVacancyEngine {
       const source = this.sources.get(state.sourceId);
       if (!source) continue;
       source.lastSyncAt = state.lastSyncAt;
-      source.lastStatus = state.lastStatus;
-      // A disabled source is not failing: its registry reason says why it is
-      // off, so an error stored before it was switched off is stale (03.11).
+      // По директиве владельца источники не отключаются навсегда из-за ошибок или robots.txt:
+      // прежние `disabled`-записи восстанавливаются как приостановленные `error` для повторного опроса после паузы.
+      source.lastStatus =
+        state.lastStatus === 'disabled' && source.enabled ? 'error' : state.lastStatus;
       source.lastErrorMessage = source.enabled ? state.lastErrorMessage : undefined;
       source.itemsFoundTotal = state.itemsFoundTotal;
       source.itemsActiveTotal = state.itemsActiveTotal;
@@ -877,6 +923,170 @@ export class MultiSourceVacancyEngine {
     this.sources.set(source.id, { ...source });
     this.rememberRight(source);
     this.configureSourcePoliteness(source);
+  }
+
+  /**
+   * Инкрементально синхронизирует каналы справочника компаний без рестарта воркера (Phase 0):
+   * сохраняет накопленную статистику и расписание для неизменённых источников,
+   * добавляет/обновляет изменившиеся и отключает удалённые `src-company-*`.
+   */
+  public syncDirectoryChannels(desiredSources: readonly VacancySourceConfig[]): {
+    readonly added: number;
+    readonly updated: number;
+    readonly disabled: number;
+    readonly total: number;
+  } {
+    let added = 0;
+    let updated = 0;
+    let disabled = 0;
+    const desiredIds = new Set<string>();
+    for (const desired of desiredSources) {
+      desiredIds.add(desired.id);
+      const current = this.sources.get(desired.id);
+      if (!current) {
+        this.addOrUpdateSource(desired);
+        added += 1;
+      } else if (directoryChannelChanged(current, desired)) {
+        this.addOrUpdateSource(mergeDirectoryChannel(current, desired));
+        updated += 1;
+      }
+    }
+    for (const [id, current] of this.sources) {
+      if (id.startsWith('src-company-') && !desiredIds.has(id) && current.enabled) {
+        this.addOrUpdateSource({ ...current, enabled: false, lastErrorMessage: undefined });
+        disabled += 1;
+      }
+    }
+    return { added, updated, disabled, total: this.sources.size };
+  }
+
+  private retireReplacedChannels(retiredSourceIds: readonly string[]): boolean {
+    let changed = false;
+    for (const retiredId of retiredSourceIds) {
+      const existing = this.sources.get(retiredId);
+      if (!existing) continue;
+      if (existing.id.startsWith(COMPANY_SITE_SOURCE_PREFIX) || isAtsBoardSourceId(existing.id)) {
+        if (existing.enabled) {
+          existing.enabled = false;
+          changed = true;
+        }
+      } else if (existing.channelTier === 1) {
+        existing.channelTier = 2;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /**
+   * F3 — динамически пересчитывает основной канал одной компании без рестарта
+   * процесса (при мёртвом/пустом сайте, закрытой ATS или удалении в `CareersPrune`).
+   */
+  public replanCompany(companyKey: string): boolean {
+    const resolved = this.replanCompanyChannel?.(companyKey);
+    if (!resolved) return false;
+    const retired = this.retireReplacedChannels(resolved.retiredSourceIds);
+    const primarySource = resolved.primary?.source;
+    if (!primarySource) return retired;
+
+    const existing = this.sources.get(primarySource.id);
+    if (existing?.enabled && existing.channelTier === 1 && existing.companyKey === companyKey) {
+      return retired;
+    }
+    const stored =
+      !existing && !this.observations.has(primarySource.id)
+        ? this.pool.loadSourceState?.(primarySource.id)
+        : undefined;
+    const nextSource: VacancySourceConfig = {
+      ...(existing ?? primarySource),
+      ...primarySource,
+      enabled: stored?.lastStatus === 'disabled' ? false : true,
+      channelTier: 1,
+      companyKey,
+      ...(stored?.lastSyncAt ? { lastSyncAt: stored.lastSyncAt } : {}),
+      ...(stored?.lastStatus ? { lastStatus: stored.lastStatus } : {}),
+      ...(stored?.lastErrorMessage ? { lastErrorMessage: stored.lastErrorMessage } : {}),
+    };
+    if (stored?.observations) {
+      this.observations.set(primarySource.id, stored.observations);
+      if (stored.observations.schedule) {
+        this.scheduler.importState({ [primarySource.id]: stored.observations.schedule });
+      }
+    }
+    this.addOrUpdateSource(nextSource);
+    return true;
+  }
+
+  /**
+   * F3 — согласует каналы компаний в памяти с новым планом без потери накопленных
+   * наблюдений и расписания.
+   */
+  public syncCompanyChannels(
+    sources: readonly RegisteredVacancySource[],
+  ): { added: number; updated: number; disabled: number } {
+    let added = 0;
+    let updated = 0;
+    let disabled = 0;
+    const nextById = new Map(sources.map((s) => [s.id, s]));
+
+    for (const [id, existing] of this.sources.entries()) {
+      if (nextById.has(id)) continue;
+      if (
+        existing.enabled &&
+        (id.startsWith(COMPANY_SITE_SOURCE_PREFIX) || id.startsWith(LINKEDIN_COMPANY_SOURCE_PREFIX))
+      ) {
+        existing.enabled = false;
+        disabled += 1;
+      }
+    }
+
+    for (const next of sources) {
+      const existing = this.sources.get(next.id);
+      if (!existing) {
+        this.addOrUpdateSource(next);
+        added += 1;
+        continue;
+      }
+      if (
+        existing.channelTier !== next.channelTier ||
+        existing.companyKey !== next.companyKey ||
+        existing.targetUrl !== next.targetUrl
+      ) {
+        existing.channelTier = next.channelTier;
+        existing.companyKey = next.companyKey;
+        existing.targetUrl = next.targetUrl;
+        updated += 1;
+      }
+    }
+    return { added, updated, disabled };
+  }
+
+  private maybeAutoReplan(source: VacancySourceConfig): void {
+    if (!this.replanCompanyChannel) return;
+    const companyKey =
+      source.companyKey ??
+      (source.id.startsWith(COMPANY_SITE_SOURCE_PREFIX)
+        ? source.id.slice(COMPANY_SITE_SOURCE_PREFIX.length)
+        : undefined);
+    if (!companyKey) return;
+
+    const obs = this.observations.get(source.id) ?? null;
+    const schedule = this.scheduler.exportSourceState(source.id) ?? obs?.schedule ?? null;
+    const summary: SourceStateSummary = {
+      sourceId: source.id,
+      lastStatus: source.lastStatus ?? null,
+      lastErrorMessage: source.lastErrorMessage ?? null,
+      itemsFoundTotal: source.itemsFoundTotal,
+      itemsActiveTotal: source.itemsActiveTotal,
+      observations: obs ? { ...obs, schedule } : null,
+    };
+    const sourceStates = new Map([[source.id, summary]]);
+    const shouldReplan = isAtsBoardSourceId(source.id)
+      ? isAtsUnavailable(source.id, { sourceStates, nowMs: this.now() })
+      : source.type === 'career_site'
+        ? isSiteFallbackWarranted(source.id, companyKey, { sourceStates, nowMs: this.now() })
+        : false;
+    if (shouldReplan) this.replanCompany(companyKey);
   }
 
   /**
@@ -1690,12 +1900,83 @@ export class MultiSourceVacancyEngine {
       partial,
       dropObservedBefore,
     );
+    if (fetched.length === 0) this.maybeAutoReplan(source);
     return {
       sourceId: source.id,
       status: 'healthy',
       fetched: fetched.length,
       kept,
       ...(replaceRefused ? { replaceRefused } : {}),
+    };
+  }
+
+  private isHoldError(err: unknown): boolean {
+    return err instanceof HostPausedError || (err instanceof Error && err.name === 'LinkedinPaused');
+  }
+
+  private async finishFailurePersistence(
+    source: VacancySourceConfig,
+    message: string,
+    failure: ReturnType<typeof classifySourceFailure>,
+    boardClosed: string | undefined,
+  ): Promise<boolean> {
+    const obs = this.observations.get(source.id);
+    const hitTerminal =
+      Boolean(boardClosed) ||
+      (failure.kind === 'terminal' &&
+        (failure.reason === 'board_gone' ||
+          (obs?.consecutiveTerminalFailures ?? 0) >= failure.threshold));
+    if (hitTerminal) {
+      await this.pauseFailingSource(source, boardClosed ?? message);
+    } else {
+      this.persistSourceState(source);
+    }
+    this.maybeAutoReplan(source);
+    return hitTerminal;
+  }
+
+  private async handleSyncFailure(
+    source: VacancySourceConfig,
+    err: unknown,
+    nowMs: number,
+  ): Promise<SourceSyncOutcome> {
+    const message = failureMessage(err);
+    if (this.isHoldError(err)) return { sourceId: source.id, status: 'held', fetched: 0, kept: 0, message };
+    if (message.startsWith('source_not_configured')) {
+      source.lastSyncAt = new Date(nowMs).toISOString();
+      source.lastStatus = 'degraded';
+      source.lastErrorMessage = message;
+      this.persistSourceState(source);
+      return { sourceId: source.id, status: 'disabled', fetched: 0, kept: 0, message };
+    }
+    const { statusCode, retryAfterHeader } = extractErrorHttpDetails(err);
+    const failure = classifySourceFailure(message, statusCode);
+    this.observe(source.id, {
+      succeeded: false,
+      atMs: nowMs,
+      notFound: statusCode === 404,
+      terminal: failure.kind === 'terminal',
+      terminalReason: failure.reason,
+      terminalThreshold: failure.threshold,
+    });
+    source.lastSyncAt = new Date(nowMs).toISOString();
+    source.lastStatus = 'error';
+    source.lastErrorMessage = message;
+    const boardClosed = await this.withdrawClosedBoard(source);
+    this.scheduler.recordAttempt(source.id, {
+      success: false,
+      statusCode,
+      terminal: failure.kind === 'terminal',
+      retryAfterHeader,
+      nowMs,
+    });
+    await this.finishFailurePersistence(source, message, failure, boardClosed);
+    return {
+      sourceId: source.id,
+      status: 'error',
+      fetched: 0,
+      kept: 0,
+      message: boardClosed ?? message,
     };
   }
 
@@ -1707,56 +1988,42 @@ export class MultiSourceVacancyEngine {
     const source = this.sources.get(sourceId);
     if (!source) return { sourceId, status: 'unknown_source', fetched: 0, kept: 0 };
     if (!source.enabled) return { sourceId, status: 'disabled', fetched: 0, kept: 0 };
-    // An endpoint that answers nothing usable without a search term must be
-    // skipped rather than recorded as an empty success (B164).
+    if (this.holdSource(source)) {
+      return { sourceId, status: 'held', fetched: 0, kept: 0, message: 'held_during_pause' };
+    }
     if (source.requiresQuery && !query?.trim()) {
       return { sourceId, status: 'skipped_needs_query', fetched: 0, kept: 0 };
     }
-
     try {
-      // No transport means the source was never contacted. Reporting that as a
-      // healthy empty result would be a measurement we never took (B161).
-      if (!this.fetcher) {
-        throw new Error('vacancy_source_transport_unavailable');
-      }
+      if (!this.fetcher) throw new Error('vacancy_source_transport_unavailable');
       const permission = await this.robotsPermission(source, nowMs);
-      if (permission.disallowed) {
-        // Запрет словами — не поломка: площадка сказала «не ходи», и продукт
-        // не ходит. Красным отказом это выглядеть не должно (B204).
-        return { sourceId, status: 'disabled', fetched: 0, kept: 0, message: permission.reason };
+      if (permission.rateLimited) {
+        this.scheduler.recordAttempt(source.id, {
+          success: false,
+          statusCode: 429,
+          retryAfterHeader: permission.retryAfterHeader,
+          nowMs,
+        });
+        return { sourceId, status: 'held', fetched: 0, kept: 0, message: 'robots_txt_rate_limited_429' };
       }
       return await this.readSource(source, query, nowMs);
     } catch (err) {
-      const message = failureMessage(err);
-      if (message.startsWith('source_not_configured')) {
-        // The tool this source needs is not installed here: say so once, do not
-        // log an error or a failed reading on every poll.
-        source.lastSyncAt = new Date(nowMs).toISOString();
-        source.lastStatus = 'degraded';
-        source.lastErrorMessage = message;
-        this.persistSourceState(source);
-        return { sourceId, status: 'disabled', fetched: 0, kept: 0, message };
-      }
-      // Провал транспорта — не пустой улов: про содержимое площадки он не
-      // говорит ничего, поэтому серию пустых уловов он не удлиняет (B200).
-      const { statusCode, retryAfterHeader } = extractErrorHttpDetails(err);
-      this.observe(source.id, { succeeded: false, atMs: nowMs, notFound: statusCode === 404 });
-      source.lastSyncAt = new Date(nowMs).toISOString();
-      source.lastStatus = 'error';
-      source.lastErrorMessage = message;
-      const boardClosed = await this.withdrawClosedBoard(source);
-      this.scheduler.recordAttempt(source.id, {
-        success: false,
-        statusCode,
-        retryAfterHeader,
-        nowMs,
-      });
-
-      this.persistSourceState(source);
-      // A failed reading is not evidence that the source went empty, so the
-      // slice it delivered last time stays until a successful run replaces it.
-      return { sourceId, status: 'error', fetched: 0, kept: 0, message: boardClosed ?? message };
+      return this.handleSyncFailure(source, err, nowMs);
     }
+  }
+
+  /**
+   * По директиве владельца сбоящие источники (в т.ч. 404/403/ENOTFOUND) не отключаются
+   * навсегда (`enabled` остаётся `true`), а ставятся на паузу планировщиком с автоматическим
+   * возобновлением после окончания отступа.
+   */
+  private async pauseFailingSource(
+    source: VacancySourceConfig,
+    message: string,
+  ): Promise<void> {
+    source.lastStatus = 'error';
+    source.lastErrorMessage = message;
+    this.persistSourceState(source);
   }
 
   /**
@@ -1799,7 +2066,7 @@ export class MultiSourceVacancyEngine {
     // Название площадки едет вместе с записью: на экране кандидат читает
     // источник, а не тип адаптера (PRB-017).
     const freshFetched = fetched
-      .filter((v) => keptOnIntake(v, source.id, readingPartial))
+      .filter((v) => keptOnIntake(v, source.id))
       .map((v) =>
         v.provenance ? { ...v, provenance: { ...v.provenance, sourceName: source.name } } : v,
       );
@@ -2080,10 +2347,14 @@ export class MultiSourceVacancyEngine {
 
   private persistSourceState(source: VacancySourceConfig, fullRead?: boolean): void {
     const observations = this.observations.get(source.id);
-    const schedule = this.scheduler.exportState()[source.id] ?? null;
+    const schedule = this.scheduler.exportSourceState(source.id) ?? null;
+    const savedObservations =
+      observations || schedule
+        ? { ...(observations ?? emptySourceObservations()), schedule }
+        : undefined;
     this.pool.saveSourceState({
       sourceId: source.id,
-      ...(observations ? { observations: { ...observations, schedule } } : {}),
+      ...(savedObservations ? { observations: savedObservations } : {}),
       ...(source.lastSyncAt ? { lastSyncAt: source.lastSyncAt } : {}),
       ...(source.lastStatus ? { lastStatus: source.lastStatus } : {}),
       ...(source.lastErrorMessage ? { lastErrorMessage: source.lastErrorMessage } : {}),
@@ -2099,7 +2370,33 @@ export class MultiSourceVacancyEngine {
   /** Доски, выключенные только из-за порции; ручное переключение их отсюда убирает. */
   private rolloutWaiting: Set<string> | undefined;
 
-  /** B641: на смене суток UTC включает доски ATS новой порции без перезапуска. */
+  private admitPlacementBoard(board: DirectoryCompany): void {
+    if (!board.atsProvider || !board.atsSlug) return;
+    const id = atsBoardSourceId(board.atsProvider as AtsProvider, board.atsSlug);
+    const existing = this.sources.get(id);
+    if (existing) {
+      if (!existing.enabled && existing.lastStatus !== 'disabled') existing.enabled = true;
+      return;
+    }
+    const stored = this.pool.loadSourceState?.(id);
+    if (stored?.lastStatus === 'disabled') return;
+    const built = atsBoardSource({
+      company: board.companyName,
+      provider: board.atsProvider as AtsProvider,
+      board: board.atsSlug,
+      jobs: 0,
+      observedAt: '',
+      lists: ['company_placement'],
+    });
+    if (!built.enabled) return;
+    if (stored?.observations) {
+      this.observations.set(id, stored.observations);
+      if (stored.observations.schedule) this.scheduler.importState({ [id]: stored.observations.schedule });
+    }
+    this.addOrUpdateSource({ ...built, channelTier: 1, companyKey: board.companyKey });
+  }
+
+  /** B641 / F10: на смене суток UTC включает доски ATS новой порции без перезапуска. */
   private admitRolloutDay(nowMs: number): void {
     const day = Math.floor(nowMs / 86_400_000);
     if (day === this.rolloutDay) return;
@@ -2114,6 +2411,9 @@ export class MultiSourceVacancyEngine {
       if (!source || atsRolloutAdmits(id, nowMs) !== true) continue;
       source.enabled = true;
       this.rolloutWaiting.delete(id);
+    }
+    for (const board of this.pool.loadAdmittedRolloutBoards?.(nowMs) ?? []) {
+      this.admitPlacementBoard(board);
     }
   }
 
@@ -2169,6 +2469,16 @@ export class MultiSourceVacancyEngine {
 
   /** Опрос канала компании с потолком ожидания: зависший сайт не держит место полосы. */
   private syncWithinLane(sourceId: string, nowMs: number): Promise<SourceSyncOutcome> {
+    const source = this.sources.get(sourceId);
+    if (source && this.holdSource(source)) {
+      return Promise.resolve({
+        sourceId,
+        status: 'held',
+        fetched: 0,
+        kept: 0,
+        message: 'held_during_pause',
+      });
+    }
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<SourceSyncOutcome>((resolve) => {
       timer = setTimeout(
@@ -2190,29 +2500,37 @@ export class MultiSourceVacancyEngine {
   }
 
   /**
-   * Спрашивает у площадки её собственное правило и подчиняется ему. Запрет
-   * словами — не отговорка расписания, а отказ от запроса: продукт не ходит
-   * туда, куда ему сказали не ходить (B204).
+   * Спрашивает у площадки `robots.txt` для соблюдения `Crawl-delay` и `429 Retry-After`.
+   * По директиве владельца `Disallow` в `robots.txt` и поле `robots_forbidden`
+   * не блокируют и не отключают опрос источника.
    */
   private async robotsPermission(
     source: VacancySourceConfig,
     nowMs: number,
-  ): Promise<{ disallowed: boolean; reason?: string }> {
+  ): Promise<{
+    disallowed: boolean;
+    reason?: string;
+    rateLimited?: boolean;
+    retryAfterHeader?: string | null;
+  }> {
     if (!this.robots) return { disallowed: false };
-    // Разрешение владельца поверх robots — только явное, с основанием в
-    // реестре (B217). Молчаливого исключения здесь нет.
     if (source.robotsOverride) return { disallowed: false };
     const policy = await this.robots.policyFor(source.targetUrl, nowMs);
-    if (policy.verdict === 'unconfirmed') return { disallowed: false };
-    this.scheduler.setRobotsPolicy(source.id, policy);
-    return policy.verdict === 'disallowed'
-      ? { disallowed: true, reason: 'robots_txt_disallows_this_address' }
-      : { disallowed: false };
+    if (policy.rateLimited) {
+      return {
+        disallowed: false,
+        rateLimited: true,
+        retryAfterHeader: policy.retryAfterHeader,
+      };
+    }
+    this.scheduler.setRobotsPolicy(source.id, {
+      verdict: 'allowed',
+      crawlDelaySeconds: policy.crawlDelaySeconds,
+    });
+    return { disallowed: false };
   }
 
   private isDue(source: VacancySourceConfig, nowMs: number): boolean {
-    const addressStatus = (source as { addressStatus?: string }).addressStatus;
-    if (addressStatus === 'robots_forbidden') return false;
     const interval = source.refreshIntervalMinutes * TIER_INTERVAL_FACTOR[tierOf(source)];
     const status = this.scheduler.isSourceDue(source.id, interval, nowMs);
     return status.due;

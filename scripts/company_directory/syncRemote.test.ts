@@ -60,4 +60,68 @@ describe('company directory sync to prod (B628)', () => {
     expect(sync(file, true).deleted).toBe(1);
     expect(keys(file)).toEqual(['acme:Acme', 'prod-import:Prod Import']);
   });
+  it('preserves prod-discovered website, careers, ATS and evidence when git fields are null', () => {
+    const file = path.join(mkdtempSync(path.join(tmpdir(), 'b628-sync-preserve-')), 'db.sqlite');
+    const db = new DatabaseSync(file);
+    db.exec(COMPANY_DIRECTORY_MIGRATION);
+    db.exec('ALTER TABLE company_directory ADD COLUMN evidence TEXT');
+    db.prepare(
+      `INSERT INTO company_directory (
+         company_key, company_name, website_url, careers_url, ats_provider, ats_slug,
+         source_type, created_at, updated_at, evidence
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      'acme',
+      'Acme',
+      'https://acme.com/',
+      'https://acme.com/careers',
+      'greenhouse',
+      'acme',
+      'ats_direct',
+      TS,
+      TS,
+      JSON.stringify({ siteDiscovery: { value: '2026-11-20', how: 'B643-9' } }),
+    );
+    db.close();
+
+    const row = {
+      companyKey: 'acme',
+      companyName: 'Acme Inc',
+      websiteUrl: null,
+      careersUrl: null,
+      linkedinUrl: 'https://www.linkedin.com/company/acme/jobs/',
+      linkedinOrgId: '999',
+      sourceType: 'linkedin_guest',
+      atsProvider: null,
+      atsSlug: null,
+      createdAt: TS,
+      updatedAt: TS,
+      evidence: { linkedinOrgId: { value: '999', how: 'verified' } },
+    };
+    execFileSync('node', [SCRIPT], {
+      input: `${JSON.stringify(row)}\n`,
+      env: { ...process.env, DB: file, DRY: '0', PRUNE: '0' },
+    });
+
+    const verify = new DatabaseSync(file);
+    const saved = verify
+      .prepare(
+        `SELECT company_name, website_url, careers_url, ats_provider, ats_slug, source_type, linkedin_org_id, evidence
+           FROM company_directory WHERE company_key = 'acme'`,
+      )
+      .get() as Record<string, string | null>;
+    verify.close();
+
+    expect(saved.company_name).toBe('Acme Inc');
+    expect(saved.website_url).toBe('https://acme.com/');
+    expect(saved.careers_url).toBe('https://acme.com/careers');
+    expect(saved.ats_provider).toBe('greenhouse');
+    expect(saved.ats_slug).toBe('acme');
+    expect(saved.source_type).toBe('ats_direct');
+    expect(saved.linkedin_org_id).toBe('999');
+    expect(JSON.parse(saved.evidence ?? '{}')).toEqual({
+      siteDiscovery: { value: '2026-11-20', how: 'B643-9' },
+      linkedinOrgId: { value: '999', how: 'verified' },
+    });
+  });
 });

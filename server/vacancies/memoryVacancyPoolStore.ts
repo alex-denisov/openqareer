@@ -256,6 +256,10 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     return true;
   }
 
+  loadSourceState(sourceId: string): StoredSourceState | undefined {
+    return this.states.get(sourceId);
+  }
+
   clearSourceSyncRequest(sourceId: string, requestedAt: string): boolean {
     const current = this.states.get(sourceId);
     if (!current || current.syncRequestedAt !== requestedAt) return false;

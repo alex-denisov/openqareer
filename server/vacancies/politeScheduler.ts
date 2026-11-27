@@ -17,6 +17,7 @@ export const DEFAULT_MAX_REQUESTS_PER_HOUR = 30;
 export const ONE_HOUR_MS = 60 * 60_000;
 export const STATUS_429_MIN_BACKOFF_MS = 15 * 60_000; // 15 minutes
 export const STATUS_403_MIN_BACKOFF_MS = 30 * 60_000; // 30 minutes
+export const TERMINAL_ERROR_MIN_BACKOFF_MS = 6 * 60 * 60_000; // 6 hours
 export const MAX_ADAPTATION_MULTIPLIER = 4.0;
 
 export interface SourceScheduleState {
@@ -25,6 +26,7 @@ export interface SourceScheduleState {
   readonly lastAttemptAtMs: number | null;
   readonly lastSuccessAtMs: number | null;
   readonly lastStatusCode: number | null;
+  readonly lastTerminalFailure?: boolean;
   readonly retryAfterUntilMs: number | null;
   readonly hourlyRequestTimestamps: readonly number[];
   readonly consecutiveUnchangedCount: number;
@@ -41,6 +43,7 @@ export interface SourceDueVerdict {
 export interface AttemptOutcome {
   readonly success: boolean;
   readonly statusCode?: number;
+  readonly terminal?: boolean;
   readonly retryAfterHeader?: string | null;
   readonly newItemsCount?: number;
   readonly nowMs?: number;
@@ -179,7 +182,7 @@ export class PoliteScheduler {
     const prev = this.getState(sourceId);
     this.states.set(sourceId, {
       ...prev,
-      robotsVerdict: policy.verdict,
+      robotsVerdict: policy.verdict === 'disallowed' ? 'allowed' : policy.verdict,
       crawlDelaySeconds: policy.crawlDelaySeconds ?? prev.crawlDelaySeconds,
     });
   }
@@ -198,6 +201,7 @@ export class PoliteScheduler {
         lastAttemptAtMs: nowMs,
         lastSuccessAtMs: nowMs,
         lastStatusCode: outcome.statusCode ?? 200,
+        lastTerminalFailure: false,
         retryAfterUntilMs: null,
         hourlyRequestTimestamps: updatedHourly,
         consecutiveUnchangedCount: consecutiveUnchanged,
@@ -211,6 +215,7 @@ export class PoliteScheduler {
         consecutiveFailures: prev.consecutiveFailures + 1,
         lastAttemptAtMs: nowMs,
         lastStatusCode: outcome.statusCode ?? prev.lastStatusCode,
+        lastTerminalFailure: outcome.terminal ?? false,
         retryAfterUntilMs: retryAfterUntil ?? prev.retryAfterUntilMs,
         hourlyRequestTimestamps: updatedHourly,
       });
@@ -223,10 +228,6 @@ export class PoliteScheduler {
     nowMs: number = Date.now(),
   ): SourceDueVerdict {
     const state = this.getState(sourceId);
-
-    if (state.robotsVerdict === 'disallowed') {
-      return { due: false, reason: 'robots_disallowed' };
-    }
 
     const retryCheck = this.checkRetryAfter(state, nowMs);
     if (!retryCheck.due) return retryCheck;
@@ -257,11 +258,14 @@ export class PoliteScheduler {
 
   private checkBackoff(state: SourceScheduleState, nowMs: number): SourceDueVerdict {
     if (state.consecutiveFailures > 0 && state.lastAttemptAtMs !== null) {
-      const backoffMs = calculateExponentialBackoffMs(
+      const baseBackoffMs = calculateExponentialBackoffMs(
         state.consecutiveFailures,
         state.lastStatusCode ?? undefined,
         this.config,
       );
+      const backoffMs = state.lastTerminalFailure
+        ? Math.min(this.config.ceilingBackoffMs, Math.max(baseBackoffMs, TERMINAL_ERROR_MIN_BACKOFF_MS))
+        : baseBackoffMs;
       const backoffUntilMs = state.lastAttemptAtMs + backoffMs;
       if (nowMs < backoffUntilMs) {
         const remainingSec = Math.ceil((backoffUntilMs - nowMs) / 1000);
@@ -384,6 +388,11 @@ export class PoliteScheduler {
     };
   }
 
+  public exportSourceState(sourceId: string): SourceScheduleState | undefined {
+    const state = this.states.get(sourceId);
+    return state ? { ...state } : undefined;
+  }
+
   public exportState(): Record<string, SourceScheduleState> {
     const result: Record<string, SourceScheduleState> = {};
     for (const [id, state] of this.states.entries()) {
@@ -407,7 +416,7 @@ export class PoliteScheduler {
             : [],
           consecutiveUnchangedCount: state.consecutiveUnchangedCount ?? 0,
           crawlDelaySeconds: state.crawlDelaySeconds ?? null,
-          robotsVerdict: state.robotsVerdict ?? 'allowed',
+          robotsVerdict: state.robotsVerdict === 'disallowed' ? 'allowed' : (state.robotsVerdict ?? 'allowed'),
         });
       }
     }

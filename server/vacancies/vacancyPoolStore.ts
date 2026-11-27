@@ -1,4 +1,5 @@
 import type { CatalogChip, ChipCounts } from './catalogChips';
+import type { DirectoryCompany } from './companyDirectorySources';
 import type { UnifiedVacancy, VacancyCluster, VacancySourceConfig } from '../domain/unifiedVacancy';
 import type { ClusterRepresentative, VacancyClusterLookup } from './vacancyDeduplicator';
 import type { SourceObservations } from './sourceHealthVerdict';
@@ -153,6 +154,8 @@ export interface VacancyPoolStore {
     dropObservedBefore?: string,
   ): Promise<MergeSliceResult>;
   loadSourceStates(): StoredSourceState[];
+  /** Point lookup for one source's state by primary key. */
+  loadSourceState?(sourceId: string): StoredSourceState | undefined;
   /** Only sources with a pending manual request: the 5 s worker poll (B641). */
   loadRequestedSourceSyncs?(): readonly {
     sourceId: string;
@@ -288,4 +291,6 @@ export interface VacancyPoolStore {
     updated: number;
     passFinished: boolean;
   };
+  /** B646-5 / F10: допущенные на указанный UTC-день доски из `company_placement`. */
+  loadAdmittedRolloutBoards?(nowMs: number): readonly DirectoryCompany[];
 }

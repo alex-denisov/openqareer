@@ -291,6 +291,7 @@ function SourcesBody({
 const PAUSE_LABELS = {
   no_fresh_vacancies: 'Приостановлен: нет свежих вакансий',
   links_not_opening: 'Приостановлен: ссылки не открываются',
+  terminal_failure: 'Отключён: источник недоступен',
 } as const;
 
 function SourceStatusBadge({ status, pausedBecause }: {
@@ -324,6 +325,9 @@ function SourceStatusBadge({ status, pausedBecause }: {
         <XCircle size={14} /> Ошибка
       </span>
     );
+  }
+  if (status === 'disabled') {
+    return <span className="admin-badge is-muted">Отключён</span>;
   }
   return <span className="admin-badge is-muted">Не проверялся</span>;
 }
