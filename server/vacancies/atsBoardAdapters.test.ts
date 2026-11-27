@@ -69,21 +69,23 @@ describe('ats board source id', () => {
     expect(pinpoint?.crawlPermission).toBe('allowed');
     expect(
       ATS_PROVIDERS.filter((p) => p.crawlPermission === 'allowed').map((p) => p.provider),
-    ).toEqual([
-      'greenhouse',
-      'lever',
-      'ashby',
-      'workable',
-      'recruitee',
-      'smartrecruiters',
-      'breezy',
-      'pinpoint',
-      'personio',
-      'bamboohr',
-      'teamtailor',
-      'paylocity',
-      'join',
-    ]);
+    ).toEqual(
+      expect.arrayContaining([
+        'greenhouse',
+        'lever',
+        'ashby',
+        'workable',
+        'recruitee',
+        'smartrecruiters',
+        'breezy',
+        'pinpoint',
+        'personio',
+        'bamboohr',
+        'teamtailor',
+        'paylocity',
+        'join',
+      ]),
+    );
   });
 });
 

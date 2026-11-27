@@ -1,5 +1,7 @@
 import { withTextSalary } from './textSalary';
 import { freshnessAnchorMs, VACANCY_POOL_INDEX_FIRST_SEEN_COLUMN } from './poolLiveness';
+import type { DirectoryCompany } from './companyDirectorySources';
+import { readRolloutPlacementBoards } from './placementBoardRollout';
 /* eslint-disable max-lines -- pool persistence and its bounded public projection
    share one SQLite transaction boundary. */
 import { readInWorker } from '../data/readInWorker';
@@ -217,7 +219,30 @@ const OBSERVATIONS_NEWER_WINS = `CASE
   ELSE vacancy_source_state.observations
 END`;
 
-const SOURCE_STATUSES = new Set(['healthy', 'degraded', 'error']);
+const SOURCE_STATUSES = new Set(['healthy', 'degraded', 'error', 'disabled']);
+
+function isGonePlacementMessage(message: string | undefined): boolean {
+  if (!message) return false;
+  return /^(?:board_closed:|vacancy_source_board_gone)/i.test(message) ||
+    /vacancy_source_unreachable:\s*(?:404|410)\b|ENOTFOUND/i.test(message);
+}
+
+function mapSourceStateRow(row: SourceStateRow): StoredSourceState {
+  const parsedObs = parseObservations(row.observations);
+  return {
+    sourceId: row.source_id,
+    ...(row.last_sync_at ? { lastSyncAt: row.last_sync_at } : {}),
+    ...(row.last_status && SOURCE_STATUSES.has(row.last_status)
+      ? { lastStatus: row.last_status as StoredSourceState['lastStatus'] }
+      : {}),
+    ...(row.last_error_message ? { lastErrorMessage: row.last_error_message } : {}),
+    itemsFoundTotal: row.items_found_total,
+    itemsActiveTotal: row.items_active_total,
+    ...(row.sync_requested_at ? { syncRequestedAt: row.sync_requested_at } : {}),
+    ...(row.sync_started_at ? { syncStartedAt: row.sync_started_at } : {}),
+    ...(parsedObs === undefined ? {} : { observations: parsedObs }),
+  };
+}
 
 /** Сколько строк дочитывается из `payload` за один шаг фонового прохода. */
 export const BACKFILL_CHUNK = 2_000;
@@ -1127,21 +1152,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   loadSourceStates(sourceIds?: readonly string[]): StoredSourceState[] {
-    return this.readSourceStateRows(sourceIds).map((row) => ({
-      sourceId: row.source_id,
-      ...(row.last_sync_at ? { lastSyncAt: row.last_sync_at } : {}),
-      ...(row.last_status && SOURCE_STATUSES.has(row.last_status)
-        ? { lastStatus: row.last_status as StoredSourceState['lastStatus'] }
-        : {}),
-      ...(row.last_error_message ? { lastErrorMessage: row.last_error_message } : {}),
-      itemsFoundTotal: row.items_found_total,
-      itemsActiveTotal: row.items_active_total,
-      ...(row.sync_requested_at ? { syncRequestedAt: row.sync_requested_at } : {}),
-      ...(row.sync_started_at ? { syncStartedAt: row.sync_started_at } : {}),
-      ...(parseObservations(row.observations) === undefined
-        ? {}
-        : { observations: parseObservations(row.observations) as SourceObservations }),
-    }));
+    return this.readSourceStateRows(sourceIds).map((row) => mapSourceStateRow(row));
+  }
+
+  loadSourceState(sourceId: string): StoredSourceState | undefined {
+    return this.loadSourceStates([sourceId])[0];
   }
 
   /**
@@ -1780,13 +1795,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private stampPlacementHealth(state: StoredSourceState): void {
     const checkedAt = state.lastSyncAt ? Date.parse(state.lastSyncAt) : Number.NaN;
     if (!state.lastStatus || !Number.isFinite(checkedAt)) return;
+    const placementHealth =
+      state.lastStatus === 'disabled' && isGonePlacementMessage(state.lastErrorMessage)
+        ? 'gone'
+        : state.lastStatus;
     this.database
       .prepare(
         `UPDATE company_placement SET health = ?, last_checked_at = ?,
            last_full_read_at = CASE WHEN ? = 1 THEN ? ELSE last_full_read_at END
          WHERE source_id = ?`,
       )
-      .run(state.lastStatus, checkedAt, state.fullRead === true ? 1 : 0, checkedAt, state.sourceId);
+      .run(placementHealth, checkedAt, state.fullRead === true ? 1 : 0, checkedAt, state.sourceId);
   }
 
   requestSourceSync(sourceId: string, requestedAt: string): void {
@@ -3405,6 +3424,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     } catch {
       return undefined;
     }
+  }
+
+  loadAdmittedRolloutBoards(nowMs: number): readonly DirectoryCompany[] {
+    return readRolloutPlacementBoards(this.database, nowMs);
   }
 
   close(): void {

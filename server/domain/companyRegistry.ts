@@ -24,6 +24,7 @@ import {
   NOTION_RELOCATION_SEEDS,
   TELEGRAPH_CURRENCY_REMOTE_SEEDS,
 } from './companySeeds';
+import defaultCompanyDirectorySeed from '../data/companyDirectorySeed.json';
 import type { UnifiedVacancy } from './unifiedVacancy';
 
 export interface CompanyQuery {
@@ -159,15 +160,84 @@ function matchesLocationAndAts(c: Company, query: CompanyQuery): boolean {
   return true;
 }
 
+interface DirectorySeedRow {
+  readonly companyKey: string;
+  readonly companyName: string;
+  readonly websiteUrl: string | null;
+  readonly careersUrl: string | null;
+  readonly linkedinUrl: string | null;
+  readonly atsProvider: string | null;
+  readonly atsSlug: string | null;
+  readonly status: string;
+  readonly geo: string | null;
+  readonly industry: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+function toCompanyFromDirectorySeed(row: DirectorySeedRow, canonical: string, domain: string | undefined): Company {
+  return {
+    id: `comp-${row.companyKey}`,
+    name: row.companyName,
+    canonicalName: canonical,
+    domain,
+    careersUrl: row.careersUrl ?? row.websiteUrl ?? undefined,
+    linkedinUrl: row.linkedinUrl ?? undefined,
+    industry: row.industry ?? undefined,
+    locations: row.geo ? [{ country: row.geo }] : [],
+    attributes: [],
+    atsProvider: (row.atsProvider as Company['atsProvider']) ?? undefined,
+    atsBoardToken: row.atsSlug ?? undefined,
+    verifiedVacanciesCount: 0,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 export class CompanyRegistry {
   private companies: Map<string, Company> = new Map();
   private domainIndex: Map<string, string> = new Map();
   private nameIndex: Map<string, string> = new Map();
+  private companyKeyIndex: Map<string, string> = new Map();
 
   constructor() {}
 
+  private mergeDirectorySeeds(): void {
+    const seeds = defaultCompanyDirectorySeed as readonly DirectorySeedRow[];
+    const ownerMatchedIds = new Set<string>();
+    for (const row of seeds) {
+      const canonical = normalizeCompanyName(row.companyName);
+      const domain = extractDomainFromUrl(row.websiteUrl ?? undefined) ?? extractDomainFromUrl(row.careersUrl ?? undefined);
+      const ownerCandidate = this.nameIndex.get(canonical);
+      const existingId =
+        this.companyKeyIndex.get(row.companyKey) ??
+        (ownerCandidate && !ownerMatchedIds.has(ownerCandidate) ? ownerCandidate : undefined);
+      if (existingId) {
+        ownerMatchedIds.add(existingId);
+        const existing = this.companies.get(existingId)!;
+        this.companyKeyIndex.set(row.companyKey, existingId);
+        this.companies.set(existingId, {
+          ...existing,
+          domain: existing.domain ?? domain,
+          careersUrl: existing.careersUrl ?? row.careersUrl ?? row.websiteUrl ?? undefined,
+          industry: existing.industry ?? row.industry ?? undefined,
+          atsProvider: existing.atsProvider ?? (row.atsProvider as Company['atsProvider']) ?? undefined,
+          atsBoardToken: existing.atsBoardToken ?? row.atsSlug ?? undefined,
+        });
+        continue;
+      }
+      const comp = toCompanyFromDirectorySeed(row, canonical, domain);
+      this.companies.set(comp.id, comp);
+      ownerMatchedIds.add(comp.id);
+      this.companyKeyIndex.set(row.companyKey, comp.id);
+      if (canonical && !this.nameIndex.has(canonical)) this.nameIndex.set(canonical, comp.id);
+      if (domain && !this.domainIndex.has(domain)) this.domainIndex.set(domain, comp.id);
+    }
+  }
+
   /**
-   * Loads the 4 verified owner lists from evidence directory and indexes all companies.
+   * Loads the 4 verified owner lists from evidence directory and indexes all companies,
+   * unified with companyDirectorySeed.json (F9 SSOT).
    */
   public loadOwnerLists(baseDir = DEFAULT_EVIDENCE_DIR): void {
     const records = loadRawRecords(baseDir);
@@ -175,6 +245,7 @@ export class CompanyRegistry {
     this.companies.clear();
     this.domainIndex.clear();
     this.nameIndex.clear();
+    this.companyKeyIndex.clear();
 
     for (const comp of merged) {
       this.companies.set(comp.id, comp);
@@ -183,6 +254,7 @@ export class CompanyRegistry {
         this.domainIndex.set(comp.domain, comp.id);
       }
     }
+    this.mergeDirectorySeeds();
   }
 
   public getAll(): readonly Company[] {
@@ -190,7 +262,10 @@ export class CompanyRegistry {
   }
 
   public getById(id: string): Company | undefined {
-    return this.companies.get(id);
+    const direct = this.companies.get(id);
+    if (direct) return direct;
+    const byKey = this.companyKeyIndex.get(id);
+    return byKey ? this.companies.get(byKey) : undefined;
   }
 
   public findByName(name: string): Company | undefined {

@@ -43,6 +43,8 @@ describe('companyLanePerHost (B628 throughput)', () => {
     expect(companyLanePerHost('boards-api.greenhouse.io')).toBe(16);
     expect(companyLanePerHost('api.lever.co')).toBe(16);
     expect(companyLanePerHost('api.ashbyhq.com')).toBe(16);
+    expect(companyLanePerHost('join.com')).toBe(16);
+    expect(companyLanePerHost('recruiting.paylocity.com')).toBe(16);
     expect(companyLanePerHost('www.example.com')).toBe(3);
   });
   it('pickCompanyLane accepts a per-host limit function', () => {

@@ -8,7 +8,7 @@ import type { UnifiedVacancy } from '../domain/unifiedVacancy';
  * ссылки на jobs.dou.ua и builtin.com из #501).
  */
 const ATS_LINK_HOSTS =
-  /(^|\.)(greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|recruitee\.com|smartrecruiters\.com|breezy\.hr|pinpointhq\.com|personio\.(de|com)|bamboohr\.com|myworkdayjobs\.com|comeet\.(co|com)|teamtailor\.com|jobvite\.com|icims\.com|successfactors\.(com|eu)|taleo\.net|eightfold\.ai|huntflow\.(ru|io))$/i;
+  /(^|\.)(greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|recruitee\.com|smartrecruiters\.com|breezy\.hr|pinpointhq\.com|personio\.(de|com)|bamboohr\.com|myworkdayjobs\.com|comeet\.(co|com)|teamtailor\.com|jobvite\.com|icims\.com|successfactors\.(com|eu)|taleo\.net|eightfold\.ai|huntflow\.(ru|io)|workstream\.us|rippling\.com|applytojob\.com)$/i;
 
 const MAX_TITLE_LENGTH = 140;
 const MIN_TITLE_LENGTH = 3;

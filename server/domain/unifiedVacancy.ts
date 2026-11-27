@@ -215,7 +215,7 @@ export interface VacancySourceConfig {
   targetUrl: string;
   refreshIntervalMinutes: number;
   lastSyncAt?: string;
-  lastStatus?: 'healthy' | 'degraded' | 'error';
+  lastStatus?: 'healthy' | 'degraded' | 'error' | 'disabled';
   lastErrorMessage?: string;
   itemsFoundTotal: number;
   itemsActiveTotal: number;

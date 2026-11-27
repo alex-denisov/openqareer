@@ -70,7 +70,7 @@ describe('MultiSourceVacancyEngine polite scheduling (B204)', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it('skips sources disallowed by robots_forbidden', async () => {
+  it('polls sources even if marked robots_forbidden without blocking', async () => {
     const fetcher = vi.fn(async () => [makeVacancy('v-1', 'src-forbidden')]);
     const engine = new MultiSourceVacancyEngine({
       sources: [
@@ -90,8 +90,8 @@ describe('MultiSourceVacancyEngine polite scheduling (B204)', () => {
     });
 
     const outcomes = await engine.syncDue(BASE_TIME);
-    expect(outcomes).toHaveLength(0);
-    expect(fetcher).not.toHaveBeenCalled();
+    expect(outcomes).toHaveLength(1);
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it('adapts poll interval when source yields 0 new vacancies and snaps back on new items', async () => {

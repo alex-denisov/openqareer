@@ -11,6 +11,10 @@ export type DetectedAtsProvider =
   | 'teamtailor'
   | 'personio'
   | 'pinpoint'
+  | 'comeet'
+  | 'phenom'
+  | 'successfactors'
+  | 'workstream'
   | 'dou';
 
 export interface DetectedAts {
@@ -133,6 +137,46 @@ const ATS_MATCHERS: Array<(text: string) => DetectedAts | null> = [
     return {
       provider: 'dou',
       endpointUrl: `https://jobs.dou.ua/companies/${m[1]}/vacancies/`,
+      orgId: m[1],
+    };
+  },
+  (text) => {
+    const urlMatch = text.match(/comeet\.com\/jobs\/([a-z0-9_-]+\/[a-z0-9._-]+)/i);
+    const widget = text.match(/data-company-uid=["']([a-z0-9._-]+)["']/i);
+    const orgId = urlMatch?.[1] ?? widget?.[1];
+    if (!orgId && !/comeet-widget|comeet\.co\/careers-api/i.test(text)) return null;
+    const [uid, tok] = (orgId ?? '').split('/');
+    return {
+      provider: 'comeet',
+      endpointUrl: uid ? `https://www.comeet.co/careers-api/2.0/company/${uid}/positions?token=${tok ?? ''}&details=true` : '',
+      orgId: orgId ?? undefined,
+    };
+  },
+  (text) => {
+    if (!/window\.phApp\b|phenompeople\.com|eagerLoadRefineSearch/i.test(text)) return null;
+    const hostMatch = text.match(/https?:\/\/([a-z0-9.-]+)\/[^"'\s]*?(?:search-results|careers-home|job\/)/i);
+    return {
+      provider: 'phenom',
+      endpointUrl: hostMatch?.[1] ? `https://${hostMatch[1]}/widgets` : '',
+      orgId: hostMatch?.[1],
+    };
+  },
+  (text) => {
+    const sf = text.match(/https?:\/\/(jobs\.[a-z0-9.-]+)\/(?:job\/|search\/)/i);
+    const host = sf?.[1] ?? text.match(/https?:\/\/([a-z0-9.-]+\.successfactors\.(?:com|eu))/i)?.[1];
+    if (!host) return null;
+    return {
+      provider: 'successfactors',
+      endpointUrl: `https://${host}/services/recruiting/v1/jobs`,
+      orgId: host,
+    };
+  },
+  (text) => {
+    const m = text.match(/apply\.workstream\.us\/([a-z0-9_-]+)/i);
+    if (!m?.[1]) return null;
+    return {
+      provider: 'workstream',
+      endpointUrl: `https://api.workstream.us/api/v1/companies/${m[1]}/jobs`,
       orgId: m[1],
     };
   },

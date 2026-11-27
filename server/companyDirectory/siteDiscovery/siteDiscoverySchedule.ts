@@ -11,7 +11,13 @@ import { resolveCompany } from './deterministicResolver';
 import { politeFetch } from './hostLimiter';
 import { publicApiCounter } from '../freehire/freehireRepoCheck';
 import { DirectAtsDiscovery, DIRECT_ATS_FRESH_MS } from './directAtsDiscovery';
-import { directoryWindowEnd, orderByVacancies, readPendingPage, vacancyCounts, writeDiscovery, type HostCheck, type PendingCompany } from './siteDiscovery';
+import {
+  directoryWindowEnd,
+  readPendingPage,
+  writeDiscovery,
+  type HostCheck,
+  type PendingCompany,
+} from './siteDiscovery';
 
 interface Log {
   info(details: Record<string, unknown>, message: string): void;
@@ -27,6 +33,8 @@ const BETWEEN_MS = 5_000;
 const WINDOW = 500;
 const QUEUE_TTL_MS = 6 * 60 * 60_000;
 const IDLE_MS = 10 * 60_000;
+const MAX_QUEUE_BUFFER = 500;
+const DEMAND_PREFETCH_LIMIT = 100;
 
 export interface TickResult {
   readonly checked: number;
@@ -36,15 +44,40 @@ export interface TickResult {
   readonly liveDirectBoards: number;
 }
 
+function loadDemandPriorityRows(database: DatabaseSync): PendingCompany[] {
+  const hasVc = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'vacancy_company'")
+    .get();
+  if (!hasVc) return [];
+  const rows = database
+    .prepare(
+      `SELECT d.company_key AS companyKey, d.company_name AS companyName,
+              d.website_url AS websiteUrl, d.linkedin_url AS linkedinUrl,
+              json_extract(d.evidence, '$.careersUrlDropped.value') AS droppedCareersUrl,
+              CASE WHEN d.evidence IS NOT NULL AND instr(d.evidence, 'B643-9') > 0 THEN 1 ELSE 0 END AS siteSearched
+         FROM (SELECT company_key, count(*) AS cnt FROM vacancy_company GROUP BY company_key ORDER BY cnt DESC LIMIT ?) v
+         JOIN company_directory d ON d.company_key = v.company_key
+        WHERE d.status = 'active' AND d.ats_provider IS NULL
+          AND NOT EXISTS (SELECT 1 FROM company_placement p WHERE p.company_key = d.company_key AND p.type = 'ats')
+        ORDER BY v.cnt DESC`,
+    )
+    .all(DEMAND_PREFETCH_LIMIT) as unknown as Array<
+    Omit<PendingCompany, 'siteSearched'> & { siteSearched: number }
+  >;
+  return rows.map(({ siteSearched, ...rest }) => ({
+    ...rest,
+    ...(siteSearched ? { siteSearched: true } : {}),
+  }));
+}
+
 /**
- * Pending companies, most pool vacancies first. The directory is read in windows
- * of WINDOW rows with the event loop free between them; the list is reread when older
- * than QUEUE_TTL_MS. A drained list is not: companies with a known board stay pending,
- * and rereading for them held 75 % of the maintenance CPU (B761, prod 25.11).
+ * Pending companies bounded in memory (`MAX_QUEUE_BUFFER`), scanning primary-key windows (`B761`).
+ * Once a full pass finishes, re-reading rests for `QUEUE_TTL_MS` (6 h).
  */
 export class PendingQueue {
   private items: PendingCompany[] = [];
-  private readAt = -Infinity;
+  private cursor = '';
+  private exhaustedAt = -Infinity;
 
   constructor(
     private readonly database: DatabaseSync,
@@ -53,34 +86,50 @@ export class PendingQueue {
   ) {}
 
   async next(count: number): Promise<readonly PendingCompany[]> {
-    if (this.now() - this.readAt > QUEUE_TTL_MS) await this.refresh();
+    if (
+      this.items.length === 0 &&
+      (this.cursor !== '' || this.now() - this.exhaustedAt > QUEUE_TTL_MS)
+    ) {
+      await this.refresh(count);
+    }
     return this.items.splice(0, count);
   }
 
-  private async refresh(): Promise<void> {
-    const all: PendingCompany[] = [];
-    let after = '';
+  private async refresh(requestedCount: number): Promise<void> {
     const directSince = this.direct ? this.now() - DIRECT_ATS_FRESH_MS : undefined;
-    for (;;) {
-      const until = directoryWindowEnd(this.database, after, WINDOW);
-      if (until === undefined) break;
-      all.push(...readPendingPage(this.database, after, WINDOW, directSince, until));
-      after = until;
+    const buffered: PendingCompany[] =
+      this.cursor === '' ? loadDemandPriorityRows(this.database) : [];
+    const seen = new Set(buffered.map((c) => c.companyKey));
+    const cap = Math.max(requestedCount, MAX_QUEUE_BUFFER);
+
+    while (buffered.length < cap) {
+      const until = directoryWindowEnd(this.database, this.cursor, WINDOW);
+      if (until === undefined) {
+        this.cursor = '';
+        this.exhaustedAt = this.now();
+        break;
+      }
+      for (const c of readPendingPage(this.database, this.cursor, WINDOW, directSince, until)) {
+        if (!seen.has(c.companyKey)) {
+          seen.add(c.companyKey);
+          buffered.push(c);
+        }
+      }
+      this.cursor = until;
       await new Promise((resolve) => setImmediate(resolve));
     }
-    const ordered = orderByVacancies(all, vacancyCounts(this.database));
+
     if (this.direct) {
       const priority: PendingCompany[] = [];
       const fallback: PendingCompany[] = [];
-      for (const company of ordered) {
+      for (const company of buffered) {
         if (this.direct.prioritized(company)) priority.push(company);
         else if (!company.siteSearched) fallback.push(company);
       }
       this.items = [...priority, ...fallback];
     } else {
-      this.items = ordered;
+      this.items = buffered;
     }
-    this.readAt = this.now();
   }
 }
 
@@ -121,6 +170,7 @@ export async function runSiteDiscoveryTick(
         {
           companyKey: found.companyKey,
           evidence: found.evidence,
+          ...(found.websiteUrl ? { websiteUrl: found.websiteUrl } : {}),
           ...(found.evidence.careersUrl ? { careersUrl: found.careersUrl } : {}),
           ...(found.hhEmployerIds && found.hhEmployerIds.length > 0 ? { hhEmployerIds: found.hhEmployerIds } : {}),
         },

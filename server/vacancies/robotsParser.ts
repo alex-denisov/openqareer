@@ -201,8 +201,8 @@ export function evaluateRobotsPolicy(options: {
     };
   }
 
-  // 5xx Server Error or unreachable -> fail-closed unconfirmed
-  if (status >= 500 || options.robotsTxtContent === null) {
+  // 429 Too Many Requests / 5xx Server Error / unreachable -> fail-closed unconfirmed
+  if (status >= 500 || status === 429 || options.robotsTxtContent === null) {
     return {
       verdict: 'unconfirmed',
       crawlDelaySeconds: null,

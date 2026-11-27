@@ -41,7 +41,7 @@ export const COMPANY_LANE_CONCURRENCY = 24;
  */
 export const ATS_SERVICE_PER_HOST = 16;
 const ATS_API_HOST =
-  /(?:^|\.)(?:greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|recruitee\.com|personio\.(?:de|com)|pinpointhq\.com|breezy\.hr|bamboohr\.com|teamtailor\.com|myworkdayjobs\.com)$/;
+  /(?:^|\.)(?:greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|recruitee\.com|personio\.(?:de|com)|pinpointhq\.com|breezy\.hr|bamboohr\.com|teamtailor\.com|myworkdayjobs\.com|join\.com|recruiting\.paylocity\.com)$/;
 
 export function companyLanePerHost(host: string): number {
   return ATS_API_HOST.test(host) ? ATS_SERVICE_PER_HOST : COMPANY_LANE_PER_HOST;

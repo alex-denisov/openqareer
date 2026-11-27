@@ -128,24 +128,38 @@ export function readJoin(
   return listOf(payload, (value) => asArray(record(value).items)).map((item) => {
     const job = record(item);
     const city = record(job.city);
-    const location = joinParts([text(city.cityName), text(city.countryName)], ', ');
+    const location =
+      joinParts([text(city.cityName), text(city.countryName)], ', ') || text(job.location);
     const idParam = text(job.idParam);
+    const slugOrId = idParam || text(job.slug);
+    const directUrl = text(job.url) || text(job.applyUrl) || text(job.publicUrl);
+    const url = directUrl || (slugOrId ? `https://join.com/companies/${board}/${slugOrId}` : '');
+    const companyName = employer(
+      text(record(job.company).name) || text(job.companyName),
+      context,
+      board,
+    );
     const employmentType = text(record(job.employmentType).name);
+    const workplace = text(job.workplaceType).toUpperCase();
+    const remoteType = text(job.remoteType).toUpperCase();
     return buildJsonVacancy({
       sourceId,
       context,
-      externalId: text(job.id),
+      externalId: text(job.id) || slugOrId,
       title: text(job.title),
-      company: employer('', context, board),
+      company: companyName,
       location: location || undefined,
-      // workplaceType — главный признак; подпись места — запасной, название не в счёт.
-      isRemote: text(job.workplaceType) === 'REMOTE' || REMOTE_WORDS.test(location),
+      // workplaceType / remoteType — главный признак; подпись места — запасной.
+      isRemote:
+        workplace === 'REMOTE' ||
+        remoteType === 'ANYWHERE' ||
+        REMOTE_WORDS.test(location),
       // Список Join текста не несёт — описание есть только у карточки.
       description: joinParts([text(job.title), text(record(job.category).name)], ' · '),
       skills: [],
       employmentType: employmentType || undefined,
       // join.com/companies/<id>/<idParam> отвечает 301 на страницу с доменом компании.
-      url: idParam ? `https://join.com/companies/${board}/${idParam}` : '',
+      url,
       publishedAt: fromIso(job.createdAt),
     });
   });

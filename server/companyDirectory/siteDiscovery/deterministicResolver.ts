@@ -62,11 +62,43 @@ export function nameSlugs(name: string): readonly string[] {
   return words.length > 1 ? [joined, words.join('-')] : [joined];
 }
 
-async function readSite(company: PendingCompany, fetchImpl: typeof fetch, day: string, evidence: Record<string, unknown>, hostIsPublic: HostCheck) {
-  const site = company.websiteUrl && !LINKEDIN.test(company.websiteUrl) ? absolute(company.websiteUrl) : undefined;
-  if (!site) return { html: '' } as { html: string; careersUrl?: string; careersHtml?: string };
-  const home = await page(site, fetchImpl, hostIsPublic);
-  if (home.status === 0 || home.status >= 400) return { html: '' };
+async function resolveHomeSite(
+  company: PendingCompany,
+  fetchImpl: typeof fetch,
+  day: string,
+  evidence: Record<string, unknown>,
+  hostIsPublic: HostCheck,
+): Promise<{ status: number; url: string; html: string; websiteUrl?: string }> {
+  const known = company.websiteUrl && !LINKEDIN.test(company.websiteUrl) ? absolute(company.websiteUrl) : undefined;
+  if (known) {
+    const home = await page(known, fetchImpl, hostIsPublic);
+    return home;
+  }
+  const [slug] = nameSlugs(company.companyName);
+  if (!slug) return { status: 0, url: '', html: '' };
+  const guessed = `https://${slug}.com/`;
+  const home = await page(guessed, fetchImpl, hostIsPublic);
+  if (home.status === 200 && home.html.trim().length > 0) {
+    evidence.websiteUrl = { value: home.url, how: `B643-9 name domain guess, HTTP 200 on ${day}`, confirmed: true };
+    return { ...home, websiteUrl: home.url };
+  }
+  return { status: 0, url: '', html: '' };
+}
+
+function isSubstantialCareersPage(html: string): boolean {
+  if (careersPageVerdict(html) !== 'ok') return false;
+  return html.length > 500 || (html.length > 40 && /href=["'][^"']*\/(?:jobs?|careers?|positions?)\//i.test(html));
+}
+
+async function readSite(
+  company: PendingCompany,
+  fetchImpl: typeof fetch,
+  day: string,
+  evidence: Record<string, unknown>,
+  hostIsPublic: HostCheck,
+): Promise<{ html: string; websiteUrl?: string; careersUrl?: string; careersHtml?: string }> {
+  const home = await resolveHomeSite(company, fetchImpl, day, evidence, hostIsPublic);
+  if (home.status === 0 || home.status >= 400 || !home.url) return { html: '' };
   const origin = new URL(home.url).origin;
   const candidates = [
     ...careersLinks(home.html, home.url).map((url) => [url, 'home page link'] as const),
@@ -74,16 +106,15 @@ async function readSite(company: PendingCompany, fetchImpl: typeof fetch, day: s
   ];
   const dropped = company.droppedCareersUrl ?? null;
   for (const [url, how] of candidates) {
-    // B643: a page the prune step dropped is not offered again.
     if (url === dropped) continue;
     const result = await page(url, fetchImpl, hostIsPublic);
     if (result.url === dropped) continue;
-    if (result.status === 200 && result.html.length > 500 && careersPageVerdict(result.html) === 'ok') {
+    if (result.status === 200 && isSubstantialCareersPage(result.html)) {
       evidence.careersUrl = { value: result.url, how: `B643-9 ${how}, HTTP 200 on ${day}`, confirmed: true };
-      return { html: home.html, careersUrl: result.url, careersHtml: result.html };
+      return { html: home.html, websiteUrl: home.websiteUrl, careersUrl: result.url, careersHtml: result.html };
     }
   }
-  return { html: home.html };
+  return { html: home.html, websiteUrl: home.websiteUrl };
 }
 
 /** Joined slug at every provider; the hyphenated one only where boards use hyphens (lever, ashby). */
@@ -106,8 +137,15 @@ export async function resolveCompany(
   const pages = `${site.careersHtml ?? ''} ${site.html} ${site.careersUrl ?? ''}`;
   const hh = hhEmployerIds(pages);
   if (hh.length > 0) evidence.hhEmployer = { value: hh, how: `B643 hh employer link on company pages on ${day}`, confirmed: true };
-  const found = (rest: Omit<Discovery, 'companyKey' | 'careersUrl' | 'hhEmployerIds' | 'evidence'> = {}): Discovery =>
-    ({ companyKey: company.companyKey, careersUrl: site.careersUrl, ...(hh.length > 0 ? { hhEmployerIds: hh } : {}), ...rest, evidence });
+  const found = (rest: Omit<Discovery, 'companyKey' | 'websiteUrl' | 'careersUrl' | 'hhEmployerIds' | 'evidence'> = {}): Discovery =>
+    ({
+      companyKey: company.companyKey,
+      ...(site.websiteUrl ? { websiteUrl: site.websiteUrl } : {}),
+      careersUrl: site.careersUrl,
+      ...(hh.length > 0 ? { hhEmployerIds: hh } : {}),
+      ...rest,
+      evidence,
+    });
   const linked = boardsFromHtml(pages).slice(0, MAX_CANDIDATES);
   for (const candidate of linked) {
     const jobs = await boardJobs(candidate, fetchImpl);

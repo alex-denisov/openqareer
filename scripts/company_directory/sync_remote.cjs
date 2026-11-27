@@ -18,13 +18,32 @@ rl.on('close', () => {
       industry, domain_group, notes, created_at, updated_at, evidence)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(company_key) DO UPDATE SET company_name=excluded.company_name,
-      website_url=excluded.website_url, careers_url=excluded.careers_url,
-      linkedin_url=excluded.linkedin_url,
+      website_url=COALESCE(excluded.website_url, company_directory.website_url),
+      careers_url=COALESCE(excluded.careers_url, company_directory.careers_url),
+      linkedin_url=COALESCE(excluded.linkedin_url, company_directory.linkedin_url),
       linkedin_org_id=COALESCE(excluded.linkedin_org_id, company_directory.linkedin_org_id),
-      source_type=excluded.source_type, ats_provider=excluded.ats_provider,
-      ats_slug=excluded.ats_slug, status=excluded.status, geo=excluded.geo,
-      industry=excluded.industry, domain_group=excluded.domain_group, notes=excluded.notes,
-      updated_at=excluded.updated_at, evidence=excluded.evidence`);
+      source_type=CASE
+        WHEN excluded.ats_provider IS NULL AND company_directory.ats_provider IS NOT NULL
+          THEN company_directory.source_type
+        WHEN excluded.source_type = 'linkedin_guest'
+          AND (excluded.careers_url IS NULL OR excluded.careers_url LIKE '%linkedin.com%')
+          AND company_directory.careers_url IS NOT NULL
+          AND company_directory.careers_url NOT LIKE '%linkedin.com%'
+          THEN company_directory.source_type
+        ELSE excluded.source_type
+      END,
+      ats_provider=COALESCE(excluded.ats_provider, company_directory.ats_provider),
+      ats_slug=COALESCE(excluded.ats_slug, company_directory.ats_slug),
+      status=excluded.status,
+      geo=COALESCE(excluded.geo, company_directory.geo),
+      industry=COALESCE(excluded.industry, company_directory.industry),
+      domain_group=COALESCE(excluded.domain_group, company_directory.domain_group),
+      notes=COALESCE(excluded.notes, company_directory.notes),
+      updated_at=excluded.updated_at,
+      evidence=json_patch(
+        CASE WHEN json_valid(company_directory.evidence) THEN company_directory.evidence ELSE '{}' END,
+        CASE WHEN json_valid(excluded.evidence) THEN excluded.evidence ELSE '{}' END
+      )`);
     for (const r of rows) {
       key.run(r.companyKey);
       up.run(r.companyKey, r.companyName, r.websiteUrl ?? null, r.careersUrl ?? null,

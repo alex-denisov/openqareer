@@ -1,4 +1,5 @@
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
+import { ATS_PROVIDERS as BOARD_CONTRACTS } from './atsBoardAdapters';
 
 function parseMs(value: string | undefined): number | undefined {
   if (!value) return undefined;
@@ -31,24 +32,11 @@ const EMPLOYER_SITE_IDS: ReadonlySet<string> = new Set([
 const FREEHIRE_PREFIX = 'src-fh-';
 const FREEHIRE_AGGREGATORS: ReadonlySet<string> = new Set(['getmatch', 'habr-career']);
 const ATS_PROVIDERS: readonly string[] = [
-  'greenhouse',
-  'lever',
-  'ashby',
-  'workable',
-  'recruitee',
-  'smartrecruiters',
-  'breezy',
-  'pinpoint',
-  'personio',
-  'bamboohr',
-  'teamtailor',
+  ...BOARD_CONTRACTS.map((c) => c.provider),
   'workday',
   'icims',
   'jobvite',
   'oracle',
-  'paylocity',
-  'join',
-  'paycom',
 ];
 
 export type SourceKind =

@@ -35,6 +35,10 @@ export async function withRequestTimeout<T>(
   let expectedAt = clock() + timeoutMs;
   let graces = 0;
   let timer: ReturnType<typeof setTimeout>;
+  let rejectTimeout!: (reason?: unknown) => void;
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    rejectTimeout = reject;
+  });
 
   const onTimer = () => {
     const firedAt = clock();
@@ -44,12 +48,14 @@ export async function withRequestTimeout<T>(
       timer = setTimeout(onTimer, graceMs);
       return;
     }
-    controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
+    const err = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    controller.abort(err);
+    rejectTimeout(err);
   };
   timer = setTimeout(onTimer, timeoutMs);
 
   try {
-    return await run(controller.signal);
+    return await Promise.race([run(controller.signal), timeoutPromise]);
   } finally {
     clearTimeout(timer);
   }

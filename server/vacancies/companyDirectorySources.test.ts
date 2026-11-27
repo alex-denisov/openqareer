@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import {
+  isAtsUnavailable,
+  isSiteFallbackWarranted,
   planCompanyChannels,
+  readChannelHealthSummary,
   readDirectoryCompanies,
+  resolveCompanyChannel,
   type DirectoryCompany,
+  type SourceStateSummary,
 } from './companyDirectorySources';
+import { emptySourceObservations, recordReading } from './sourceHealthVerdict';
 import type { RegisteredVacancySource } from './defaultVacancySources';
 
 function source(over: Partial<RegisteredVacancySource>): RegisteredVacancySource {
@@ -47,8 +53,8 @@ const REGISTRY = [
   source({ id: 'src-hh', type: 'hh' as RegisteredVacancySource['type'] }),
 ];
 
-describe('planCompanyChannels (B622)', () => {
-  it('prefers the own career site over the company ATS and LinkedIn', () => {
+describe('planCompanyChannels (B622 / Phase 1 F2+F3)', () => {
+  it('prefers company ATS over the own career site and LinkedIn', () => {
     const plan = planCompanyChannels(REGISTRY, [
       company({
         websiteUrl: 'https://acme.com',
@@ -58,6 +64,45 @@ describe('planCompanyChannels (B622)', () => {
       }),
     ]);
     expect(plan.channels).toEqual([
+      { companyKey: 'acme', companyName: 'Acme', kind: 'company_ats', sourceId: 'ats-greenhouse-acme' },
+    ]);
+  });
+
+  it('routes paycom ATS as primary and falls back from closed ATS to career_site or linkedin_company', () => {
+    const paycomPlan = planCompanyChannels(REGISTRY, [
+      company({
+        companyKey: 'paycomco',
+        companyName: 'PaycomCo',
+        careersUrl: 'https://careers.paycomco.io/jobs',
+        atsProvider: 'paycom',
+        atsSlug: '0123456789abcdef0123456789abcdef',
+        linkedinOrgId: '777',
+      }),
+    ]);
+    expect(paycomPlan.channels).toEqual([
+      {
+        companyKey: 'paycomco',
+        companyName: 'PaycomCo',
+        kind: 'company_ats',
+        sourceId: 'ats-paycom-0123456789abcdef0123456789abcdef',
+      },
+    ]);
+
+    const closedAtsFallback = planCompanyChannels(
+      REGISTRY,
+      [
+        company({
+          companyKey: 'acme',
+          companyName: 'Acme',
+          websiteUrl: 'https://acme.com',
+          atsProvider: 'greenhouse',
+          atsSlug: 'acme',
+          linkedinOrgId: '42',
+        }),
+      ],
+      { unavailableAtsSourceIds: new Set(['ats-greenhouse-acme']) },
+    );
+    expect(closedAtsFallback.channels).toEqual([
       { companyKey: 'acme', companyName: 'Acme', kind: 'career_site', sourceId: 'src-acme' },
     ]);
   });
@@ -227,5 +272,230 @@ describe('B628 — Workday boards from the directory', () => {
       company({ companyKey: 'x', atsProvider: 'workday', atsSlug: 'x.wd3.myworkdayjobs.com' }),
     ]);
     expect(plan.sources.some((s) => s.id.startsWith('ats-workday-'))).toBe(false);
+  });
+});
+
+describe('Phase 1 F2 — join.com & paylocity.com recognition', () => {
+  it('maps numeric join.com and paylocity.com careers_url to ATS channels and blocks non-numeric join slugs', () => {
+    const plan = planCompanyChannels(REGISTRY, [
+      company({
+        companyKey: 'j1',
+        companyName: 'Join Numeric',
+        careersUrl: 'https://join.com/companies/167291',
+      }),
+      company({
+        companyKey: 'j2',
+        companyName: 'Join Slug',
+        careersUrl: 'https://join.com/companies/acme-slug',
+      }),
+      company({
+        companyKey: 'j3',
+        companyName: 'Join Explicit Slug',
+        atsProvider: 'join',
+        atsSlug: 'not-numeric',
+        linkedinOrgId: '555',
+      }),
+      company({
+        companyKey: 'p1',
+        companyName: 'Paylocity Co',
+        careersUrl: 'https://recruiting.paylocity.com/Recruiting/Jobs/All/12345-abcd',
+      }),
+    ]);
+
+    expect(plan.channels).toEqual([
+      { companyKey: 'j1', companyName: 'Join Numeric', kind: 'company_ats', sourceId: 'ats-join-167291' },
+      { companyKey: 'j3', companyName: 'Join Explicit Slug', kind: 'linkedin_company', sourceId: 'src-company-li-j3' },
+      { companyKey: 'p1', companyName: 'Paylocity Co', kind: 'company_ats', sourceId: 'ats-paylocity-12345-abcd' },
+    ]);
+    expect(plan.sources.some((s) => s.id === 'src-company-site-j2')).toBe(false);
+    expect(plan.sources.some((s) => s.id === 'ats-join-not-numeric')).toBe(false);
+  });
+});
+
+describe('Phase 1 F3 — immediate site fallback & O(1) channel resolution', () => {
+  const NOW = Date.parse('2026-11-27T12:00:00Z');
+
+  it('does not fall back on 1st/2nd error, 1st/2nd empty reading, or HTTP 429', () => {
+    const twoErrors = new Map<string, SourceStateSummary>([
+      [
+        'src-company-site-acme',
+        {
+          sourceId: 'src-company-site-acme',
+          lastStatus: 'error',
+          lastErrorMessage: 'vacancy_source_unreachable: 404',
+          itemsFoundTotal: 0,
+          observations: {
+            ...emptySourceObservations(),
+            firstReadingAt: '2026-11-25T00:00:00Z',
+            lastReadingAt: '2026-11-26T00:00:00Z',
+            lastReadingSucceeded: false,
+            windowReadings: 2,
+            windowSuccessful: 0,
+            consecutiveNotFound: 2,
+          },
+        },
+      ],
+    ]);
+    expect(isSiteFallbackWarranted('src-company-site-acme', 'acme', { sourceStates: twoErrors, nowMs: NOW })).toBe(false);
+
+    const twoEmpty = new Map<string, SourceStateSummary>([
+      [
+        'src-company-site-acme',
+        {
+          sourceId: 'src-company-site-acme',
+          lastStatus: 'healthy',
+          itemsFoundTotal: 0,
+          observations: {
+            ...emptySourceObservations(),
+            firstReadingAt: '2026-11-25T00:00:00Z',
+            lastReadingAt: '2026-11-26T00:00:00Z',
+            lastReadingSucceeded: true,
+            consecutiveEmptyReadings: 2,
+          },
+        },
+      ],
+    ]);
+    expect(isSiteFallbackWarranted('src-company-site-acme', 'acme', { sourceStates: twoEmpty, nowMs: NOW })).toBe(false);
+
+    const rateLimited = new Map<string, SourceStateSummary>([
+      [
+        'src-company-site-acme',
+        {
+          sourceId: 'src-company-site-acme',
+          lastStatus: 'error',
+          lastErrorMessage: 'vacancy_source_unreachable: 429',
+          itemsFoundTotal: 0,
+          observations: {
+            ...emptySourceObservations(),
+            firstReadingAt: '2026-11-20T00:00:00Z',
+            lastReadingAt: '2026-11-26T00:00:00Z',
+            lastReadingSucceeded: false,
+            windowReadings: 5,
+            windowSuccessful: 0,
+          },
+        },
+      ],
+    ]);
+    expect(isSiteFallbackWarranted('src-company-site-acme', 'acme', { sourceStates: rateLimited, nowMs: NOW })).toBe(false);
+  });
+
+  it('falls back immediately to linkedin_company on 3 errors, 3 empty readings, disabled, or placement gone', () => {
+    const comp = company({
+      companyKey: 'globex',
+      companyName: 'Globex',
+      careersUrl: 'https://careers.globex.io/jobs',
+      linkedinOrgId: '987654',
+    });
+
+    const threeEmptyObs = [0, 1, 2].reduce(
+      (obs, i) =>
+        recordReading(obs, {
+          succeeded: true,
+          census: {
+            total: 0,
+            fresherThan30Days: 0,
+            fresherThan90Days: 0,
+            fresherThan180Days: 0,
+            withEmployer: 0,
+            withLink: 0,
+            withDate: 0,
+          },
+          atMs: NOW - (3 - i) * 3_600_000,
+        }),
+      emptySourceObservations(),
+    );
+    const emptyPlan = planCompanyChannels(REGISTRY, [comp], {
+      sourceStates: new Map([
+        [
+          'src-company-site-globex',
+          {
+            sourceId: 'src-company-site-globex',
+            lastStatus: 'healthy',
+            itemsFoundTotal: 0,
+            observations: threeEmptyObs,
+          },
+        ],
+      ]),
+      nowMs: NOW,
+    });
+    expect(emptyPlan.channels).toEqual([
+      { companyKey: 'globex', companyName: 'Globex', kind: 'linkedin_company', sourceId: 'src-company-li-globex' },
+    ]);
+
+    const disabledPlan = planCompanyChannels(REGISTRY, [comp], {
+      sourceStates: new Map([
+        [
+          'src-company-site-globex',
+          {
+            sourceId: 'src-company-site-globex',
+            lastStatus: 'disabled',
+            lastErrorMessage: 'vacancy_source_unreachable: 404',
+            itemsFoundTotal: 0,
+          },
+        ],
+      ]),
+      nowMs: NOW,
+    });
+    expect(disabledPlan.channels[0]?.sourceId).toBe('src-company-li-globex');
+  });
+
+  it('retains career_site when no fallback exists and placement is not gone', () => {
+    const comp = company({
+      companyKey: 'nofallback',
+      companyName: 'NoFallback',
+      careersUrl: 'https://nofallback.io/careers',
+    });
+    const plan = planCompanyChannels(REGISTRY, [comp], {
+      unhealthySourceIds: new Set(['src-company-site-nofallback']),
+    });
+    expect(plan.channels[0]?.sourceId).toBe('src-company-site-nofallback');
+
+    const gonePlan = planCompanyChannels(REGISTRY, [comp], {
+      goneCompanySiteKeys: new Set(['nofallback']),
+    });
+    expect(gonePlan.channels).toEqual([]);
+  });
+
+  it('streams health summary via readChannelHealthSummary and resolves one company via resolveCompanyChannel', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(`
+      CREATE TABLE company_directory (
+        company_key TEXT PRIMARY KEY, company_name TEXT, website_url TEXT,
+        careers_url TEXT, linkedin_org_id TEXT, ats_provider TEXT, ats_slug TEXT, status TEXT
+      );
+      CREATE TABLE vacancy_source_state (
+        source_id TEXT PRIMARY KEY, last_sync_at TEXT, last_status TEXT,
+        last_error_message TEXT, items_found_total INTEGER NOT NULL DEFAULT 0,
+        items_active_total INTEGER NOT NULL DEFAULT 0, observations TEXT
+      );
+      CREATE TABLE company_placement (
+        placement_id TEXT PRIMARY KEY, company_key TEXT, type TEXT,
+        source_id TEXT, health TEXT
+      );
+    `);
+    db.prepare(
+      `INSERT INTO company_directory VALUES ('globex', 'Globex', 'https://globex.io', 'https://globex.io/careers', '123456', NULL, NULL, 'active')`,
+    ).run();
+    db.prepare(
+      `INSERT INTO vacancy_source_state (source_id, last_status, last_error_message, items_found_total, observations)
+       VALUES ('src-company-site-globex', 'disabled', 'vacancy_source_unreachable: 404', 0, NULL)`,
+    ).run();
+    db.prepare(
+      `INSERT INTO company_placement VALUES ('site:globex.io', 'globex', 'employer_site', 'src-company-site-globex', 'gone')`,
+    ).run();
+
+    const summary = readChannelHealthSummary(db, NOW);
+    expect(summary.unhealthySourceIds?.has('src-company-site-globex')).toBe(true);
+    expect(summary.goneCompanySiteKeys?.has('globex')).toBe(true);
+    expect(isAtsUnavailable('ats-greenhouse-gone', { unavailableAtsSourceIds: new Set(['ats-greenhouse-gone']) })).toBe(true);
+
+    const resolved = resolveCompanyChannel(db, REGISTRY, 'globex', NOW);
+    expect(resolved.primary).toMatchObject({
+      companyKey: 'globex',
+      kind: 'linkedin_company',
+      sourceId: 'src-company-li-globex',
+    });
+    expect(resolved.retiredSourceIds).toContain('src-company-site-globex');
+    db.close();
   });
 });

@@ -102,21 +102,28 @@ export interface DirectoryIndex {
 }
 
 export function loadDirectoryIndex(database: DatabaseSync): DirectoryIndex {
-  const rows = database
-    .prepare(
-      `SELECT company_key, company_name, website_url, careers_url, ats_provider, ats_slug, source_type FROM company_directory`,
-    )
-    .all() as unknown as {
-    company_key: string;
-    company_name: string;
-    website_url: string | null;
-    careers_url: string | null;
-    ats_provider: string | null;
-    ats_slug: string | null;
-    source_type: string;
-  }[];
   const index: DirectoryIndex = { byKey: new Map(), byName: new Map(), byDomain: new Map(), byBoard: new Map(), rows: new Map() };
-  for (const row of rows) remember(index, row.company_key, row.company_name, row.website_url, row.ats_provider, row.ats_slug, row.source_type);
+  const pageStmt = database.prepare(
+    `SELECT company_key, company_name, website_url, careers_url, ats_provider, ats_slug, source_type
+       FROM company_directory WHERE company_key > ? ORDER BY company_key LIMIT 2000`,
+  );
+  let cursor = '';
+  for (;;) {
+    const rows = pageStmt.all(cursor) as unknown as {
+      company_key: string;
+      company_name: string;
+      website_url: string | null;
+      careers_url: string | null;
+      ats_provider: string | null;
+      ats_slug: string | null;
+      source_type: string;
+    }[];
+    for (const row of rows) {
+      cursor = row.company_key;
+      remember(index, row.company_key, row.company_name, row.website_url, row.ats_provider, row.ats_slug, row.source_type);
+    }
+    if (rows.length < 2000) break;
+  }
   return index;
 }
 

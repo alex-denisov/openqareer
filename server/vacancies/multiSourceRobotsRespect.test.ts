@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 import { RobotsPolicyLoader } from './robotsPolicyLoader';
+import { emptySourceObservations } from './sourceHealthVerdict';
 import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 
 /**
@@ -20,8 +22,8 @@ function source(id: string, targetUrl: string): VacancySourceConfig {
   };
 }
 
-describe('движок уважает robots.txt площадки', () => {
-  it('запрет словами останавливает опрос, и площадка об этом сказана', async () => {
+describe('движок читает robots.txt для вежливости без блокировки источников', () => {
+  it('Disallow в robots.txt не останавливает и не отключает опрос площадки', async () => {
     let fetched = 0;
     const engine = new MultiSourceVacancyEngine({
       sources: [
@@ -32,17 +34,16 @@ describe('движок уважает robots.txt площадки', () => {
         return [];
       },
       robots: new RobotsPolicyLoader({
-        fetchRobots: async () => ({ status: 200, body: 'User-agent: *\nDisallow: /\n' }),
+        fetchRobots: async () => ({ status: 200, body: 'User-agent: *\nDisallow: /\nCrawl-delay: 4\n' }),
       }),
     });
 
     const outcome = await engine.syncSource('ats-smartrecruiters-x');
 
-    expect(fetched).toBe(0);
-    // Запрет площадки — не поломка продукта: он назван словами, а не красным
-    // отказом, который читается как «сломалось у нас».
-    expect(outcome.status).toBe('disabled');
-    expect(outcome.message).toContain('robots');
+    expect(fetched).toBe(1);
+    expect(outcome.status).toBe('healthy');
+    expect(engine.getSource('ats-smartrecruiters-x')?.enabled).toBe(true);
+    expect(engine.getScheduler().getScheduleInfo('ats-smartrecruiters-x').crawlDelaySeconds).toBe(4);
   });
 
   it('разрешение словами опрос не трогает', async () => {
@@ -82,14 +83,8 @@ describe('движок уважает robots.txt площадки', () => {
   });
 });
 
-/**
- * B217 — владелец разрешил Remotive вопреки `Disallow: /api/*`: API площадки
- * задокументирован для того же использования. Исключение живёт в реестре
- * явным полем с датой и основанием, а не в памяти агента; без него запрет
- * robots действует как прежде.
- */
-describe('явное разрешение владельца поверх robots.txt (B217)', () => {
-  it('источник с robotsOverride опрашивается, без него — нет', async () => {
+describe('robotsOverride и снятие прежней блокировки (B217)', () => {
+  it('опрашивает как источники с robotsOverride, так и без него', async () => {
     const calls: string[] = [];
     const robots = new RobotsPolicyLoader({
       fetchRobots: async () => ({ status: 200, body: 'User-agent: *\nDisallow: /api/\n' }),
@@ -117,6 +112,67 @@ describe('явное разрешение владельца поверх robots
     await engine.syncSource('remotive');
     await engine.syncSource('other');
 
-    expect(calls).toEqual(['remotive']);
+    expect(calls).toEqual(['remotive', 'other']);
+  });
+});
+
+describe('Phase 1 F6 — revival of legacy disabled sources & 429 hold', () => {
+  it('keeps sources enabled across restart and revives previously disabled states as paused retryable errors', async () => {
+    const pool = new MemoryVacancyPoolStore();
+    const id = 'ats-smartrecruiters-blocked';
+    pool.saveSourceState({
+      sourceId: id,
+      lastSyncAt: '2026-11-20T00:00:00.000Z',
+      lastStatus: 'disabled',
+      lastErrorMessage: 'robots_txt_disallows_this_address',
+      itemsFoundTotal: 0,
+      itemsActiveTotal: 0,
+      observations: {
+        ...emptySourceObservations(),
+        schedule: {
+          sourceId: id,
+          consecutiveFailures: 0,
+          lastAttemptAtMs: null,
+          lastSuccessAtMs: null,
+          lastStatusCode: null,
+          retryAfterUntilMs: null,
+          hourlyRequestTimestamps: [],
+          consecutiveUnchangedCount: 0,
+          crawlDelaySeconds: null,
+          robotsVerdict: 'disallowed',
+        },
+      },
+    });
+
+    const restarted = new MultiSourceVacancyEngine({
+      sources: [source(id, 'https://api.smartrecruiters.com/v1/companies/Blocked/postings')],
+      pool,
+    });
+    const restored = restarted.getSource(id)!;
+    expect(restored.enabled).toBe(true);
+    expect(restored.lastStatus).toBe('error');
+    expect(restarted.getScheduler().getScheduleInfo(id).robotsVerdict).toBe('allowed');
+    expect(restarted.getScheduler().getScheduleInfo(id).isDue).toBe(true);
+  });
+
+  it('holds and backs off without calling fetcher or setting error when /robots.txt returns 429', async () => {
+    let fetched = 0;
+    const id = 'ats-join-429-robots';
+    const robots = new RobotsPolicyLoader({
+      fetchRobots: async () => ({ status: 429, body: null, retryAfterHeader: '120' }),
+    });
+    const engine = new MultiSourceVacancyEngine({
+      sources: [source(id, 'https://join.com/api/public/companies/167291/jobs')],
+      fetcher: async () => {
+        fetched += 1;
+        return [];
+      },
+      robots,
+    });
+
+    const outcome = await engine.syncSource(id, undefined, 10_000);
+    expect(fetched).toBe(0);
+    expect(outcome.status).toBe('held');
+    expect(engine.getSource(id)?.lastStatus).toBeUndefined();
   });
 });

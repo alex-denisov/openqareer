@@ -12,6 +12,10 @@ import {
   AggregatorCompanyBackfill,
   AggregatorCompanyTicker,
 } from './companyDirectory/placement/aggregatorBackfill';
+import {
+  FreehireCandidatesPromoteBackfill,
+  FreehireCandidatesPromoteTicker,
+} from './companyDirectory/freehire/freehireCandidatesPromote';
 import { DatabaseSync } from 'node:sqlite';
 import { readServerConfig } from './config';
 import { applySqliteBusyTimeout } from './data/sqliteBusyTimeout';
@@ -52,7 +56,10 @@ import {
 import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
 import { logPoolWrites } from './maintenance/poolWriteLog';
 import { watchWriteHolds } from './observability/sqliteWriteHolds';
-import { composeVacancyEngine } from './vacancies/composeVacancyEngine';
+import {
+  composeVacancyEngine,
+  scheduleDirectoryChannelRefresh,
+} from './vacancies/composeVacancyEngine';
 import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
 import { createHhFetchSummary } from './vacancies/hhFetchSummary';
 import { useFanDemand } from './vacancies/jobspyFan';
@@ -314,7 +321,12 @@ const worker = new MaintenanceWorker({
   ...(process.env.OPENQAREER_CAREERS_PRUNE_OFF === '1'
     ? {}
     : { careersPrune: new CareersPruneTicker(new CareersPrune(semanticDatabase)) }),
+  // Phase 2 F7: поток переноса кандидатов freehire в company_directory без рестарта; off — OPENQAREER_FREEHIRE_PROMOTE_OFF=1.
+  ...(process.env.OPENQAREER_FREEHIRE_PROMOTE_OFF === '1'
+    ? {}
+    : { freehirePromote: new FreehireCandidatesPromoteTicker(new FreehireCandidatesPromoteBackfill(semanticDatabase)) }),
   purgeRecruiters: () => purgeExpiredRecruiters(semanticDatabase, new Date()),
+  databasePath: config.databasePath,
 });
 
 // Разовая разморозка названий с живыми вакансиями: включается на хосте флагом и после прогона снимается.
@@ -451,6 +463,10 @@ try {
   stopJobs.push(scheduleFreehireRepo(semanticDatabase, log, process.env));
   // B645: все ~520 тыс. компаний freehire по публичным страницам (__data.json), ~3 запроса/с, без модели.
   stopJobs.push(scheduleFreehirePages(semanticDatabase, log, process.env));
+  // Phase 0: динамическое подхватывание новых/обогащённых каналов company_directory без рестарта.
+  stopJobs.push(
+    scheduleDirectoryChannelRefresh(config.databasePath, composed.engine, log, () => shuttingDown),
+  );
   // B621: LinkedIn ID компаний реестра через гостевой доступ, одна компания за такт.
   if (process.env.OPENQAREER_LINKEDIN_ORG_RESOLVER_OFF !== '1') {
     stopLinkedinOrgResolver = scheduleLinkedinOrgResolver(

@@ -17,9 +17,10 @@ import { HhVacancyDescriptionLoader } from './hhVacancyDescription';
 import { createHttpLinkProbe } from './linkLivenessProbe';
 import {
   buildMultiSourceFetcher,
-  fetchRobotsTxt,
+  createRobotsFetcher,
   type MultiSourceFetcherDeps,
 } from './multiSourceFetcher';
+import { createHostRequestPacer, type HostRequestPacer } from './hostRequestPacer';
 import type { LinkProbe } from './linkLivenessProbe';
 import {
   MultiSourceVacancyEngine,
@@ -28,7 +29,15 @@ import {
 } from './multiSourceVacancyEngine';
 import type { LinkedinGuestBudget } from './linkedinGuestBudget';
 import type { VacancySourceConfig } from '../domain/unifiedVacancy';
-import { planCompanyChannels, readDirectoryCompanies } from './companyDirectorySources';
+import {
+  planCompanyChannels,
+  readChannelHealthSummary,
+  readDirectoryCompanies,
+  readDirectoryCompaniesAsync,
+  resolveCompanyChannel,
+  type PlanCompanyChannelsOptions,
+  type ResolvedCompanyChannel,
+} from './companyDirectorySources';
 import { DEFAULT_VACANCY_SOURCES, type RegisteredVacancySource } from './defaultVacancySources';
 import { RobotsPolicyLoader, type RobotsFetcher } from './robotsPolicyLoader';
 import { SqliteVacancyPoolStore, type PoolWriteEvent } from './sqliteVacancyPoolStore';
@@ -97,6 +106,7 @@ function createPoolJobsReader(databasePath: string, hasVacancy: (id: string) => 
  */
 export function registryWithCompanyChannels(databasePath: string): RegisteredVacancySource[] {
   let companies: ReturnType<typeof readDirectoryCompanies> = [];
+  let healthOptions: PlanCompanyChannelsOptions = {};
   try {
     const database = new DatabaseSync(databasePath, { readOnly: true });
     try {
@@ -104,13 +114,102 @@ export function registryWithCompanyChannels(databasePath: string): RegisteredVac
         ...readDirectoryCompanies(database),
         ...readRolloutPlacementBoards(database, Date.now()),
       ];
+      healthOptions = readChannelHealthSummary(database, Date.now());
     } finally {
       database.close();
     }
   } catch {
     companies = [];
+    healthOptions = {};
   }
-  return [...planCompanyChannels(DEFAULT_VACANCY_SOURCES, companies).sources];
+  return [...planCompanyChannels(DEFAULT_VACANCY_SOURCES, companies, healthOptions).sources];
+}
+
+/**
+ * Неблокирующее обновление каналов компаний справочника и роллаута в работающем
+ * движке без перезапуска процесса обслуживания (Phase 0).
+ */
+export async function refreshCompanyChannelsAsync(
+  databasePath: string,
+  engine: Pick<MultiSourceVacancyEngine, 'syncDirectoryChannels'>,
+  shouldStop: () => boolean = () => false,
+): Promise<{ added: number; updated: number; disabled: number; total: number }> {
+  const database = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const nowMs = Date.now();
+    const companies = [
+      ...(await readDirectoryCompaniesAsync(database, undefined, shouldStop)),
+      ...readRolloutPlacementBoards(database, nowMs),
+    ];
+    if (shouldStop()) return { added: 0, updated: 0, disabled: 0, total: 0 };
+    const healthOptions = readChannelHealthSummary(database, nowMs);
+    const plan = planCompanyChannels(DEFAULT_VACANCY_SOURCES, companies, healthOptions);
+    return engine.syncDirectoryChannels(plan.sources);
+  } finally {
+    database.close();
+  }
+}
+
+const DIRECTORY_REFRESH_INTERVAL_MS = 15 * 60_000;
+
+interface DirectoryRefreshLog {
+  info(context: Record<string, unknown>, message: string): void;
+  error(context: Record<string, unknown>, message: string): void;
+}
+
+/**
+ * Запускает периодическое фоновое обновление каналов справочника в `maintenance`
+ * без перезапуска процесса и без удержания event loop.
+ */
+export function scheduleDirectoryChannelRefresh(
+  databasePath: string,
+  engine: Pick<MultiSourceVacancyEngine, 'syncDirectoryChannels'>,
+  log: DirectoryRefreshLog,
+  shouldStop: () => boolean,
+  intervalMs = DIRECTORY_REFRESH_INTERVAL_MS,
+): () => void {
+  let running = false;
+  const timer = setInterval(() => {
+    if (shouldStop() || running) return;
+    running = true;
+    const startedAt = Date.now();
+    void refreshCompanyChannelsAsync(databasePath, engine, shouldStop)
+      .then((result) => {
+        if (result.added + result.updated + result.disabled > 0) {
+          log.info({ ...result, ms: Date.now() - startedAt }, 'directory-channels-refreshed');
+        }
+      })
+      .catch((error: unknown) => {
+        log.error(
+          {
+            errorName: error instanceof Error ? error.name : 'UnknownError',
+            message: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
+          },
+          'directory-channels-refresh-failed',
+        );
+      })
+      .finally(() => {
+        running = false;
+      });
+  }, intervalMs);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
+function resolveCompanyChannelFromDb(
+  databasePath: string,
+  companyKey: string,
+): ResolvedCompanyChannel | undefined {
+  try {
+    const database = new DatabaseSync(databasePath, { readOnly: true });
+    try {
+      return resolveCompanyChannel(database, DEFAULT_VACANCY_SOURCES, companyKey, Date.now());
+    } finally {
+      database.close();
+    }
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -123,13 +222,35 @@ function buildFetcher(
   options: ComposeVacancyEngineOptions,
   hhCrawlCoordinator: HhCrawlCoordinator,
   readLinkedinPoolJobs: NonNullable<MultiSourceFetcherDeps['readLinkedinPoolJobs']>,
+  hostPacer: HostRequestPacer,
 ) {
   return buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies, hhCrawlCoordinator, {
     readLinkedinPoolJobs,
+    hostPacer,
     ...(options.linkedinBudget ? { linkedinBudget: options.linkedinBudget } : {}),
     ...(options.linkedinFetch ? { linkedinFetch: options.linkedinFetch } : {}),
     ...(options.renderScriptPage ? { renderScriptPage: options.renderScriptPage } : {}),
   });
+}
+
+function hostOfTarget(targetUrl: string): string {
+  try {
+    return new URL(targetUrl).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function createHoldSource(
+  linkedinBudget: ComposeVacancyEngineOptions['linkedinBudget'],
+  hostPacer: ReturnType<typeof createHostRequestPacer>,
+): (source: VacancySourceConfig) => boolean {
+  const linkedinHold = linkedinBudget ? holdDuringLinkedinPause(linkedinBudget) : undefined;
+  return (source) => {
+    if (linkedinHold?.(source)) return true;
+    const host = hostOfTarget(source.targetUrl);
+    return host !== '' && hostPacer.isLongPaused(host);
+  };
 }
 
 export function composeVacancyEngine(options: ComposeVacancyEngineOptions): ComposedVacancyEngine {
@@ -150,33 +271,24 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
     // Быстрый проход останавливается на странице, где пул всё уже знает (B219).
     // Движок собирается ниже, поэтому спрашивается через замыкание, а не значением.
     isKnown: (id: string): boolean => engine.hasVacancy(id),
-    // Роли кандидатов вне справочника hh ищутся по названию (27.10).
     demandTerms: currentFanDemand,
   });
-  // Карточки пула LinkedIn читаются своим соединением и только при опросе источника.
   const poolJobs = createPoolJobsReader(options.databasePath, (id) => engine.hasVacancy(id));
+  const hostPacer = createHostRequestPacer();
   const engine: MultiSourceVacancyEngine = new MultiSourceVacancyEngine({
     sources: registryWithCompanyChannels(options.databasePath),
     ...(options.registerRequestedAts
       ? { loadRequestedSource: (sourceId) => readVerifiedRequestedAts(options.databasePath, sourceId) }
       : {}),
-    // Во время паузы бюджета LinkedIn-источники не занимают места в волне (B622).
-    ...(options.linkedinBudget
-      ? { holdSource: holdDuringLinkedinPause(options.linkedinBudget) }
-      : {}),
-    fetcher: options.fetcher ?? buildFetcher(options, hhCrawlCoordinator, poolJobs.read),
+    replanCompanyChannel: (companyKey) => resolveCompanyChannelFromDb(options.databasePath, companyKey),
+    holdSource: createHoldSource(options.linkedinBudget, hostPacer),
+    fetcher: options.fetcher ?? buildFetcher(options, hhCrawlCoordinator, poolJobs.read, hostPacer),
     pool,
-    // Право обхода спрашивается у самой площадки, а не берётся из записи,
-    // сделанной когда-то руками; `Crawl-delay` тоже приходит оттуда (B204).
-    robots: new RobotsPolicyLoader({ fetchRobots: options.fetchRobots ?? fetchRobotsTxt }),
-    // Открывается ли ещё ссылка объявления — отдельное доказательство: лента
-    // может отдавать свежие даты у вакансий, которых на сайте уже нет (B200
-    // срез 2).
+    robots: new RobotsPolicyLoader({ fetchRobots: options.fetchRobots ?? createRobotsFetcher(hostPacer) }),
     linkProbe: options.linkProbe ?? createHttpLinkProbe(),
     descriptionLoader: new HhVacancyDescriptionLoader({
       transport: hhPageFetcher,
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-      // 03.11: адаптивный темп (старт 2/с, потолок 10/с); первый отказ делит его пополам.
       rate: new HhTextRateController(),
     }),
     ...(options.recluster ? { recluster: options.recluster } : {}),

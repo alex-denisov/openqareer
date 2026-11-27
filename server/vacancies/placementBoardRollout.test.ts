@@ -33,11 +33,11 @@ describe('B646-5 placement board rollout', () => {
     expect(admittedPlacementBoards(PLACEMENT_ROLLOUT_START_MS + DAY)).toBe(600);
   });
 
-  it('reads paylocity and join batches, never paycom, with directory names', () => {
+  it('reads paylocity, join and paycom batches without exclusions, with directory names', () => {
     const boards = readRolloutPlacementBoards(database(), PLACEMENT_ROLLOUT_START_MS + 1);
     expect(boards.filter((b) => b.atsProvider === 'paylocity')).toHaveLength(300);
     expect(boards.filter((b) => b.atsProvider === 'join')).toHaveLength(300);
-    expect(boards.some((b) => b.atsProvider === 'paycom')).toBe(false);
+    expect(boards.filter((b) => b.atsProvider === 'paycom')).toHaveLength(300);
     expect(boards[0]).toMatchObject({
       companyKey: 'pc0000',
       companyName: 'Acme Payroll',
@@ -49,7 +49,7 @@ describe('B646-5 placement board rollout', () => {
     const boards = readRolloutPlacementBoards(database(), PLACEMENT_ROLLOUT_START_MS + 1);
     const plan = planCompanyChannels(DEFAULT_VACANCY_SOURCES, boards);
     const ats = plan.channels.filter((c) => c.kind === 'company_ats');
-    expect(ats).toHaveLength(600);
+    expect(ats).toHaveLength(900);
     const ids = new Set(ats.map((c) => c.sourceId));
     expect(plan.sources.filter((s) => ids.has(s.id)).every((s) => s.enabled)).toBe(true);
   });
@@ -58,5 +58,29 @@ describe('B646-5 placement board rollout', () => {
     expect(
       readRolloutPlacementBoards(new DatabaseSync(':memory:'), PLACEMENT_ROLLOUT_START_MS + 1),
     ).toEqual([]);
+  });
+
+  it('skips non-numeric join slugs and placements marked gone or disabled', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(`
+      CREATE TABLE company_directory (company_key TEXT PRIMARY KEY, company_name TEXT);
+      CREATE TABLE company_placement (
+        placement_id TEXT PRIMARY KEY, company_key TEXT, type TEXT,
+        provider TEXT, slug TEXT, health TEXT
+      );
+    `);
+    const insert = db.prepare('INSERT INTO company_placement VALUES (?, ?, ?, ?, ?, ?)');
+    insert.run('ats:join:1', 'j1', 'ats', 'join', '167291', null);
+    insert.run('ats:join:2', 'j2', 'ats', 'join', 'not-a-number', null);
+    insert.run('ats:join:3', 'j3', 'ats', 'join', '99999', 'gone');
+    insert.run('ats:paylocity:1', 'p1', 'ats', 'paylocity', 'guid-ok', 'healthy');
+    insert.run('ats:paylocity:2', 'p2', 'ats', 'paylocity', 'guid-off', 'disabled');
+
+    const boards = readRolloutPlacementBoards(db, PLACEMENT_ROLLOUT_START_MS + 1);
+    expect(boards.map((b) => [b.atsProvider, b.atsSlug])).toEqual([
+      ['paylocity', 'guid-ok'],
+      ['join', '167291'],
+    ]);
+    db.close();
   });
 });

@@ -182,7 +182,7 @@ export interface AdminSourceHealth {
     verdict: 'never_read' | 'unreachable' | 'alive' | 'fading' | 'dead';
     reason: string;
     /** Поля нет у сервера, который ещё не называет причину приостановки. */
-    pausedBecause?: 'no_fresh_vacancies' | 'links_not_opening' | null;
+    pausedBecause?: 'no_fresh_vacancies' | 'links_not_opening' | 'terminal_failure' | null;
     lastNonEmptyReadingAt: string | null;
     consecutiveEmptyReadings: number;
     fresherThan30Days: AdminCountedShare;
@@ -246,7 +246,7 @@ export interface AdminVacancySource {
   targetUrl: string;
   refreshIntervalMinutes: number;
   lastSyncAt?: string;
-  lastStatus?: 'healthy' | 'degraded' | 'error';
+  lastStatus?: 'healthy' | 'degraded' | 'error' | 'disabled';
   lastErrorMessage?: string;
   itemsFoundTotal: number;
   itemsActiveTotal: number;

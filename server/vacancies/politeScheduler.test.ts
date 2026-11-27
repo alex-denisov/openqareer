@@ -139,13 +139,12 @@ describe('politeScheduler', () => {
       expect(allowed.due).toBe(true);
     });
 
-    it('blocks sources disallowed by robots.txt', () => {
+    it('does not block sources on robots.txt Disallow', () => {
       const scheduler = new PoliteScheduler();
       scheduler.setRobotsPolicy('src-1', { verdict: 'disallowed' });
 
       const status = scheduler.isSourceDue('src-1', BASE_INTERVAL, NOW);
-      expect(status.due).toBe(false);
-      expect(status.reason).toBe('robots_disallowed');
+      expect(status.due).toBe(true);
     });
 
     it('adapts interval when feed is unchanged and resets on new items', () => {

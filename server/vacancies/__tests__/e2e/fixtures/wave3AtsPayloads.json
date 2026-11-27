@@ -1,0 +1,258 @@
+{
+  "taleo": {
+    "company": "Valero Energy",
+    "board": "valero.taleo.net/2",
+    "payload": {
+      "requisitionList": [
+        {
+          "jobId": "TAL-101",
+          "title": "OT Cybersecurity Architect",
+          "primaryLocation": "San Antonio, TX",
+          "isRemote": false,
+          "postedDate": "2026-11-20T08:00:00Z",
+          "url": "https://valero.taleo.net/careersection/2/jobdetail.ftl?job=TAL-101",
+          "description": "Protect industrial control networks across refining sites."
+        }
+      ]
+    }
+  },
+  "eightfold": {
+    "company": "Starbucks",
+    "board": "apply.starbucks.com/starbucks.com",
+    "payload": {
+      "data": {
+        "positions": [
+          {
+            "id": 9021044,
+            "name": "Principal Platform Engineer",
+            "location": "Seattle, WA, USA",
+            "work_location_option": "remote",
+            "t_create": 1795200000,
+            "canonicalPositionUrl": "https://apply.starbucks.com/careers/job/9021044",
+            "job_description": "Design global loyalty and order-ahead platform APIs."
+          }
+        ]
+      }
+    }
+  },
+  "huntflow": {
+    "company": "AlumniHub",
+    "board": "alumnihub-career",
+    "payload": {
+      "items": [
+        {
+          "id": 55102,
+          "position": "Senior Go Developer",
+          "city": "Warsaw",
+          "remote": true,
+          "created": "2026-11-22T10:00:00Z",
+          "url": "https://alumnihub-career.huntflow.io/vacancy/55102",
+          "body": "Build high-concurrency microservices in Go and Kafka."
+        }
+      ]
+    }
+  },
+  "avature": {
+    "company": "Electronic Arts",
+    "board": "jobs.ea.com",
+    "payload": {
+      "jobs": [
+        {
+          "id": "av-7731",
+          "title": "Senior Rendering Engineer",
+          "location": "Vancouver, BC, Canada",
+          "isRemote": false,
+          "publishedAt": "2026-11-21T09:00:00Z",
+          "url": "https://jobs.ea.com/en_US/careers/JobDetail/av-7731",
+          "description": "Optimize Vulkan/DX12 frame pipelines for AAA titles."
+        }
+      ]
+    }
+  },
+  "cornerstone": {
+    "company": "Nintendo Europe",
+    "board": "nintendoeurope",
+    "payload": {
+      "jobs": [
+        {
+          "id": "cs-881",
+          "title": "Senior Localization Producer",
+          "location": "Frankfurt, Germany",
+          "isRemote": false,
+          "publishedAt": "2026-11-19T10:00:00Z",
+          "url": "https://nintendoeurope.csod.com/ux/ats/careersite/1/home/requisition/cs-881",
+          "description": "Coordinate European game localization milestones."
+        }
+      ]
+    }
+  },
+  "pageup": {
+    "company": "Pacific Health",
+    "board": "513",
+    "payload": {
+      "jobs": [
+        {
+          "id": "pu-604",
+          "title": "Senior Systems Administrator",
+          "location": "Sydney, Australia",
+          "isRemote": false,
+          "publishedAt": "2026-11-20T04:00:00Z",
+          "url": "https://careers.pageuppeople.com/513/cw/en/job/pu-604",
+          "description": "Administer Linux virtualization clusters and identity directories."
+        }
+      ]
+    }
+  },
+  "workstream": {
+    "company": "QuickServe Group",
+    "board": "004a7767",
+    "payload": {
+      "data": [
+        {
+          "id": "ws-2201",
+          "title": "Regional Operations Manager",
+          "location": "Austin, TX",
+          "isRemote": false,
+          "created_at": "2026-11-22T14:00:00Z",
+          "url": "https://apply.workstream.us/004a7767/ws-2201",
+          "description": "Lead multi-unit store operations and scheduling."
+        }
+      ]
+    }
+  },
+  "freshteam": {
+    "company": "Simera Talent",
+    "board": "simera-talent",
+    "payload": [
+      {
+        "id": 31044,
+        "title": "Lead React Engineer",
+        "remote": true,
+        "branch": { "city": "Remote", "country": "United States" },
+        "created_at": "2026-11-21T16:00:00Z",
+        "applicant_apply_link": "https://simera-talent.freshteam.com/jobs/31044",
+        "description": "Architect accessible React 19 interfaces and design systems."
+      }
+    ]
+  },
+  "applitrack": {
+    "company": "AACS District",
+    "board": "aacs",
+    "payload": {
+      "jobs": [
+        {
+          "id": "at-419",
+          "title": "Instructional Technology Specialist",
+          "location": "Annapolis, MD",
+          "isRemote": false,
+          "publishedAt": "2026-11-18T12:00:00Z",
+          "url": "https://www.applitrack.com/aacs/onlineapp/default.aspx?AppliTrackJobId=at-419",
+          "description": "Support district-wide LMS and classroom engineering tools."
+        }
+      ]
+    }
+  },
+  "trakstar": {
+    "company": "1Force",
+    "board": "1force",
+    "payload": {
+      "jobs": [
+        {
+          "id": "ts-128",
+          "title": "Cloud Security Consultant",
+          "location": "Remote, US",
+          "isRemote": true,
+          "publishedAt": "2026-11-23T08:00:00Z",
+          "url": "https://1force.hire.trakstar.com/jobs/ts-128",
+          "description": "Perform AWS/GCP security architecture reviews and SOC2 readiness."
+        }
+      ]
+    }
+  },
+  "inhire": {
+    "company": "Conta Azul",
+    "board": "contaazul",
+    "payload": {
+      "jobsPage": [
+        {
+          "id": "ih-918",
+          "displayName": "Senior Data Engineer",
+          "location": "Joinville, SC, Brazil",
+          "workplaceType": "remote",
+          "createdAt": "2026-11-22T11:00:00Z",
+          "url": "https://contaazul.inhire.app/vagas/ih-918",
+          "description": "Build financial analytics pipelines on Spark and BigQuery."
+        }
+      ]
+    }
+  },
+  "talentlyft": {
+    "company": "Flyer One Ventures",
+    "board": "flyer-one-ventures",
+    "payload": {
+      "results": [
+        {
+          "id": "tl-505",
+          "title": "Investment Associate (SaaS)",
+          "location": "London / Remote",
+          "isRemote": true,
+          "publishedAt": "2026-11-20T10:00:00Z",
+          "shortUrl": "https://flyer-one-ventures.talentlyft.com/jobs/tl-505",
+          "description": "Source and evaluate B2B SaaS startups across Europe."
+        }
+      ]
+    }
+  },
+  "jobscore": {
+    "company": "MAQ Software",
+    "board": "maqsoftware",
+    "payload": {
+      "jobs": [
+        {
+          "id": "js-612",
+          "title": "Principal Power BI Architect",
+          "location": "Redmond, WA",
+          "isRemote": false,
+          "publishedAt": "2026-11-21T17:00:00Z",
+          "url": "https://careers.jobscore.com/careers/maqsoftware/jobs/js-612",
+          "description": "Deliver enterprise Fabric and Power BI analytical platforms."
+        }
+      ]
+    }
+  },
+  "peopleforce": {
+    "company": "Acropolium",
+    "board": "acropolium",
+    "payload": {
+      "data": [
+        {
+          "id": "pf-311",
+          "title": "Senior Node.js Engineer",
+          "location": "Remote, EU",
+          "remote": true,
+          "created_at": "2026-11-24T09:00:00Z",
+          "url": "https://acropolium.peopleforce.io/careers/v/pf-311",
+          "description": "Build high-availability TypeScript APIs for travel-tech clients."
+        }
+      ]
+    }
+  },
+  "paycom": {
+    "company": "CHOC",
+    "board": "0012604c8f3328ef1785c7189f1333b7",
+    "payload": {
+      "companyName": "CHOC",
+      "jobPostingPreviews": [
+        {
+          "jobId": "pc-901",
+          "jobTitle": "Pediatric Clinical Informatics Specialist",
+          "locations": "Orange, CA",
+          "remoteType": "On-Site",
+          "description": "Support clinical EHR workflows.",
+          "positionType": "Full-Time",
+          "postedOn": "2026-11-11"
+        }
+      ]
+    }
+  }
+}

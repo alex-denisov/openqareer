@@ -1,5 +1,6 @@
 import type { UnclusteredPoolPage } from './unclusteredPoolPage';
 import type { CatalogChip, ChipCounts } from './catalogChips';
+import type { DirectoryCompany } from './companyDirectorySources';
 import type { PruneControl } from './poolPruneBatches';
 import type { UnifiedVacancy, VacancyCluster, VacancySourceConfig } from '../domain/unifiedVacancy';
 import type { ClusterRepresentative, VacancyClusterLookup } from './vacancyDeduplicator';
@@ -169,6 +170,8 @@ export interface VacancyPoolStore {
   readUnclusteredPoolPage?(chunk?: number, maxUnclustered?: number): UnclusteredPoolPage;
   /** Without ids — every stored state (start-up); with ids — only those (B736 admin page). */
   loadSourceStates(sourceIds?: readonly string[]): StoredSourceState[];
+  /** Point lookup for one source's state by primary key. */
+  loadSourceState?(sourceId: string): StoredSourceState | undefined;
   /** Only sources with a pending manual request: the 5 s worker poll (B641). */
   loadRequestedSourceSyncs?(): readonly {
     sourceId: string;
@@ -330,4 +333,6 @@ export interface VacancyPoolStore {
     updated: number;
     passFinished: boolean;
   };
+  /** B646-5 / F10: допущенные на указанный UTC-день доски из `company_placement`. */
+  loadAdmittedRolloutBoards?(nowMs: number): readonly DirectoryCompany[];
 }

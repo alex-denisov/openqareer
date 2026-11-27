@@ -1,0 +1,64 @@
+{
+  "embeddedComeet": {
+    "url": "https://careers.overwolf.com/jobs",
+    "company": "Overwolf",
+    "html": "<!doctype html><html><head><title>Overwolf Careers</title></head><body><h1>Open Roles</h1><script src=\"https://www.comeet.com/jobs/overwolf/B1.001\"></script><div class=\"comeet-widget\" data-company-uid=\"B1.001\"></div></body></html>"
+  },
+  "embeddedPhenom": {
+    "url": "https://careers.g42.ai/core42/global/en/search-results",
+    "company": "Core42",
+    "html": "<!doctype html><html><head><title>Core42 Careers</title></head><body><script>window.phApp = { ddo: { eagerLoadRefineSearch: { data: { jobs: [{ jobId: 'C42-99', title: 'AI Infrastructure Lead', cityStateCountry: 'Abu Dhabi, UAE', applyUrl: 'https://careers.g42.ai/core42/global/en/job/C42-99/AI-Infrastructure-Lead', postedDate: '2026-11-22T10:00:00Z' }] } } } };</script></body></html>"
+  },
+  "embeddedSuccessFactors": {
+    "url": "https://careers.tetrapak.com/open-positions",
+    "company": "Tetra Pak",
+    "html": "<!doctype html><html><body><a href=\"https://jobs.tetrapak.com/job/Lund-Automation-Engineer/102200/\">Automation Engineer</a><iframe src=\"https://jobs.tetrapak.com/search/\"></iframe></body></html>"
+  },
+  "embeddedWorkstream": {
+    "url": "https://careers.quickserve.example/jobs",
+    "company": "QuickServe",
+    "html": "<!doctype html><html><body><iframe src=\"https://apply.workstream.us/004a7767\"></iframe></body></html>"
+  },
+  "embeddedGreenhouse": {
+    "url": "https://acme.example/careers",
+    "company": "Acme",
+    "html": "<!doctype html><html><body><div id=\"grnhse_app\"></div><script src=\"https://boards.greenhouse.io/embed/job_board/js?for=acme\"></script></body></html>"
+  },
+  "embeddedLever": {
+    "url": "https://beta.example/careers",
+    "company": "Beta",
+    "html": "<!doctype html><html><body><a href=\"https://jobs.lever.co/beta\">View jobs on Lever</a></body></html>"
+  },
+  "spaShell": {
+    "url": "https://spa-corp.example/careers",
+    "company": "SpaCorp",
+    "shellHtml": "<!doctype html><html><head><title>SpaCorp Careers</title></head><body><div id=\"root\"></div><script src=\"/assets/app.js\"></script></body></html>",
+    "renderedHtml": "<!doctype html><html><body><div id=\"root\"><section><h2>Open Roles</h2><a href=\"https://spa-corp.example/jobs/backend-platform-engineer\">Senior Backend Platform Engineer</a><a href=\"https://spa-corp.example/jobs/staff-product-designer\">Staff Product Designer</a></section></div></body></html>"
+  },
+  "jsonLdGraph": {
+    "url": "https://jsonld-corp.example/careers",
+    "company": "JsonLdCorp",
+    "html": "<!doctype html><html><head><script type=\"application/ld+json\">{\"@context\":\"https://schema.org\",\"@graph\":[{\"@type\":\"Organization\",\"name\":\"JsonLdCorp\"},{\"@type\":\"JobPosting\",\"title\":\"Principal Security Engineer\",\"url\":\"https://jsonld-corp.example/jobs/principal-security-engineer\",\"datePosted\":\"2026-11-20\",\"jobLocation\":{\"@type\":\"Place\",\"address\":{\"@type\":\"PostalAddress\",\"addressLocality\":\"Berlin\",\"addressCountry\":\"DE\"}},\"description\":\"Lead cloud security architecture and zero-trust posture.\"},{\"@type\":\"JobPosting\",\"title\":\"Senior Data Platform Engineer\",\"url\":\"https://jsonld-corp.example/jobs/senior-data-platform\",\"datePosted\":\"2026-11-21\",\"jobLocationType\":\"TELECOMMUTE\",\"description\":\"Build streaming ingestion and lakehouse storage.\"}]}</script></head><body><h1>Careers</h1></body></html>"
+  },
+  "nextDataSample": {
+    "url": "https://next-corp.example/careers",
+    "company": "NextCorp",
+    "html": "<!doctype html><html><head><script id=\"__NEXT_DATA__\" type=\"application/json\">{\"props\":{\"pageProps\":{\"jobs\":[{\"id\":\"nx-1\",\"title\":\"Staff Frontend Engineer\",\"location\":\"Remote\",\"url\":\"https://next-corp.example/careers/staff-frontend-engineer\",\"publishedAt\":\"2026-11-22T09:00:00Z\",\"description\":\"Architect fast accessible web experiences.\"}]}}}</script></head><body><div id=\"__next\"></div></body></html>"
+  },
+  "semanticAnchors": {
+    "url": "https://semantic-corp.example/careers",
+    "company": "SemanticCorp",
+    "html": "<!doctype html><html><body><main><h1>Open Positions</h1><ul><li><a href=\"/careers/openings/senior-rust-engineer\">Senior Rust Systems Engineer</a></li><li><a href=\"/careers/position/staff-ml-ops\">Staff MLOps Engineer</a></li></ul></main></body></html>"
+  },
+  "sitemapFallback": {
+    "url": "https://sitemap-corp.example/careers",
+    "company": "SitemapCorp",
+    "landingHtml": "<!doctype html><html><body><h1>Join SitemapCorp</h1><p>Explore our mission and culture.</p></body></html>",
+    "sitemapXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><url><loc>https://sitemap-corp.example/jobs/senior-systems-engineer</loc><lastmod>2026-11-22</lastmod></url><url><loc>https://sitemap-corp.example/jobs/product-manager-ai</loc><lastmod>2026-11-23</lastmod></url></urlset>"
+  },
+  "navNoiseTrap": {
+    "url": "https://noisy-corp.example/careers",
+    "company": "NoisyCorp",
+    "html": "<!doctype html><html><body><nav><a href=\"/jobs\">All jobs</a><a href=\"/jobs?department=eng\">View Openings</a><a href=\"https://www.linkedin.com/company/noisy/jobs/\">LinkedIn</a><a href=\"https://jobs.dou.ua/companies/noisy/vacancies/\">DOU</a></nav></body></html>"
+  }
+}

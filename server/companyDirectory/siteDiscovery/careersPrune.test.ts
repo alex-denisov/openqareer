@@ -2,10 +2,19 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { COMPANY_DIRECTORY_MIGRATION } from '../../data/companyDirectorySchema';
 import { PLACEMENT_TABLES } from '../placement/placementSchema';
-import { CareersPrune, CareersPruneTicker, careersDropReason, careersUrlSetAt, type SourceStateRow } from './careersPrune';
+import {
+  CareersPrune,
+  CareersPruneTicker,
+  careersDropReason,
+  careersUrlSetAt,
+  resolveCareersUrlSetAt,
+  type DroppedCompanyInfo,
+  type SourceStateRow,
+} from './careersPrune';
 
 const NOW = Date.parse('2026-11-11T12:00:00Z');
 const DAY = 86_400_000;
+const HOUR = 3_600_000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
 function state(overrides: Partial<SourceStateRow> = {}, observations: Record<string, unknown> = {}): SourceStateRow {
@@ -62,11 +71,38 @@ describe('B643 careers drop rule', () => {
     expect(careersDropReason(state({ careersUrlSetAt: null }), NOW)).toBeUndefined();
   });
 
-  it('reads the set time from evidence: explicit time first, else the B643-9 discovery day', () => {
+  it('reads the set time from evidence: explicit time first, else the B643-9 discovery day, and resolves legacy updated_at', () => {
     expect(careersUrlSetAt({ careersUrlSetAt: '2026-11-10T05:00:00.000Z' })).toBe(Date.parse('2026-11-10T05:00:00.000Z'));
     expect(careersUrlSetAt({ careersUrl: { how: 'B643-9 site path /careers, HTTP 200 on 2026-11-11' } })).toBe(Date.parse('2026-11-11T00:00:00Z'));
     expect(careersUrlSetAt({ careersUrl: { how: 'freehire.me listing' } })).toBeNull();
     expect(careersUrlSetAt(null)).toBeNull();
+    expect(resolveCareersUrlSetAt(null, '2026-11-01T00:00:00Z')).toBe(Date.parse('2026-11-01T00:00:00Z'));
+    expect(resolveCareersUrlSetAt({ careersUrlSetAt: '2026-11-10T05:00:00.000Z' }, '2026-11-01T00:00:00Z')).toBe(
+      Date.parse('2026-11-10T05:00:00.000Z'),
+    );
+  });
+
+  it('drops disabled terminal sources with a blocking cause and protects recently updated legacy rows', () => {
+    expect(careersDropReason(state({ lastStatus: 'disabled', lastErrorMessage: 'vacancy_source_unreachable: 404' }), NOW)).toMatch(/HTTP 404/);
+    // Legacy row with updated_at > firstReadingAt is protected until 14 days elapse after updated_at with lastReadingAt >= updated_at.
+    expect(
+      careersDropReason(
+        state(
+          { careersUrlSetAt: null, legacyBaselineAt: NOW - 1 * DAY },
+          { firstReadingAt: iso(NOW - 3 * DAY), lastReadingAt: iso(NOW - 1 * HOUR) },
+        ),
+        NOW,
+      ),
+    ).toBeUndefined();
+    expect(
+      careersDropReason(
+        state(
+          { careersUrlSetAt: null, legacyBaselineAt: NOW - 15 * DAY },
+          { firstReadingAt: iso(NOW - 20 * DAY), lastReadingAt: iso(NOW - 1 * DAY) },
+        ),
+        NOW,
+      ),
+    ).toMatch(/0 items for 15 days/);
   });
 
   it('keeps a page with unreadable observations', () => {
@@ -108,10 +144,17 @@ function runAll(prune: CareersPrune) {
 }
 
 describe('B643 careers prune pass', () => {
-  it('clears the bad careers page, marks its site placement gone and records why', () => {
+  it('clears the bad careers page (including legacy rows), marks its site placement gone and emits droppedCompanies', () => {
     const db = openDb();
-    const report = runAll(new CareersPrune(db, { chunk: 1, now: () => NOW }));
-    expect(report.droppedTotal).toBe(1);
+    const emitted: DroppedCompanyInfo[] = [];
+    const report = runAll(
+      new CareersPrune(db, { chunk: 1, now: () => NOW, onDropped: (drops) => emitted.push(...drops) }),
+    );
+    expect(report.droppedTotal).toBe(2);
+    expect(emitted).toEqual([
+      { companyKey: 'acme', sourceId: 'src-company-site-acme' },
+      { companyKey: 'legacy', sourceId: 'src-company-site-legacy' },
+    ]);
     const acme = db.prepare(`SELECT careers_url, evidence FROM company_directory WHERE company_key = 'acme'`).get() as { careers_url: string | null; evidence: string };
     expect(acme.careers_url).toBeNull();
     const evidence = JSON.parse(acme.evidence);
@@ -120,7 +163,17 @@ describe('B643 careers prune pass', () => {
     expect(db.prepare(`SELECT placement_id, health FROM company_placement ORDER BY placement_id`).all())
       .toEqual([{ placement_id: 'site:acme.com', health: 'gone' }, { placement_id: 'site:good.com', health: null }]);
     expect(db.prepare(`SELECT careers_url FROM company_directory WHERE company_key = 'good'`).get()).toEqual({ careers_url: 'https://good.com/jobs' });
-    expect(db.prepare(`SELECT careers_url FROM company_directory WHERE company_key = 'legacy'`).get()).toEqual({ careers_url: 'https://legacy.com/careers' });
+    expect(db.prepare(`SELECT careers_url FROM company_directory WHERE company_key = 'legacy'`).get()).toEqual({ careers_url: null });
+  });
+
+  it('protects a legacy row without careersUrlSetAt when updated_at is newer than firstReadingAt', () => {
+    const db = openDb();
+    db.prepare(`UPDATE company_directory SET updated_at = ? WHERE company_key = 'legacy'`).run(iso(NOW - 1 * DAY));
+    const report = runAll(new CareersPrune(db, { chunk: 1, now: () => NOW }));
+    expect(report.droppedTotal).toBe(1);
+    expect(db.prepare(`SELECT careers_url FROM company_directory WHERE company_key = 'legacy'`).get()).toEqual({
+      careers_url: 'https://legacy.com/careers',
+    });
   });
 
   it('finishes an empty pass when the poll state table is not there yet', () => {

@@ -91,3 +91,36 @@ describe('правило читается под нужный путь', () => {
     expect(embed.verdict).toBe('disallowed');
   });
 });
+
+describe('Phase 1 F6 — robots.txt 429 & short transient TTL', () => {
+  it('treats HTTP 429 on /robots.txt as unconfirmed + rateLimited and caches only for short TTL', async () => {
+    let calls = 0;
+    const loader = new RobotsPolicyLoader({
+      fetchRobots: async () => {
+        calls += 1;
+        if (calls === 1) {
+          return { status: 429, body: 'User-agent: *\nAllow: /\n', retryAfterHeader: '120' };
+        }
+        return { status: 200, body: 'User-agent: *\nAllow: /\n' };
+      },
+    });
+
+    const first = await loader.policyFor('https://join.com/api/public/companies/1/jobs', 1_000);
+    expect(first).toEqual({
+      verdict: 'unconfirmed',
+      crawlDelaySeconds: null,
+      rateLimited: true,
+      retryAfterHeader: '120',
+    });
+
+    // Within 5m short TTL: cached
+    await loader.policyFor('https://join.com/api/public/companies/2/jobs', 60_000);
+    expect(calls).toBe(1);
+
+    // After 6 minutes: NOT cached for 24h, re-fetches and succeeds
+    const after = await loader.policyFor('https://join.com/api/public/companies/3/jobs', 370_000);
+    expect(calls).toBe(2);
+    expect(after.verdict).toBe('allowed');
+    expect(after.rateLimited).toBeUndefined();
+  });
+});
